@@ -29,6 +29,9 @@ struct FSimpleHexTileData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid")
 	ESimpleHexTileType TileType = ESimpleHexTileType::Grassland;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid")
+	float Height = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -39,7 +42,6 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	ESimpleHexTileType TileType = ESimpleHexTileType::Grassland;
 
-	// Relative share of the final map.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "0.0"))
 	float Weight = 1.0f;
 
@@ -49,26 +51,25 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "1"))
 	int32 MaxClumpSize = 12;
 
-	// Positive bias.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> PreferredAdjacentTypes;
 
-	// Negative bias.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> AvoidAdjacentTypes;
 
-	// If true, this type is allowed to place fewer tiles than its desired count
-	// when the available positions are poor.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	bool bSoftCount = false;
 
-	// If true, clump growth will reject very bad candidate tiles instead of forcing placement.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	bool bRejectBadAdjacency = false;
 
-	// Minimum candidate score required when bRejectBadAdjacency is true.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float MinPlacementScore = 0.5f;
+
+	// Logical height offset before world scaling.
+	// Example: Ocean -2, Coast -1, Grassland 0, Plains 1, Mountain 5.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	float HeightOffset = 0.0f;
 };
 
 struct FSimpleHexMeshSection
@@ -80,6 +81,24 @@ struct FSimpleHexMeshSection
 	TArray<FColor> VertexColors;
 	TArray<FProcMeshTangent> Tangents;
 };
+
+struct FSimpleHexVertexKey
+{
+	int32 X = 0;
+	int32 Y = 0;
+
+	bool operator==(const FSimpleHexVertexKey& Other) const
+	{
+		return X == Other.X && Y == Other.Y;
+	}
+};
+
+FORCEINLINE uint32 GetTypeHash(const FSimpleHexVertexKey& Key)
+{
+	uint32 Hash = ::GetTypeHash(Key.X);
+	Hash = HashCombine(Hash, ::GetTypeHash(Key.Y));
+	return Hash;
+}
 
 UCLASS()
 class CONQUEST_API ASimpleHexGridActor : public AActor
@@ -105,37 +124,42 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Size", meta = (ClampMin = "1"))
 	int32 GridHeight = 20;
 
-	// Distance from hex center to corner.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Size", meta = (ClampMin = "1.0"))
 	float HexRadius = 100.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Height")
+	bool bUseHeightOffsets = true;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Height")
+	float HeightScale = 60.0f;
+
+	// Used to convert deterministic world-space XY positions into stable shared vertex keys.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Height", meta = (ClampMin = "1.0"))
+	float VertexKeyPrecision = 10.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
 	int32 RandomSeed = 1337;
 
-	// Adds variation to the final tile counts.
-	// Example: 0.15 means each rule weight can shift by roughly +/-15%.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float CountRandomness = 0.15f;
 
-	// Higher values make clumps more strongly prefer growing into positions beside similar/preferred terrain.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
 	float SameTypeAdjacencyBonus = 3.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
 	float PreferredAdjacencyBonus = 2.0f;
 
-	// More attempts gives better seed selection, but costs slightly more generation time.
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
-	int32 SeedSelectionAttempts = 48;
-
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
-	TArray<FSimpleHexTileGenerationRule> GenerationRules;
-
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
 	float AvoidAdjacencyPenalty = 6.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
 	float HardAvoidAdjacencyPenalty = 12.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
+	int32 SeedSelectionAttempts = 48;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
+	TArray<FSimpleHexTileGenerationRule> GenerationRules;
 
 	// Material order:
 	// 0 Grassland
@@ -158,10 +182,14 @@ private:
 	UPROPERTY()
 	TArray<FSimpleHexTileData> Tiles;
 
+	TMap<FSimpleHexVertexKey, float> ResolvedVertexHeights;
+
 private:
 	void SetupDefaultGenerationRules();
 
 	void GenerateTileData();
+	void ResolveTileHeights();
+	void ResolveSharedVertexHeights();
 	void GenerateMesh();
 
 	void BuildDesiredTileCounts(
@@ -185,10 +213,10 @@ private:
 	) const;
 
 	float ScoreTileForRuleAdjacency(
-	const FSimpleHexTileGenerationRule& Rule,
-	int32 Q,
-	int32 R,
-	const TArray<bool>& Assigned
+		const FSimpleHexTileGenerationRule& Rule,
+		int32 Q,
+		int32 R,
+		const TArray<bool>& Assigned
 	) const;
 
 	int32 GrowClump(
@@ -208,6 +236,10 @@ private:
 	) const;
 
 	ESimpleHexTileType PickWeightedTileType(FRandomStream& RandomStream) const;
+	ESimpleHexTileType PickWeightedLandTileType(FRandomStream& RandomStream) const;
+
+	float GetHeightOffsetForTileType(ESimpleHexTileType TileType) const;
+	float GetResolvedCornerHeight(const FVector& FlatCornerPosition) const;
 
 	void AddHexTile(
 		int32 Q,
@@ -234,6 +266,8 @@ private:
 	FVector GetHexCenter(int32 Q, int32 R) const;
 	FVector GetHexCornerOffset(int32 CornerIndex) const;
 	FVector2D GetHexCornerUV(int32 CornerIndex) const;
+
+	FSimpleHexVertexKey MakeVertexKey(const FVector& FlatPosition) const;
 
 	bool GetNeighbourCoord(
 		int32 Q,

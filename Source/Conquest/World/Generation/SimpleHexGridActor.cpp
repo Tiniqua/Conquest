@@ -15,6 +15,17 @@ ASimpleHexGridActor::ASimpleHexGridActor()
 	GridMesh->bUseAsyncCooking = true;
 	GridMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
+	WaterMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("WaterMesh"));
+	WaterMesh->SetupAttachment(SceneRoot);
+	WaterMesh->bUseAsyncCooking = true;
+	WaterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WaterMesh->SetVisibility(bShowWaterLayer);
+	WaterMesh->SetCastShadow(false);
+	WaterMesh->bCastDynamicShadow = false;
+	WaterMesh->bCastStaticShadow = false;
+	WaterMesh->CastShadow = false;
+	WaterMesh->TranslucencySortPriority = 1;
+
 	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
@@ -23,6 +34,8 @@ ASimpleHexGridActor::ASimpleHexGridActor()
 	HexGridOverlayMesh->SetCastShadow(false);
 	HexGridOverlayMesh->bCastDynamicShadow = false;
 	HexGridOverlayMesh->bCastStaticShadow = false;
+	HexGridOverlayMesh->CastShadow = false;
+	HexGridOverlayMesh->TranslucencySortPriority = 2;
 
 	SetupDefaultGenerationRules();
 }
@@ -42,7 +55,9 @@ void ASimpleHexGridActor::RebuildGrid()
 	GenerateTileData();
 	ResolveTileHeights();
 	ResolveSharedVertexHeights();
+
 	GenerateMesh();
+	GenerateWaterMesh();
 	GenerateGridOverlayMesh();
 }
 
@@ -56,195 +71,14 @@ void ASimpleHexGridActor::SetHexGridOverlayVisible(bool bVisible)
 	}
 }
 
-void ASimpleHexGridActor::GenerateGridOverlayMesh()
+void ASimpleHexGridActor::SetWaterLayerVisible(bool bVisible)
 {
-	if (!HexGridOverlayMesh)
+	bShowWaterLayer = bVisible;
+
+	if (WaterMesh)
 	{
-		return;
+		WaterMesh->SetVisibility(bShowWaterLayer);
 	}
-
-	HexGridOverlayMesh->ClearAllMeshSections();
-	HexGridOverlayMesh->SetVisibility(bShowHexGridOverlay);
-	HexGridOverlayMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	// Re-apply this in case the component was reset/recreated.
-	HexGridOverlayMesh->SetCastShadow(false);
-	HexGridOverlayMesh->bCastDynamicShadow = false;
-	HexGridOverlayMesh->bCastStaticShadow = false;
-
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UVs;
-	TArray<FColor> VertexColors;
-	TArray<FProcMeshTangent> Tangents;
-
-	for (int32 R = 0; R < GridHeight; ++R)
-	{
-		for (int32 Q = 0; Q < GridWidth; ++Q)
-		{
-			const FVector FlatCenter = GetHexCenter(Q, R);
-
-			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
-			{
-				if (!ShouldDrawGridEdge(Q, R, EdgeIndex))
-				{
-					continue;
-				}
-
-				const int32 AIndex = EdgeIndex;
-				const int32 BIndex = (EdgeIndex + 1) % 6;
-
-				const FVector FlatA = FlatCenter + GetHexCornerOffset(AIndex);
-				const FVector FlatB = FlatCenter + GetHexCornerOffset(BIndex);
-
-				const float HeightA = bUseHeightOffsets
-					? GetResolvedCornerHeight(FlatA)
-					: 0.0f;
-
-				const float HeightB = bUseHeightOffsets
-					? GetResolvedCornerHeight(FlatB)
-					: 0.0f;
-
-				const FVector A(
-					FlatA.X,
-					FlatA.Y,
-					HeightA + GridOverlaySurfaceOffset
-				);
-
-				const FVector B(
-					FlatB.X,
-					FlatB.Y,
-					HeightB + GridOverlaySurfaceOffset
-				);
-
-				AddGridEdgeQuad(
-					Vertices,
-					Triangles,
-					Normals,
-					UVs,
-					VertexColors,
-					Tangents,
-					A,
-					B,
-					GridLineWidth
-				);
-			}
-		}
-	}
-
-	HexGridOverlayMesh->CreateMeshSection(
-		0,
-		Vertices,
-		Triangles,
-		Normals,
-		UVs,
-		VertexColors,
-		Tangents,
-		false
-	);
-
-	if (GridOverlayMaterial)
-	{
-		HexGridOverlayMesh->SetMaterial(0, GridOverlayMaterial);
-	}
-
-	HexGridOverlayMesh->SetCastShadow(false);
-}
-
-bool ASimpleHexGridActor::ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const
-{
-	// Your edge indexing:
-	// 0 NE
-	// 1 NW
-	// 2 W
-	// 3 SW
-	// 4 SE
-	// 5 E
-
-	// Draw only half the edges for interior tiles to avoid double-thick shared borders.
-	if (EdgeIndex == 3 || EdgeIndex == 4 || EdgeIndex == 5)
-	{
-		return true;
-	}
-
-	// Still draw missing north/west border edges.
-	int32 NeighbourQ = 0;
-	int32 NeighbourR = 0;
-
-	return !GetNeighbourCoord(Q, R, EdgeIndex, NeighbourQ, NeighbourR);
-}
-
-void ASimpleHexGridActor::AddGridEdgeQuad(
-	TArray<FVector>& Vertices,
-	TArray<int32>& Triangles,
-	TArray<FVector>& Normals,
-	TArray<FVector2D>& UVs,
-	TArray<FColor>& VertexColors,
-	TArray<FProcMeshTangent>& Tangents,
-	const FVector& A,
-	const FVector& B,
-	float Width
-)
-{
-	const FVector FlatDirection = FVector(
-		B.X - A.X,
-		B.Y - A.Y,
-		0.0f
-	).GetSafeNormal();
-
-	if (FlatDirection.IsNearlyZero())
-	{
-		return;
-	}
-
-	const FVector Perpendicular = FVector(
-		-FlatDirection.Y,
-		FlatDirection.X,
-		0.0f
-	) * (Width * 0.5f);
-
-	const FVector V0 = A + Perpendicular;
-	const FVector V1 = B + Perpendicular;
-	const FVector V2 = B - Perpendicular;
-	const FVector V3 = A - Perpendicular;
-
-	const int32 StartIndex = Vertices.Num();
-
-	Vertices.Add(V0);
-	Vertices.Add(V1);
-	Vertices.Add(V2);
-	Vertices.Add(V3);
-
-	Triangles.Add(StartIndex + 0);
-	Triangles.Add(StartIndex + 1);
-	Triangles.Add(StartIndex + 2);
-
-	Triangles.Add(StartIndex + 0);
-	Triangles.Add(StartIndex + 2);
-	Triangles.Add(StartIndex + 3);
-
-	// Since this is an overlay, simple up normals are fine.
-	// The material should ideally be unlit anyway.
-	Normals.Add(FVector::UpVector);
-	Normals.Add(FVector::UpVector);
-	Normals.Add(FVector::UpVector);
-	Normals.Add(FVector::UpVector);
-
-	UVs.Add(FVector2D(0.0f, 0.0f));
-	UVs.Add(FVector2D(1.0f, 0.0f));
-	UVs.Add(FVector2D(1.0f, 1.0f));
-	UVs.Add(FVector2D(0.0f, 1.0f));
-
-	VertexColors.Add(FColor::Black);
-	VertexColors.Add(FColor::Black);
-	VertexColors.Add(FColor::Black);
-	VertexColors.Add(FColor::Black);
-
-	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
-	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
-	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
-	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
 }
 
 void ASimpleHexGridActor::SetupDefaultGenerationRules()
@@ -310,7 +144,7 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Grassland.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Ocean
 	};
-	Grassland.HeightOffset = 0.0f;
+	Grassland.HeightOffset = 0.5f;
 	GenerationRules.Add(Grassland);
 
 	FSimpleHexTileGenerationRule Plains;
@@ -345,7 +179,7 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 		ESimpleHexTileType::Tundra,
 		ESimpleHexTileType::Lake
 	};
-	Desert.HeightOffset = 0.0f;
+	Desert.HeightOffset = 2.0f;
 	GenerationRules.Add(Desert);
 
 	FSimpleHexTileGenerationRule Tundra;
@@ -390,7 +224,6 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Lake.Weight = 3.0f;
 	Lake.MinClumpSize = 1;
 	Lake.MaxClumpSize = 4;
-
 	Lake.PreferredAdjacentTypes = {
 		ESimpleHexTileType::Lake,
 		ESimpleHexTileType::Grassland,
@@ -409,7 +242,7 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Lake.bSoftCount = true;
 	Lake.bRejectBadAdjacency = true;
 	Lake.MinPlacementScore = 1.0f;
-	Lake.HeightOffset = -2.0f;
+	Lake.HeightOffset = -1.0f;
 	GenerationRules.Add(Lake);
 
 	FSimpleHexTileGenerationRule Mountain;
@@ -516,7 +349,7 @@ void ASimpleHexGridActor::GenerateTileData()
 				FailedClumpAttempts = 0;
 			}
 
-			if (Rule.bSoftCount && FailedClumpAttempts >= 3)
+			if (Rule.bSoftCount && FailedClumpAttempts >= 12)
 			{
 				break;
 			}
@@ -974,48 +807,13 @@ int32 ASimpleHexGridActor::PickBestFrontierIndex(
 	return Frontier.Num() - 1;
 }
 
-ESimpleHexTileType ASimpleHexGridActor::PickWeightedTileType(
-	FRandomStream& RandomStream
-) const
+ESimpleHexTileType ASimpleHexGridActor::PickWeightedLandTileType(FRandomStream& RandomStream) const
 {
 	float TotalWeight = 0.0f;
 
 	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
 	{
-		TotalWeight += FMath::Max(0.0f, Rule.Weight);
-	}
-
-	if (TotalWeight <= 0.0f)
-	{
-		return ESimpleHexTileType::Grassland;
-	}
-
-	float Roll = RandomStream.FRandRange(0.0f, TotalWeight);
-
-	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
-	{
-		Roll -= FMath::Max(0.0f, Rule.Weight);
-
-		if (Roll <= 0.0f)
-		{
-			return Rule.TileType;
-		}
-	}
-
-	return GenerationRules.Last().TileType;
-}
-
-ESimpleHexTileType ASimpleHexGridActor::PickWeightedLandTileType(
-	FRandomStream& RandomStream
-) const
-{
-	float TotalWeight = 0.0f;
-
-	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
-	{
-		if (Rule.TileType == ESimpleHexTileType::Ocean ||
-			Rule.TileType == ESimpleHexTileType::Coast ||
-			Rule.TileType == ESimpleHexTileType::Lake)
+		if (IsWaterTileType(Rule.TileType))
 		{
 			continue;
 		}
@@ -1032,9 +830,7 @@ ESimpleHexTileType ASimpleHexGridActor::PickWeightedLandTileType(
 
 	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
 	{
-		if (Rule.TileType == ESimpleHexTileType::Ocean ||
-			Rule.TileType == ESimpleHexTileType::Coast ||
-			Rule.TileType == ESimpleHexTileType::Lake)
+		if (IsWaterTileType(Rule.TileType))
 		{
 			continue;
 		}
@@ -1073,6 +869,108 @@ float ASimpleHexGridActor::GetResolvedCornerHeight(const FVector& FlatCornerPosi
 	}
 
 	return 0.0f;
+}
+
+float ASimpleHexGridActor::GetWaterSurfaceRenderZ() const
+{
+	return WaterSurfaceZ + WaterSurfaceRenderOffset;
+}
+
+bool ASimpleHexGridActor::IsWaterLayerTargetTile(int32 Q, int32 R) const
+{
+	if (!IsValidTile(Q, R))
+	{
+		return false;
+	}
+
+	const FSimpleHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
+
+	if (IsWaterTileType(Tile.TileType))
+	{
+		return true;
+	}
+
+	return DoesAdjacentLandTileNeedWaterGapFill(Q, R);
+}
+
+bool ASimpleHexGridActor::IsLandTileAdjacentToWater(int32 Q, int32 R) const
+{
+	if (!IsValidTile(Q, R))
+	{
+		return false;
+	}
+
+	const FSimpleHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
+	if (IsWaterTileType(Tile.TileType))
+	{
+		return false;
+	}
+
+	for (int32 Direction = 0; Direction < 6; ++Direction)
+	{
+		int32 NeighbourQ = 0;
+		int32 NeighbourR = 0;
+
+		if (!GetNeighbourCoord(Q, R, Direction, NeighbourQ, NeighbourR))
+		{
+			continue;
+		}
+
+		if (!IsValidTile(NeighbourQ, NeighbourR))
+		{
+			continue;
+		}
+
+		const FSimpleHexTileData& NeighbourTile = Tiles[GetTileIndex(NeighbourQ, NeighbourR)];
+		if (IsWaterTileType(NeighbourTile.TileType))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool ASimpleHexGridActor::DoesAdjacentLandTileNeedWaterGapFill(int32 Q, int32 R) const
+{
+	if (!bFillAdjacentSlopedLandWaterGaps || !IsLandTileAdjacentToWater(Q, R))
+	{
+		return false;
+	}
+
+	const int32 TileIndex = GetTileIndex(Q, R);
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		return false;
+	}
+
+	const FSimpleHexTileData& Tile = Tiles[TileIndex];
+	const FVector FlatCenter = GetHexCenter(Q, R);
+
+	float MinSurfaceZ = Tile.Height;
+	float MaxSurfaceZ = Tile.Height;
+
+	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+	{
+		const FVector FlatCorner = FlatCenter + GetHexCornerOffset(CornerIndex);
+		const float CornerZ = bUseHeightOffsets
+			? GetResolvedCornerHeight(FlatCorner)
+			: 0.0f;
+
+		MinSurfaceZ = FMath::Min(MinSurfaceZ, CornerZ);
+		MaxSurfaceZ = FMath::Max(MaxSurfaceZ, CornerZ);
+	}
+
+	const bool bIsActuallySloped = (MaxSurfaceZ - MinSurfaceZ) >= WaterGapFillMinSlopeDelta;
+	if (!bIsActuallySloped)
+	{
+		return false;
+	}
+
+	// If any part of the adjacent land fan has been averaged/tapered below the water plane,
+	// the flat water overlay needs to extend into this tile to cover the visual hole.
+	const float GapThresholdZ = WaterSurfaceZ - WaterGapFillBelowSurfaceTolerance;
+	return MinSurfaceZ <= GapThresholdZ;
 }
 
 void ASimpleHexGridActor::GenerateMesh()
@@ -1115,6 +1013,148 @@ void ASimpleHexGridActor::GenerateMesh()
 			GridMesh->SetMaterial(SectionIndex, TileMaterials[SectionIndex]);
 		}
 	}
+}
+
+void ASimpleHexGridActor::GenerateWaterMesh()
+{
+	if (!WaterMesh)
+	{
+		return;
+	}
+
+	WaterMesh->ClearAllMeshSections();
+	WaterMesh->SetVisibility(bShowWaterLayer);
+	WaterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WaterMesh->SetCastShadow(false);
+	WaterMesh->bCastDynamicShadow = false;
+	WaterMesh->bCastStaticShadow = false;
+	WaterMesh->CastShadow = false;
+	WaterMesh->TranslucencySortPriority = 1;
+
+	FSimpleHexMeshSection WaterSection;
+
+	for (int32 R = 0; R < GridHeight; ++R)
+	{
+		for (int32 Q = 0; Q < GridWidth; ++Q)
+		{
+			if (!IsWaterLayerTargetTile(Q, R))
+			{
+				continue;
+			}
+
+			AddFlatWaterHex(Q, R, WaterSection);
+		}
+	}
+
+	WaterMesh->CreateMeshSection(
+		0,
+		WaterSection.Vertices,
+		WaterSection.Triangles,
+		WaterSection.Normals,
+		WaterSection.UVs,
+		WaterSection.VertexColors,
+		WaterSection.Tangents,
+		false
+	);
+
+	if (WaterMaterial)
+	{
+		WaterMesh->SetMaterial(0, WaterMaterial);
+	}
+
+	WaterMesh->SetCastShadow(false);
+	WaterMesh->bCastDynamicShadow = false;
+	WaterMesh->bCastStaticShadow = false;
+	WaterMesh->CastShadow = false;
+}
+
+void ASimpleHexGridActor::GenerateGridOverlayMesh()
+{
+	if (!HexGridOverlayMesh)
+	{
+		return;
+	}
+
+	HexGridOverlayMesh->ClearAllMeshSections();
+	HexGridOverlayMesh->SetVisibility(bShowHexGridOverlay);
+	HexGridOverlayMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HexGridOverlayMesh->SetCastShadow(false);
+	HexGridOverlayMesh->bCastDynamicShadow = false;
+	HexGridOverlayMesh->bCastStaticShadow = false;
+	HexGridOverlayMesh->CastShadow = false;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	for (int32 R = 0; R < GridHeight; ++R)
+	{
+		for (int32 Q = 0; Q < GridWidth; ++Q)
+		{
+			const FVector FlatCenter = GetHexCenter(Q, R);
+
+			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+			{
+				if (!ShouldDrawGridEdge(Q, R, EdgeIndex))
+				{
+					continue;
+				}
+
+				const int32 AIndex = EdgeIndex;
+				const int32 BIndex = (EdgeIndex + 1) % 6;
+
+				const FVector FlatA = FlatCenter + GetHexCornerOffset(AIndex);
+				const FVector FlatB = FlatCenter + GetHexCornerOffset(BIndex);
+
+				const float HeightA = bUseHeightOffsets
+					? GetResolvedCornerHeight(FlatA)
+					: 0.0f;
+
+				const float HeightB = bUseHeightOffsets
+					? GetResolvedCornerHeight(FlatB)
+					: 0.0f;
+
+				const FVector A(FlatA.X, FlatA.Y, HeightA + GridOverlaySurfaceOffset);
+				const FVector B(FlatB.X, FlatB.Y, HeightB + GridOverlaySurfaceOffset);
+
+				AddGridEdgeQuad(
+					Vertices,
+					Triangles,
+					Normals,
+					UVs,
+					VertexColors,
+					Tangents,
+					A,
+					B,
+					GridLineWidth
+				);
+			}
+		}
+	}
+
+	HexGridOverlayMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	if (GridOverlayMaterial)
+	{
+		HexGridOverlayMesh->SetMaterial(0, GridOverlayMaterial);
+	}
+
+	HexGridOverlayMesh->SetCastShadow(false);
+	HexGridOverlayMesh->bCastDynamicShadow = false;
+	HexGridOverlayMesh->bCastStaticShadow = false;
+	HexGridOverlayMesh->CastShadow = false;
 }
 
 void ASimpleHexGridActor::AddHexTile(
@@ -1182,6 +1222,52 @@ void ASimpleHexGridActor::AddHexTile(
 	}
 }
 
+void ASimpleHexGridActor::AddFlatWaterHex(
+	int32 Q,
+	int32 R,
+	FSimpleHexMeshSection& Section
+)
+{
+	const float WaterZ = GetWaterSurfaceRenderZ();
+	const FVector FlatCenter = GetHexCenter(Q, R);
+	const FVector Center(FlatCenter.X, FlatCenter.Y, WaterZ);
+	const FVector2D CenterUV(0.5f, 0.5f);
+
+	TArray<FVector> Corners;
+	TArray<FVector2D> CornerUVs;
+
+	Corners.SetNum(6);
+	CornerUVs.SetNum(6);
+
+	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+	{
+		const FVector FlatCorner = FlatCenter + GetHexCornerOffset(CornerIndex);
+
+		Corners[CornerIndex] = FVector(
+			FlatCorner.X,
+			FlatCorner.Y,
+			WaterZ
+		);
+
+		CornerUVs[CornerIndex] = GetHexCornerUV(CornerIndex);
+	}
+
+	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+	{
+		const int32 NextCornerIndex = (CornerIndex + 1) % 6;
+
+		AddTriangle(
+			Section,
+			Center,
+			Corners[NextCornerIndex],
+			Corners[CornerIndex],
+			CenterUV,
+			CornerUVs[NextCornerIndex],
+			CornerUVs[CornerIndex]
+		);
+	}
+}
+
 void ASimpleHexGridActor::AddTriangle(
 	FSimpleHexMeshSection& Section,
 	const FVector& A,
@@ -1197,6 +1283,11 @@ void ASimpleHexGridActor::AddTriangle(
 	if (Normal.Z < 0.0f)
 	{
 		Normal *= -1.0f;
+	}
+
+	if (Normal.IsNearlyZero())
+	{
+		Normal = FVector::UpVector;
 	}
 
 	AddVertex(Section, A, UVA, Normal);
@@ -1219,6 +1310,81 @@ void ASimpleHexGridActor::AddVertex(
 	Section.UVs.Add(UV);
 	Section.VertexColors.Add(FColor::White);
 	Section.Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+}
+
+void ASimpleHexGridActor::AddGridEdgeQuad(
+	TArray<FVector>& Vertices,
+	TArray<int32>& Triangles,
+	TArray<FVector>& Normals,
+	TArray<FVector2D>& UVs,
+	TArray<FColor>& VertexColors,
+	TArray<FProcMeshTangent>& Tangents,
+	const FVector& A,
+	const FVector& B,
+	float Width
+)
+{
+	const FVector FlatDirection = FVector(
+		B.X - A.X,
+		B.Y - A.Y,
+		0.0f
+	).GetSafeNormal();
+
+	if (FlatDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector Perpendicular = FVector(
+		-FlatDirection.Y,
+		FlatDirection.X,
+		0.0f
+	) * (Width * 0.5f);
+
+	const FVector V0 = A + Perpendicular;
+	const FVector V1 = B + Perpendicular;
+	const FVector V2 = B - Perpendicular;
+	const FVector V3 = A - Perpendicular;
+
+	const int32 StartIndex = Vertices.Num();
+
+	Vertices.Add(V0);
+	Vertices.Add(V1);
+	Vertices.Add(V2);
+	Vertices.Add(V3);
+
+	Triangles.Add(StartIndex + 0);
+	Triangles.Add(StartIndex + 1);
+	Triangles.Add(StartIndex + 2);
+
+	Triangles.Add(StartIndex + 0);
+	Triangles.Add(StartIndex + 2);
+	Triangles.Add(StartIndex + 3);
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		Normals.Add(FVector::UpVector);
+		VertexColors.Add(FColor::Black);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	}
+
+	UVs.Add(FVector2D(0.0f, 0.0f));
+	UVs.Add(FVector2D(1.0f, 0.0f));
+	UVs.Add(FVector2D(1.0f, 1.0f));
+	UVs.Add(FVector2D(0.0f, 1.0f));
+}
+
+bool ASimpleHexGridActor::ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const
+{
+	if (EdgeIndex == 3 || EdgeIndex == 4 || EdgeIndex == 5)
+	{
+		return true;
+	}
+
+	int32 NeighbourQ = 0;
+	int32 NeighbourR = 0;
+
+	return !GetNeighbourCoord(Q, R, EdgeIndex, NeighbourQ, NeighbourR);
 }
 
 FVector ASimpleHexGridActor::GetHexCenter(int32 Q, int32 R) const
@@ -1335,6 +1501,13 @@ bool ASimpleHexGridActor::IsValidTile(int32 Q, int32 R) const
 	return Tiles.IsValidIndex(GetTileIndex(Q, R));
 }
 
+bool ASimpleHexGridActor::IsWaterTileType(ESimpleHexTileType TileType) const
+{
+	return TileType == ESimpleHexTileType::Ocean ||
+		TileType == ESimpleHexTileType::Coast ||
+		TileType == ESimpleHexTileType::Lake;
+}
+
 int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileType) const
 {
 	switch (TileType)
@@ -1358,13 +1531,11 @@ int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileTyp
 		return 5;
 
 	case ESimpleHexTileType::Ocean:
+	case ESimpleHexTileType::Lake:
 		return 6;
 
 	case ESimpleHexTileType::Mountain:
 		return 7;
-		
-	case ESimpleHexTileType::Lake:
-		return 8;
 
 	default:
 		return 0;
@@ -1373,5 +1544,5 @@ int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileTyp
 
 int32 ASimpleHexGridActor::GetSectionCount() const
 {
-	return 9;
+	return 8;
 }

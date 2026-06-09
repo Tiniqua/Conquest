@@ -58,7 +58,6 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> AvoidAdjacentTypes;
 
-	// If this is not empty, this tile can only be placed beside one of these assigned tile types.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> RequiredAdjacentTypes;
 
@@ -113,6 +112,12 @@ public:
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Overlay")
+	void SetHexGridOverlayVisible(bool bVisible);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Water")
+	void SetWaterLayerVisible(bool bVisible);
 
 protected:
 	virtual void BeginPlay() override;
@@ -170,10 +175,48 @@ private:
 	// 3 Tundra
 	// 4 Snow
 	// 5 Coast
-	// 6 Ocean / Lake
+	// 6 Ocean / Lake floor
 	// 7 Mountain
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Materials")
 	TArray<UMaterialInterface*> TileMaterials;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
+	bool bShowWaterLayer = true;
+
+	// Flat world height for the water surface before optional render offset.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
+	float WaterSurfaceZ = 0.0f;
+
+	// Small visual offset applied only to the overlay mesh so translucent water does not z-fight with flat terrain at WaterSurfaceZ.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
+	float WaterSurfaceRenderOffset = 0.0f;
+
+	// When enabled, water overlay is also generated on adjacent land tiles whose averaged/tapered corners dip below the water plane.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
+	bool bFillAdjacentSlopedLandWaterGaps = true;
+
+	// How far below WaterSurfaceZ a land center/corner must be before it is considered a real water gap.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water", meta = (ClampMin = "0.0"))
+	float WaterGapFillBelowSurfaceTolerance = 0.5f;
+
+	// Avoids classifying almost-flat tiles as tapered/sloped gap fillers.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water", meta = (ClampMin = "0.0"))
+	float WaterGapFillMinSlopeDelta = 1.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
+	UMaterialInterface* WaterMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
+	bool bShowHexGridOverlay = true;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.1"))
+	float GridLineWidth = 4.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.0"))
+	float GridOverlaySurfaceOffset = 2.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
+	UMaterialInterface* GridOverlayMaterial = nullptr;
 
 	UPROPERTY()
 	USceneComponent* SceneRoot = nullptr;
@@ -181,46 +224,16 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid")
 	UProceduralMeshComponent* GridMesh = nullptr;
 
-	UPROPERTY()
-	TArray<FSimpleHexTileData> Tiles;
-
-	TMap<FSimpleHexVertexKey, float> ResolvedVertexHeights;
-
-	// HEX GRID
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
-	bool bShowHexGridOverlay = true;
-
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.1"))
-	float GridLineWidth = 4.0f;
-
-	// Small offset above the terrain surface to prevent z-fighting.
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.0"))
-	float GridOverlaySurfaceOffset = 2.0f;
-
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
-	UMaterialInterface* GridOverlayMaterial = nullptr;
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Water")
+	UProceduralMeshComponent* WaterMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Overlay")
 	UProceduralMeshComponent* HexGridOverlayMesh = nullptr;
 
-	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Overlay")
-	void SetHexGridOverlayVisible(bool bVisible);
+	UPROPERTY()
+	TArray<FSimpleHexTileData> Tiles;
 
-	void GenerateGridOverlayMesh();
-
-	void AddGridEdgeQuad(
-		TArray<FVector>& Vertices,
-		TArray<int32>& Triangles,
-		TArray<FVector>& Normals,
-		TArray<FVector2D>& UVs,
-		TArray<FColor>& VertexColors,
-		TArray<FProcMeshTangent>& Tangents,
-		const FVector& A,
-		const FVector& B,
-		float Width
-	);
-
-	bool ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const;
+	TMap<FSimpleHexVertexKey, float> ResolvedVertexHeights;
 
 private:
 	void SetupDefaultGenerationRules();
@@ -229,6 +242,8 @@ private:
 	void ResolveTileHeights();
 	void ResolveSharedVertexHeights();
 	void GenerateMesh();
+	void GenerateWaterMesh();
+	void GenerateGridOverlayMesh();
 
 	void BuildDesiredTileCounts(
 		FRandomStream& RandomStream,
@@ -280,16 +295,26 @@ private:
 		const TArray<bool>& Assigned
 	) const;
 
-	ESimpleHexTileType PickWeightedTileType(FRandomStream& RandomStream) const;
 	ESimpleHexTileType PickWeightedLandTileType(FRandomStream& RandomStream) const;
 
 	float GetHeightOffsetForTileType(ESimpleHexTileType TileType) const;
 	float GetResolvedCornerHeight(const FVector& FlatCornerPosition) const;
+	float GetWaterSurfaceRenderZ() const;
+
+	bool IsWaterLayerTargetTile(int32 Q, int32 R) const;
+	bool IsLandTileAdjacentToWater(int32 Q, int32 R) const;
+	bool DoesAdjacentLandTileNeedWaterGapFill(int32 Q, int32 R) const;
 
 	void AddHexTile(
 		int32 Q,
 		int32 R,
 		TArray<FSimpleHexMeshSection>& MeshSections
+	);
+
+	void AddFlatWaterHex(
+		int32 Q,
+		int32 R,
+		FSimpleHexMeshSection& Section
 	);
 
 	void AddTriangle(
@@ -301,14 +326,28 @@ private:
 		const FVector2D& UVB,
 		const FVector2D& UVC
 	);
-	
+
 	void AddVertex(
-	FSimpleHexMeshSection& Section,
-	const FVector& Position,
-	const FVector2D& UV,
-	const FVector& Normal
-);
-	
+		FSimpleHexMeshSection& Section,
+		const FVector& Position,
+		const FVector2D& UV,
+		const FVector& Normal
+	);
+
+	void AddGridEdgeQuad(
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents,
+		const FVector& A,
+		const FVector& B,
+		float Width
+	);
+
+	bool ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const;
+
 	FVector GetHexCenter(int32 Q, int32 R) const;
 	FVector GetHexCornerOffset(int32 CornerIndex) const;
 	FVector2D GetHexCornerUV(int32 CornerIndex) const;
@@ -326,6 +365,8 @@ private:
 	int32 GetTileIndex(int32 Q, int32 R) const;
 	bool IsValidCoord(int32 Q, int32 R) const;
 	bool IsValidTile(int32 Q, int32 R) const;
+
+	bool IsWaterTileType(ESimpleHexTileType TileType) const;
 
 	int32 GetSectionIndexForTileType(ESimpleHexTileType TileType) const;
 	int32 GetSectionCount() const;

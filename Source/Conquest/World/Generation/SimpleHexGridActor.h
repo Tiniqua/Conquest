@@ -31,6 +31,31 @@ struct FSimpleHexTileData
 	ESimpleHexTileType TileType = ESimpleHexTileType::Grassland;
 };
 
+USTRUCT(BlueprintType)
+struct FSimpleHexTileGenerationRule
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	ESimpleHexTileType TileType = ESimpleHexTileType::Grassland;
+
+	// Relative share of the final map.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "0.0"))
+	float Weight = 1.0f;
+
+	// Preferred minimum number of tiles per clump.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "1"))
+	int32 MinClumpSize = 4;
+
+	// Preferred maximum number of tiles per clump.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "1"))
+	int32 MaxClumpSize = 12;
+
+	// Tile types this tile likes to start/grow beside.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	TArray<ESimpleHexTileType> PreferredAdjacentTypes;
+};
+
 struct FSimpleHexMeshSection
 {
 	TArray<FVector> Vertices;
@@ -72,11 +97,24 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
 	int32 RandomSeed = 1337;
 
+	// Adds variation to the final tile counts.
+	// Example: 0.15 means each rule weight can shift by roughly +/-15%.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float WaterChance = 0.15f;
+	float CountRandomness = 0.15f;
 
-	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float MountainChance = 0.04f;
+	// Higher values make clumps more strongly prefer growing into positions beside similar/preferred terrain.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float SameTypeAdjacencyBonus = 3.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float PreferredAdjacencyBonus = 2.0f;
+
+	// More attempts gives better seed selection, but costs slightly more generation time.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
+	int32 SeedSelectionAttempts = 48;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
+	TArray<FSimpleHexTileGenerationRule> GenerationRules;
 
 	// Material order:
 	// 0 Grassland
@@ -100,8 +138,48 @@ private:
 	TArray<FSimpleHexTileData> Tiles;
 
 private:
+	void SetupDefaultGenerationRules();
+
 	void GenerateTileData();
 	void GenerateMesh();
+
+	void BuildDesiredTileCounts(
+		FRandomStream& RandomStream,
+		TMap<ESimpleHexTileType, int32>& OutDesiredCounts
+	) const;
+
+	bool FindSeedTileForRule(
+		const FSimpleHexTileGenerationRule& Rule,
+		FRandomStream& RandomStream,
+		const TArray<bool>& Assigned,
+		int32& OutQ,
+		int32& OutR
+	) const;
+
+	float ScoreSeedTileForRule(
+		const FSimpleHexTileGenerationRule& Rule,
+		int32 Q,
+		int32 R,
+		const TArray<bool>& Assigned
+	) const;
+
+	int32 GrowClump(
+		const FSimpleHexTileGenerationRule& Rule,
+		int32 SeedQ,
+		int32 SeedR,
+		int32 TargetSize,
+		FRandomStream& RandomStream,
+		TArray<bool>& Assigned
+	);
+
+	int32 PickBestFrontierIndex(
+		const FSimpleHexTileGenerationRule& Rule,
+		const TArray<FIntPoint>& Frontier,
+		FRandomStream& RandomStream,
+		const TArray<bool>& Assigned
+	) const;
+
+	ESimpleHexTileType PickWeightedTileType(FRandomStream& RandomStream) const;
 
 	void AddHexTile(
 		int32 Q,
@@ -129,7 +207,16 @@ private:
 	FVector GetHexCornerOffset(int32 CornerIndex) const;
 	FVector2D GetHexCornerUV(int32 CornerIndex) const;
 
+	bool GetNeighbourCoord(
+		int32 Q,
+		int32 R,
+		int32 Direction,
+		int32& OutQ,
+		int32& OutR
+	) const;
+
 	int32 GetTileIndex(int32 Q, int32 R) const;
+	bool IsValidCoord(int32 Q, int32 R) const;
 	bool IsValidTile(int32 Q, int32 R) const;
 
 	int32 GetSectionIndexForTileType(ESimpleHexTileType TileType) const;

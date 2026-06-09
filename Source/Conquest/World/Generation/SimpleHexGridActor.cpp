@@ -260,7 +260,11 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 		ESimpleHexTileType::Coast,
 		ESimpleHexTileType::Lake
 	};
+	Mountain.bSoftCount = true;
+	Mountain.bRejectBadAdjacency = true;
+	Mountain.MinPlacementScore = 0.5f;
 	Mountain.HeightOffset = 5.0f;
+	
 	GenerationRules.Add(Mountain);
 }
 
@@ -330,7 +334,7 @@ void ASimpleHexGridActor::GenerateTileData()
 			{
 				++FailedClumpAttempts;
 
-				if (Rule.bSoftCount && FailedClumpAttempts >= 12)
+				if (FailedClumpAttempts >= 12)
 				{
 					break;
 				}
@@ -349,7 +353,7 @@ void ASimpleHexGridActor::GenerateTileData()
 				FailedClumpAttempts = 0;
 			}
 
-			if (Rule.bSoftCount && FailedClumpAttempts >= 12)
+			if (FailedClumpAttempts >= 12)
 			{
 				break;
 			}
@@ -535,9 +539,12 @@ bool ASimpleHexGridActor::FindSeedTileForRule(
 
 	if (BestIndex != INDEX_NONE)
 	{
-		OutQ = BestIndex % GridWidth;
-		OutR = BestIndex / GridWidth;
-		return true;
+		if (!Rule.bRejectBadAdjacency || BestScore >= Rule.MinPlacementScore)
+		{
+			OutQ = BestIndex % GridWidth;
+			OutR = BestIndex / GridWidth;
+			return true;
+		}
 	}
 
 	for (int32 Index = 0; Index < Assigned.Num(); ++Index)
@@ -548,6 +555,18 @@ bool ASimpleHexGridActor::FindSeedTileForRule(
 			const int32 CandidateR = Index / GridWidth;
 
 			if (!DoesTileSatisfyRequiredAdjacency(Rule, CandidateQ, CandidateR, Assigned))
+			{
+				continue;
+			}
+
+			const float CandidateScore = ScoreSeedTileForRule(
+				Rule,
+				CandidateQ,
+				CandidateR,
+				Assigned
+			);
+
+			if (Rule.bRejectBadAdjacency && CandidateScore < Rule.MinPlacementScore)
 			{
 				continue;
 			}

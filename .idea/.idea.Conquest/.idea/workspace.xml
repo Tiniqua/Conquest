@@ -21,14 +21,15 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "XThreadsFramesViewSplitterKey": "0.37251356",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RunManager" selected="C++ Project.Conquest">
     <configuration name="Conquest" type="CppProject" factoryName="C++ Project">
       <configuration_1>
@@ -388,7 +389,7 @@
       <option name="presentableId" value="Default" />
       <updated>1780943272369</updated>
       <workItem from="1780943359056" duration="6689000" />
-      <workItem from="1780992525763" duration="7808000" />
+      <workItem from="1780992525763" duration="9561000" />
     </task>
     <servers />
   </component>

@@ -1192,22 +1192,30 @@ void ASimpleHexGridActor::AddTriangle(
 	const FVector2D& UVC
 )
 {
-	AddVertex(Section, A, UVA);
-	AddVertex(Section, B, UVB);
-	AddVertex(Section, C, UVC);
+	FVector Normal = FVector::CrossProduct(B - A, C - A).GetSafeNormal();
+
+	if (Normal.Z < 0.0f)
+	{
+		Normal *= -1.0f;
+	}
+
+	AddVertex(Section, A, UVA, Normal);
+	AddVertex(Section, B, UVB, Normal);
+	AddVertex(Section, C, UVC, Normal);
 }
 
 void ASimpleHexGridActor::AddVertex(
 	FSimpleHexMeshSection& Section,
 	const FVector& Position,
-	const FVector2D& UV
+	const FVector2D& UV,
+	const FVector& Normal
 )
 {
 	const int32 NewIndex = Section.Vertices.Num();
 
 	Section.Vertices.Add(Position);
 	Section.Triangles.Add(NewIndex);
-	Section.Normals.Add(FVector::UpVector);
+	Section.Normals.Add(Normal);
 	Section.UVs.Add(UV);
 	Section.VertexColors.Add(FColor::White);
 	Section.Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));

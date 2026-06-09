@@ -301,13 +301,14 @@ private:
 		const FVector2D& UVB,
 		const FVector2D& UVC
 	);
-
+	
 	void AddVertex(
-		FSimpleHexMeshSection& Section,
-		const FVector& Position,
-		const FVector2D& UV
-	);
-
+	FSimpleHexMeshSection& Section,
+	const FVector& Position,
+	const FVector2D& UV,
+	const FVector& Normal
+);
+	
 	FVector GetHexCenter(int32 Q, int32 R) const;
 	FVector GetHexCornerOffset(int32 CornerIndex) const;
 	FVector2D GetHexCornerUV(int32 CornerIndex) const;

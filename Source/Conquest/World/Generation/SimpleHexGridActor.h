@@ -186,6 +186,42 @@ private:
 
 	TMap<FSimpleHexVertexKey, float> ResolvedVertexHeights;
 
+	// HEX GRID
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
+	bool bShowHexGridOverlay = true;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.1"))
+	float GridLineWidth = 4.0f;
+
+	// Small offset above the terrain surface to prevent z-fighting.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.0"))
+	float GridOverlaySurfaceOffset = 2.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
+	UMaterialInterface* GridOverlayMaterial = nullptr;
+
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Overlay")
+	UProceduralMeshComponent* HexGridOverlayMesh = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Overlay")
+	void SetHexGridOverlayVisible(bool bVisible);
+
+	void GenerateGridOverlayMesh();
+
+	void AddGridEdgeQuad(
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents,
+		const FVector& A,
+		const FVector& B,
+		float Width
+	);
+
+	bool ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const;
+
 private:
 	void SetupDefaultGenerationRules();
 

@@ -15,6 +15,15 @@ ASimpleHexGridActor::ASimpleHexGridActor()
 	GridMesh->bUseAsyncCooking = true;
 	GridMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
+	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
+	HexGridOverlayMesh->SetupAttachment(SceneRoot);
+	HexGridOverlayMesh->bUseAsyncCooking = true;
+	HexGridOverlayMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HexGridOverlayMesh->SetVisibility(bShowHexGridOverlay);
+	HexGridOverlayMesh->SetCastShadow(false);
+	HexGridOverlayMesh->bCastDynamicShadow = false;
+	HexGridOverlayMesh->bCastStaticShadow = false;
+
 	SetupDefaultGenerationRules();
 }
 
@@ -34,6 +43,208 @@ void ASimpleHexGridActor::RebuildGrid()
 	ResolveTileHeights();
 	ResolveSharedVertexHeights();
 	GenerateMesh();
+	GenerateGridOverlayMesh();
+}
+
+void ASimpleHexGridActor::SetHexGridOverlayVisible(bool bVisible)
+{
+	bShowHexGridOverlay = bVisible;
+
+	if (HexGridOverlayMesh)
+	{
+		HexGridOverlayMesh->SetVisibility(bShowHexGridOverlay);
+	}
+}
+
+void ASimpleHexGridActor::GenerateGridOverlayMesh()
+{
+	if (!HexGridOverlayMesh)
+	{
+		return;
+	}
+
+	HexGridOverlayMesh->ClearAllMeshSections();
+	HexGridOverlayMesh->SetVisibility(bShowHexGridOverlay);
+	HexGridOverlayMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Re-apply this in case the component was reset/recreated.
+	HexGridOverlayMesh->SetCastShadow(false);
+	HexGridOverlayMesh->bCastDynamicShadow = false;
+	HexGridOverlayMesh->bCastStaticShadow = false;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	for (int32 R = 0; R < GridHeight; ++R)
+	{
+		for (int32 Q = 0; Q < GridWidth; ++Q)
+		{
+			const FVector FlatCenter = GetHexCenter(Q, R);
+
+			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+			{
+				if (!ShouldDrawGridEdge(Q, R, EdgeIndex))
+				{
+					continue;
+				}
+
+				const int32 AIndex = EdgeIndex;
+				const int32 BIndex = (EdgeIndex + 1) % 6;
+
+				const FVector FlatA = FlatCenter + GetHexCornerOffset(AIndex);
+				const FVector FlatB = FlatCenter + GetHexCornerOffset(BIndex);
+
+				const float HeightA = bUseHeightOffsets
+					? GetResolvedCornerHeight(FlatA)
+					: 0.0f;
+
+				const float HeightB = bUseHeightOffsets
+					? GetResolvedCornerHeight(FlatB)
+					: 0.0f;
+
+				const FVector A(
+					FlatA.X,
+					FlatA.Y,
+					HeightA + GridOverlaySurfaceOffset
+				);
+
+				const FVector B(
+					FlatB.X,
+					FlatB.Y,
+					HeightB + GridOverlaySurfaceOffset
+				);
+
+				AddGridEdgeQuad(
+					Vertices,
+					Triangles,
+					Normals,
+					UVs,
+					VertexColors,
+					Tangents,
+					A,
+					B,
+					GridLineWidth
+				);
+			}
+		}
+	}
+
+	HexGridOverlayMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	if (GridOverlayMaterial)
+	{
+		HexGridOverlayMesh->SetMaterial(0, GridOverlayMaterial);
+	}
+
+	HexGridOverlayMesh->SetCastShadow(false);
+}
+
+bool ASimpleHexGridActor::ShouldDrawGridEdge(int32 Q, int32 R, int32 EdgeIndex) const
+{
+	// Your edge indexing:
+	// 0 NE
+	// 1 NW
+	// 2 W
+	// 3 SW
+	// 4 SE
+	// 5 E
+
+	// Draw only half the edges for interior tiles to avoid double-thick shared borders.
+	if (EdgeIndex == 3 || EdgeIndex == 4 || EdgeIndex == 5)
+	{
+		return true;
+	}
+
+	// Still draw missing north/west border edges.
+	int32 NeighbourQ = 0;
+	int32 NeighbourR = 0;
+
+	return !GetNeighbourCoord(Q, R, EdgeIndex, NeighbourQ, NeighbourR);
+}
+
+void ASimpleHexGridActor::AddGridEdgeQuad(
+	TArray<FVector>& Vertices,
+	TArray<int32>& Triangles,
+	TArray<FVector>& Normals,
+	TArray<FVector2D>& UVs,
+	TArray<FColor>& VertexColors,
+	TArray<FProcMeshTangent>& Tangents,
+	const FVector& A,
+	const FVector& B,
+	float Width
+)
+{
+	const FVector FlatDirection = FVector(
+		B.X - A.X,
+		B.Y - A.Y,
+		0.0f
+	).GetSafeNormal();
+
+	if (FlatDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector Perpendicular = FVector(
+		-FlatDirection.Y,
+		FlatDirection.X,
+		0.0f
+	) * (Width * 0.5f);
+
+	const FVector V0 = A + Perpendicular;
+	const FVector V1 = B + Perpendicular;
+	const FVector V2 = B - Perpendicular;
+	const FVector V3 = A - Perpendicular;
+
+	const int32 StartIndex = Vertices.Num();
+
+	Vertices.Add(V0);
+	Vertices.Add(V1);
+	Vertices.Add(V2);
+	Vertices.Add(V3);
+
+	Triangles.Add(StartIndex + 0);
+	Triangles.Add(StartIndex + 1);
+	Triangles.Add(StartIndex + 2);
+
+	Triangles.Add(StartIndex + 0);
+	Triangles.Add(StartIndex + 2);
+	Triangles.Add(StartIndex + 3);
+
+	// Since this is an overlay, simple up normals are fine.
+	// The material should ideally be unlit anyway.
+	Normals.Add(FVector::UpVector);
+	Normals.Add(FVector::UpVector);
+	Normals.Add(FVector::UpVector);
+	Normals.Add(FVector::UpVector);
+
+	UVs.Add(FVector2D(0.0f, 0.0f));
+	UVs.Add(FVector2D(1.0f, 0.0f));
+	UVs.Add(FVector2D(1.0f, 1.0f));
+	UVs.Add(FVector2D(0.0f, 1.0f));
+
+	VertexColors.Add(FColor::Black);
+	VertexColors.Add(FColor::Black);
+	VertexColors.Add(FColor::Black);
+	VertexColors.Add(FColor::Black);
+
+	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
 }
 
 void ASimpleHexGridActor::SetupDefaultGenerationRules()

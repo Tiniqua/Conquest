@@ -19,6 +19,7 @@ enum class ESimpleHexTileType : uint8
 	Snow      UMETA(DisplayName = "Snow"),
 	Coast     UMETA(DisplayName = "Coast"),
 	Ocean     UMETA(DisplayName = "Ocean"),
+	Lake      UMETA(DisplayName = "Lake"),
 	Mountain  UMETA(DisplayName = "Mountain")
 };
 
@@ -57,6 +58,10 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> AvoidAdjacentTypes;
 
+	// If this is not empty, this tile can only be placed beside one of these assigned tile types.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	TArray<ESimpleHexTileType> RequiredAdjacentTypes;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	bool bSoftCount = false;
 
@@ -66,8 +71,6 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float MinPlacementScore = 0.5f;
 
-	// Logical height offset before world scaling.
-	// Example: Ocean -2, Coast -1, Grassland 0, Plains 1, Mountain 5.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float HeightOffset = 0.0f;
 };
@@ -133,7 +136,6 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Height")
 	float HeightScale = 60.0f;
 
-	// Used to convert deterministic world-space XY positions into stable shared vertex keys.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Height", meta = (ClampMin = "1.0"))
 	float VertexKeyPrecision = 10.0f;
 
@@ -168,7 +170,7 @@ private:
 	// 3 Tundra
 	// 4 Snow
 	// 5 Coast
-	// 6 Ocean
+	// 6 Ocean / Lake
 	// 7 Mountain
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Materials")
 	TArray<UMaterialInterface*> TileMaterials;
@@ -213,6 +215,13 @@ private:
 	) const;
 
 	float ScoreTileForRuleAdjacency(
+		const FSimpleHexTileGenerationRule& Rule,
+		int32 Q,
+		int32 R,
+		const TArray<bool>& Assigned
+	) const;
+
+	bool DoesTileSatisfyRequiredAdjacency(
 		const FSimpleHexTileGenerationRule& Rule,
 		int32 Q,
 		int32 R,

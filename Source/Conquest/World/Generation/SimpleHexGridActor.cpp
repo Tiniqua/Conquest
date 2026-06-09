@@ -45,14 +45,18 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Ocean.Weight = 8.0f;
 	Ocean.MinClumpSize = 10;
 	Ocean.MaxClumpSize = 28;
-	Ocean.PreferredAdjacentTypes = { ESimpleHexTileType::Ocean, ESimpleHexTileType::Coast };
+	Ocean.PreferredAdjacentTypes = {
+		ESimpleHexTileType::Ocean,
+		ESimpleHexTileType::Coast
+	};
 	Ocean.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Grassland,
 		ESimpleHexTileType::Plains,
 		ESimpleHexTileType::Desert,
 		ESimpleHexTileType::Tundra,
 		ESimpleHexTileType::Snow,
-		ESimpleHexTileType::Mountain
+		ESimpleHexTileType::Mountain,
+		ESimpleHexTileType::Lake
 	};
 	Ocean.bSoftCount = true;
 	Ocean.bRejectBadAdjacency = true;
@@ -72,7 +76,8 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	};
 	Coast.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Mountain,
-		ESimpleHexTileType::Snow
+		ESimpleHexTileType::Snow,
+		ESimpleHexTileType::Lake
 	};
 	Coast.bSoftCount = true;
 	Coast.bRejectBadAdjacency = true;
@@ -88,9 +93,12 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Grassland.PreferredAdjacentTypes = {
 		ESimpleHexTileType::Grassland,
 		ESimpleHexTileType::Plains,
-		ESimpleHexTileType::Coast
+		ESimpleHexTileType::Coast,
+		ESimpleHexTileType::Lake
 	};
-	Grassland.AvoidAdjacentTypes = { ESimpleHexTileType::Ocean };
+	Grassland.AvoidAdjacentTypes = {
+		ESimpleHexTileType::Ocean
+	};
 	Grassland.HeightOffset = 0.0f;
 	GenerationRules.Add(Grassland);
 
@@ -102,10 +110,13 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Plains.PreferredAdjacentTypes = {
 		ESimpleHexTileType::Plains,
 		ESimpleHexTileType::Grassland,
-		ESimpleHexTileType::Desert
+		ESimpleHexTileType::Desert,
+		ESimpleHexTileType::Lake
 	};
-	Plains.AvoidAdjacentTypes = { ESimpleHexTileType::Ocean };
-	Plains.HeightOffset = 2.0f;
+	Plains.AvoidAdjacentTypes = {
+		ESimpleHexTileType::Ocean
+	};
+	Plains.HeightOffset = 1.0f;
 	GenerationRules.Add(Plains);
 
 	FSimpleHexTileGenerationRule Desert;
@@ -120,9 +131,10 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Desert.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Ocean,
 		ESimpleHexTileType::Snow,
-		ESimpleHexTileType::Tundra
+		ESimpleHexTileType::Tundra,
+		ESimpleHexTileType::Lake
 	};
-	Desert.HeightOffset = 3.0f;
+	Desert.HeightOffset = 0.0f;
 	GenerationRules.Add(Desert);
 
 	FSimpleHexTileGenerationRule Tundra;
@@ -133,13 +145,14 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Tundra.PreferredAdjacentTypes = {
 		ESimpleHexTileType::Tundra,
 		ESimpleHexTileType::Snow,
-		ESimpleHexTileType::Plains
+		ESimpleHexTileType::Plains,
+		ESimpleHexTileType::Lake
 	};
 	Tundra.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Ocean,
 		ESimpleHexTileType::Desert
 	};
-	Tundra.HeightOffset = 1.0f;
+	Tundra.HeightOffset = 0.0f;
 	GenerationRules.Add(Tundra);
 
 	FSimpleHexTileGenerationRule Snow;
@@ -155,14 +168,42 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	Snow.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Ocean,
 		ESimpleHexTileType::Desert,
+		ESimpleHexTileType::Coast,
+		ESimpleHexTileType::Lake
+	};
+	Snow.HeightOffset = 1.0f;
+	GenerationRules.Add(Snow);
+
+	FSimpleHexTileGenerationRule Lake;
+	Lake.TileType = ESimpleHexTileType::Lake;
+	Lake.Weight = 3.0f;
+	Lake.MinClumpSize = 1;
+	Lake.MaxClumpSize = 4;
+
+	Lake.PreferredAdjacentTypes = {
+		ESimpleHexTileType::Lake,
+		ESimpleHexTileType::Grassland,
+		ESimpleHexTileType::Plains,
+		ESimpleHexTileType::Tundra
+	};
+	Lake.AvoidAdjacentTypes = {
+		ESimpleHexTileType::Ocean,
 		ESimpleHexTileType::Coast
 	};
-	Snow.HeightOffset = 2.0f;
-	GenerationRules.Add(Snow);
+	Lake.RequiredAdjacentTypes = {
+		ESimpleHexTileType::Grassland,
+		ESimpleHexTileType::Plains,
+		ESimpleHexTileType::Tundra
+	};
+	Lake.bSoftCount = true;
+	Lake.bRejectBadAdjacency = true;
+	Lake.MinPlacementScore = 1.0f;
+	Lake.HeightOffset = -2.0f;
+	GenerationRules.Add(Lake);
 
 	FSimpleHexTileGenerationRule Mountain;
 	Mountain.TileType = ESimpleHexTileType::Mountain;
-	Mountain.Weight = 3.0f;
+	Mountain.Weight = 1.5f;
 	Mountain.MinClumpSize = 2;
 	Mountain.MaxClumpSize = 8;
 	Mountain.PreferredAdjacentTypes = {
@@ -172,7 +213,8 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 	};
 	Mountain.AvoidAdjacentTypes = {
 		ESimpleHexTileType::Ocean,
-		ESimpleHexTileType::Coast
+		ESimpleHexTileType::Coast,
+		ESimpleHexTileType::Lake
 	};
 	Mountain.HeightOffset = 5.0f;
 	GenerationRules.Add(Mountain);
@@ -244,7 +286,7 @@ void ASimpleHexGridActor::GenerateTileData()
 			{
 				++FailedClumpAttempts;
 
-				if (Rule.bSoftCount && FailedClumpAttempts >= 3)
+				if (Rule.bSoftCount && FailedClumpAttempts >= 12)
 				{
 					break;
 				}
@@ -458,8 +500,16 @@ bool ASimpleHexGridActor::FindSeedTileForRule(
 	{
 		if (!Assigned[Index])
 		{
-			OutQ = Index % GridWidth;
-			OutR = Index / GridWidth;
+			const int32 CandidateQ = Index % GridWidth;
+			const int32 CandidateR = Index / GridWidth;
+
+			if (!DoesTileSatisfyRequiredAdjacency(Rule, CandidateQ, CandidateR, Assigned))
+			{
+				continue;
+			}
+
+			OutQ = CandidateQ;
+			OutR = CandidateR;
 			return true;
 		}
 	}
@@ -484,6 +534,11 @@ float ASimpleHexGridActor::ScoreTileForRuleAdjacency(
 	const TArray<bool>& Assigned
 ) const
 {
+	if (!DoesTileSatisfyRequiredAdjacency(Rule, Q, R, Assigned))
+	{
+		return -100000.0f;
+	}
+
 	float Score = 1.0f;
 
 	for (int32 Direction = 0; Direction < 6; ++Direction)
@@ -531,6 +586,46 @@ float ASimpleHexGridActor::ScoreTileForRuleAdjacency(
 	}
 
 	return Score;
+}
+
+bool ASimpleHexGridActor::DoesTileSatisfyRequiredAdjacency(
+	const FSimpleHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R,
+	const TArray<bool>& Assigned
+) const
+{
+	if (Rule.RequiredAdjacentTypes.Num() <= 0)
+	{
+		return true;
+	}
+
+	for (int32 Direction = 0; Direction < 6; ++Direction)
+	{
+		int32 NeighbourQ = 0;
+		int32 NeighbourR = 0;
+
+		if (!GetNeighbourCoord(Q, R, Direction, NeighbourQ, NeighbourR))
+		{
+			continue;
+		}
+
+		const int32 NeighbourIndex = GetTileIndex(NeighbourQ, NeighbourR);
+
+		if (!Tiles.IsValidIndex(NeighbourIndex) ||
+			!Assigned.IsValidIndex(NeighbourIndex) ||
+			!Assigned[NeighbourIndex])
+		{
+			continue;
+		}
+
+		if (Rule.RequiredAdjacentTypes.Contains(Tiles[NeighbourIndex].TileType))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 int32 ASimpleHexGridActor::GrowClump(
@@ -708,7 +803,8 @@ ESimpleHexTileType ASimpleHexGridActor::PickWeightedLandTileType(
 	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
 	{
 		if (Rule.TileType == ESimpleHexTileType::Ocean ||
-			Rule.TileType == ESimpleHexTileType::Coast)
+			Rule.TileType == ESimpleHexTileType::Coast ||
+			Rule.TileType == ESimpleHexTileType::Lake)
 		{
 			continue;
 		}
@@ -726,7 +822,8 @@ ESimpleHexTileType ASimpleHexGridActor::PickWeightedLandTileType(
 	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
 	{
 		if (Rule.TileType == ESimpleHexTileType::Ocean ||
-			Rule.TileType == ESimpleHexTileType::Coast)
+			Rule.TileType == ESimpleHexTileType::Coast ||
+			Rule.TileType == ESimpleHexTileType::Lake)
 		{
 			continue;
 		}
@@ -962,32 +1059,32 @@ bool ASimpleHexGridActor::GetNeighbourCoord(
 
 	switch (Direction)
 	{
-	case 0: // NE
+	case 0:
 		OutQ = bOddRow ? Q + 1 : Q;
 		OutR = R - 1;
 		break;
 
-	case 1: // NW
+	case 1:
 		OutQ = bOddRow ? Q : Q - 1;
 		OutR = R - 1;
 		break;
 
-	case 2: // W
+	case 2:
 		OutQ = Q - 1;
 		OutR = R;
 		break;
 
-	case 3: // SW
+	case 3:
 		OutQ = bOddRow ? Q : Q - 1;
 		OutR = R + 1;
 		break;
 
-	case 4: // SE
+	case 4:
 		OutQ = bOddRow ? Q + 1 : Q;
 		OutR = R + 1;
 		break;
 
-	case 5: // E
+	case 5:
 		OutQ = Q + 1;
 		OutR = R;
 		break;
@@ -1021,10 +1118,41 @@ bool ASimpleHexGridActor::IsValidTile(int32 Q, int32 R) const
 
 int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileType) const
 {
-	return static_cast<int32>(TileType);
+	switch (TileType)
+	{
+	case ESimpleHexTileType::Grassland:
+		return 0;
+
+	case ESimpleHexTileType::Plains:
+		return 1;
+
+	case ESimpleHexTileType::Desert:
+		return 2;
+
+	case ESimpleHexTileType::Tundra:
+		return 3;
+
+	case ESimpleHexTileType::Snow:
+		return 4;
+
+	case ESimpleHexTileType::Coast:
+		return 5;
+
+	case ESimpleHexTileType::Ocean:
+		return 6;
+
+	case ESimpleHexTileType::Mountain:
+		return 7;
+		
+	case ESimpleHexTileType::Lake:
+		return 8;
+
+	default:
+		return 0;
+	}
 }
 
 int32 ASimpleHexGridActor::GetSectionCount() const
 {
-	return static_cast<int32>(ESimpleHexTileType::Mountain) + 1;
+	return 9;
 }

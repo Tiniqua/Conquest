@@ -43,17 +43,32 @@ struct FSimpleHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "0.0"))
 	float Weight = 1.0f;
 
-	// Preferred minimum number of tiles per clump.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "1"))
 	int32 MinClumpSize = 4;
 
-	// Preferred maximum number of tiles per clump.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation", meta = (ClampMin = "1"))
 	int32 MaxClumpSize = 12;
 
-	// Tile types this tile likes to start/grow beside.
+	// Positive bias.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	TArray<ESimpleHexTileType> PreferredAdjacentTypes;
+
+	// Negative bias.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	TArray<ESimpleHexTileType> AvoidAdjacentTypes;
+
+	// If true, this type is allowed to place fewer tiles than its desired count
+	// when the available positions are poor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	bool bSoftCount = false;
+
+	// If true, clump growth will reject very bad candidate tiles instead of forcing placement.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	bool bRejectBadAdjacency = false;
+
+	// Minimum candidate score required when bRejectBadAdjacency is true.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
+	float MinPlacementScore = 0.5f;
 };
 
 struct FSimpleHexMeshSection
@@ -116,6 +131,12 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
 	TArray<FSimpleHexTileGenerationRule> GenerationRules;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float AvoidAdjacencyPenalty = 6.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float HardAvoidAdjacencyPenalty = 12.0f;
+
 	// Material order:
 	// 0 Grassland
 	// 1 Plains
@@ -161,6 +182,13 @@ private:
 		int32 Q,
 		int32 R,
 		const TArray<bool>& Assigned
+	) const;
+
+	float ScoreTileForRuleAdjacency(
+	const FSimpleHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R,
+	const TArray<bool>& Assigned
 	) const;
 
 	int32 GrowClump(

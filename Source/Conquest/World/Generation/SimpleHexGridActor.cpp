@@ -40,50 +40,79 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 
 	GenerationRules.Add({
 		ESimpleHexTileType::Ocean,
-		12.0f,
-		8,
-		24,
+		8.0f,
+		10,
+		28,
 		{
 			ESimpleHexTileType::Ocean,
 			ESimpleHexTileType::Coast
-		}
+		},
+		{
+			ESimpleHexTileType::Grassland,
+			ESimpleHexTileType::Plains,
+			ESimpleHexTileType::Desert,
+			ESimpleHexTileType::Tundra,
+			ESimpleHexTileType::Snow,
+			ESimpleHexTileType::Mountain
+		},
+		true,
+		true,
+		1.0f
 	});
 
 	GenerationRules.Add({
 		ESimpleHexTileType::Coast,
-		10.0f,
-		4,
-		14,
+		5.0f,
+		3,
+		10,
 		{
 			ESimpleHexTileType::Ocean,
-			ESimpleHexTileType::Coast,
 			ESimpleHexTileType::Grassland,
 			ESimpleHexTileType::Plains
-		}
+		},
+		{
+			ESimpleHexTileType::Mountain,
+			ESimpleHexTileType::Snow
+		},
+		true,
+		true,
+		2.0f
 	});
 
 	GenerationRules.Add({
 		ESimpleHexTileType::Grassland,
-		28.0f,
+		31.0f,
 		8,
 		28,
 		{
 			ESimpleHexTileType::Grassland,
 			ESimpleHexTileType::Plains,
 			ESimpleHexTileType::Coast
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean
+		},
+		false,
+		false,
+		0.0f
 	});
 
 	GenerationRules.Add({
 		ESimpleHexTileType::Plains,
-		24.0f,
+		27.0f,
 		8,
 		26,
 		{
 			ESimpleHexTileType::Plains,
 			ESimpleHexTileType::Grassland,
 			ESimpleHexTileType::Desert
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean
+		},
+		false,
+		false,
+		0.0f
 	});
 
 	GenerationRules.Add({
@@ -94,7 +123,15 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 		{
 			ESimpleHexTileType::Desert,
 			ESimpleHexTileType::Plains
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean,
+			ESimpleHexTileType::Snow,
+			ESimpleHexTileType::Tundra
+		},
+		false,
+		false,
+		0.0f
 	});
 
 	GenerationRules.Add({
@@ -106,7 +143,14 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 			ESimpleHexTileType::Tundra,
 			ESimpleHexTileType::Snow,
 			ESimpleHexTileType::Plains
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean,
+			ESimpleHexTileType::Desert
+		},
+		false,
+		false,
+		0.0f
 	});
 
 	GenerationRules.Add({
@@ -118,7 +162,15 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 			ESimpleHexTileType::Snow,
 			ESimpleHexTileType::Tundra,
 			ESimpleHexTileType::Mountain
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean,
+			ESimpleHexTileType::Desert,
+			ESimpleHexTileType::Coast
+		},
+		false,
+		false,
+		0.0f
 	});
 
 	GenerationRules.Add({
@@ -130,7 +182,14 @@ void ASimpleHexGridActor::SetupDefaultGenerationRules()
 			ESimpleHexTileType::Mountain,
 			ESimpleHexTileType::Snow,
 			ESimpleHexTileType::Tundra
-		}
+		},
+		{
+			ESimpleHexTileType::Ocean,
+			ESimpleHexTileType::Coast
+		},
+		false,
+		false,
+		0.0f
 	});
 }
 
@@ -167,6 +226,8 @@ void ASimpleHexGridActor::GenerateTileData()
 	for (const FSimpleHexTileGenerationRule& Rule : GenerationRules)
 	{
 		int32 RemainingForType = DesiredCounts.FindRef(Rule.TileType);
+		
+		int32 FailedClumpAttempts = 0;
 
 		while (RemainingForType > 0)
 		{
@@ -197,10 +258,31 @@ void ASimpleHexGridActor::GenerateTileData()
 
 			if (PlacedCount <= 0)
 			{
-				break;
+				++FailedClumpAttempts;
+
+				if (Rule.bSoftCount && FailedClumpAttempts >= 3)
+				{
+					break;
+				}
+
+				continue;
 			}
 
 			RemainingForType -= PlacedCount;
+
+			if (PlacedCount < TargetClumpSize)
+			{
+				++FailedClumpAttempts;
+			}
+			else
+			{
+				FailedClumpAttempts = 0;
+			}
+
+			if (Rule.bSoftCount && FailedClumpAttempts >= 3)
+			{
+				break;
+			}
 		}
 	}
 
@@ -350,6 +432,16 @@ float ASimpleHexGridActor::ScoreSeedTileForRule(
 	const TArray<bool>& Assigned
 ) const
 {
+	return ScoreTileForRuleAdjacency(Rule, Q, R, Assigned);
+}
+
+float ASimpleHexGridActor::ScoreTileForRuleAdjacency(
+	const FSimpleHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R,
+	const TArray<bool>& Assigned
+) const
+{
 	float Score = 1.0f;
 
 	for (int32 Direction = 0; Direction < 6; ++Direction)
@@ -381,6 +473,18 @@ float ASimpleHexGridActor::ScoreSeedTileForRule(
 		if (Rule.PreferredAdjacentTypes.Contains(NeighbourType))
 		{
 			Score += PreferredAdjacencyBonus;
+		}
+
+		if (Rule.AvoidAdjacentTypes.Contains(NeighbourType))
+		{
+			if (Rule.TileType == ESimpleHexTileType::Ocean)
+			{
+				Score -= HardAvoidAdjacencyPenalty;
+			}
+			else
+			{
+				Score -= AvoidAdjacencyPenalty;
+			}
 		}
 	}
 
@@ -482,38 +586,20 @@ int32 ASimpleHexGridActor::PickBestFrontierIndex(
 	{
 		const FIntPoint Coord = Frontier[FrontierIndex];
 
-		float Score = 1.0f;
+		float Score = ScoreTileForRuleAdjacency(
+			Rule,
+			Coord.X,
+			Coord.Y,
+			Assigned
+		);
 
-		for (int32 Direction = 0; Direction < 6; ++Direction)
+		if (Rule.bRejectBadAdjacency && Score < Rule.MinPlacementScore)
 		{
-			int32 NeighbourQ = 0;
-			int32 NeighbourR = 0;
-
-			if (!GetNeighbourCoord(Coord.X, Coord.Y, Direction, NeighbourQ, NeighbourR))
-			{
-				continue;
-			}
-
-			const int32 NeighbourIndex = GetTileIndex(NeighbourQ, NeighbourR);
-
-			if (!Tiles.IsValidIndex(NeighbourIndex) ||
-				!Assigned.IsValidIndex(NeighbourIndex) ||
-				!Assigned[NeighbourIndex])
-			{
-				continue;
-			}
-
-			const ESimpleHexTileType NeighbourType = Tiles[NeighbourIndex].TileType;
-
-			if (NeighbourType == Rule.TileType)
-			{
-				Score += SameTypeAdjacencyBonus;
-			}
-
-			if (Rule.PreferredAdjacentTypes.Contains(NeighbourType))
-			{
-				Score += PreferredAdjacencyBonus;
-			}
+			Score = 0.0f;
+		}
+		else
+		{
+			Score = FMath::Max(0.05f, Score);
 		}
 
 		Scores[FrontierIndex] = Score;
@@ -522,7 +608,7 @@ int32 ASimpleHexGridActor::PickBestFrontierIndex(
 
 	if (TotalScore <= 0.0f)
 	{
-		return RandomStream.RandRange(0, Frontier.Num() - 1);
+		return INDEX_NONE;
 	}
 
 	float Roll = RandomStream.FRandRange(0.0f, TotalScore);

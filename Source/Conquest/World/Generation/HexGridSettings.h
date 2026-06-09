@@ -1,0 +1,104 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "HexTileTypes.h"
+#include "HexGridSettings.generated.h"
+
+USTRUCT(BlueprintType)
+struct FHexGridSizeSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Size", meta = (ClampMin = "1"))
+	int32 GridWidth = 20;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Size", meta = (ClampMin = "1"))
+	int32 GridHeight = 20;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Size", meta = (ClampMin = "1.0"))
+	float HexRadius = 100.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FHexHeightSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Height")
+	bool bUseHeightOffsets = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Height")
+	float HeightScale = 60.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Height", meta = (ClampMin = "1.0"))
+	float VertexKeyPrecision = 10.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FHexGenerationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation")
+	int32 RandomSeed = 1337;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float CountRandomness = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float SameTypeAdjacencyBonus = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float PreferredAdjacencyBonus = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float AvoidAdjacencyPenalty = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float HardAvoidAdjacencyPenalty = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
+	int32 SeedSelectionAttempts = 48;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation")
+	TArray<FHexTileGenerationRule> GenerationRules;
+};
+
+USTRUCT(BlueprintType)
+struct FHexWaterSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water")
+	bool bShowWaterLayer = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water")
+	float WaterSurfaceZ = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water")
+	float WaterSurfaceRenderOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water")
+	bool bFillAdjacentSlopedLandWaterGaps = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water", meta = (ClampMin = "0.0"))
+	float WaterGapFillBelowSurfaceTolerance = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Water", meta = (ClampMin = "0.0"))
+	float WaterGapFillMinSlopeDelta = 1.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FHexOverlaySettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Overlay")
+	bool bShowHexGridOverlay = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.1"))
+	float GridLineWidth = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.0"))
+	float GridOverlaySurfaceOffset = 2.0f;
+};

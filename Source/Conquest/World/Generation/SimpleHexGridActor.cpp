@@ -1550,12 +1550,14 @@ int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileTyp
 		return 5;
 
 	case ESimpleHexTileType::Ocean:
-	case ESimpleHexTileType::Lake:
 		return 6;
 
 	case ESimpleHexTileType::Mountain:
 		return 7;
 
+	case ESimpleHexTileType::Lake:
+		return 8;
+		
 	default:
 		return 0;
 	}
@@ -1563,5 +1565,5 @@ int32 ASimpleHexGridActor::GetSectionIndexForTileType(ESimpleHexTileType TileTyp
 
 int32 ASimpleHexGridActor::GetSectionCount() const
 {
-	return 8;
+	return 9;
 }

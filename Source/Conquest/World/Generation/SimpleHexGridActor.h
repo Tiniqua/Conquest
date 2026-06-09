@@ -175,8 +175,9 @@ private:
 	// 3 Tundra
 	// 4 Snow
 	// 5 Coast
-	// 6 Ocean / Lake floor
+	// 6 Ocean 
 	// 7 Mountain
+	// 8 Lake
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Materials")
 	TArray<UMaterialInterface*> TileMaterials;
 

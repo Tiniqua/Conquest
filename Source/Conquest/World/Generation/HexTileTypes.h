@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HexYieldTypes.h"
 #include "HexTileTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -20,60 +21,29 @@ enum class EHexTileType : uint8
 UENUM(BlueprintType)
 enum class EHexFeatureType : uint8
 {
-	None   UMETA(DisplayName = "None"),
-	Forest UMETA(DisplayName = "Forest"),
-	Jungle UMETA(DisplayName = "Jungle"),
-	Oasis  UMETA(DisplayName = "Oasis"),
-	River  UMETA(DisplayName = "River"),
-	Marsh  UMETA(DisplayName = "Marsh"),
+	None        UMETA(DisplayName = "None"),
+	Forest      UMETA(DisplayName = "Forest"),
+	Jungle      UMETA(DisplayName = "Jungle"),
+	Oasis       UMETA(DisplayName = "Oasis"),
+	Marsh       UMETA(DisplayName = "Marsh"),
 	FloodPlains UMETA(DisplayName = "Flood Plains")
 };
 
-UENUM(BlueprintType)
-enum class EHexResourceType : uint8
-{
-	None UMETA(DisplayName = "None"),
-	Wheat UMETA(DisplayName = "Wheat"),
-	Cattle UMETA(DisplayName = "Cattle"),
-	Fish UMETA(DisplayName = "Fish"),
-	Iron UMETA(DisplayName = "Iron"),
-	Horse UMETA(DisplayName = "Horse"),
-	Gold UMETA(DisplayName = "Gold"),
-	Oil UMETA(DisplayName = "Oil")
-};
-
 USTRUCT(BlueprintType)
-struct FHexYield
+struct FHexTileResourceInstance
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Food = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Resource")
+	FName ResourceId = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Production = 0;
+	// Used by strategic resources. Bonus/luxury resources normally leave this as 0 or 1.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Resource")
+	int32 Quantity = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Gold = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Science = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Culture = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Faith = 0;
-
-	FHexYield& operator+=(const FHexYield& Other)
+	bool HasResource() const
 	{
-		Food += Other.Food;
-		Production += Other.Production;
-		Gold += Other.Gold;
-		Science += Other.Science;
-		Culture += Other.Culture;
-		Faith += Other.Faith;
-		return *this;
+		return !ResourceId.IsNone();
 	}
 };
 
@@ -89,10 +59,19 @@ struct FHexTileData
 	TArray<EHexFeatureType> Features;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Tile")
-	EHexResourceType ResourceType = EHexResourceType::None;
+	FHexTileResourceInstance Resource;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Tile")
-	FHexYield Yield;
+	FName ImprovementId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Tile")
+	bool bHasRiver = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Tile")
+	bool bHasFreshWater = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Tile")
+	FHexYield FinalYield;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Tile")
 	float Height = 0.0f;
@@ -133,6 +112,7 @@ struct FHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float MinPlacementScore = 0.5f;
 
+	// Used as fallback if your terrain data asset has no definition for this tile type.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float HeightOffset = 0.0f;
 };

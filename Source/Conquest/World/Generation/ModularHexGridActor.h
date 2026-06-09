@@ -4,12 +4,16 @@
 #include "GameFramework/Actor.h"
 #include "HexGridModel.h"
 #include "HexMapGenerator.h"
+#include "HexResourceGenerator.h"
 #include "HexMeshBuilder.h"
+#include "HexTileResourceMeshBuilder.h"
 #include "ModularHexGridActor.generated.h"
 
 class USceneComponent;
 class UProceduralMeshComponent;
 class UHexTileResourceData;
+class UHexResourceSetData;
+class UHexImprovementSetData;
 
 UCLASS()
 class CONQUEST_API AModularHexGridActor : public AActor
@@ -31,6 +35,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Hex Grid")
 	const TArray<FHexTileData>& GetTiles() const { return GridModel.GetTiles(); }
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
+	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
+	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -38,8 +48,17 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid")
 	bool bGenerateOnBeginPlay = true;
 
+	// Terrain, features, base yields, height offsets, and terrain materials.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Data")
-	UHexTileResourceData* TileResourceData = nullptr;
+	TObjectPtr<UHexTileResourceData> TileResourceData = nullptr;
+
+	// Bonus/luxury/strategic resources. This is where Wheat, Silk, Iron, etc. are authored.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Data")
+	TObjectPtr<UHexResourceSetData> ResourceSetData = nullptr;
+
+	// Farms, mines, plantations, pastures, camps, fishing boats, etc.
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Data")
+	TObjectPtr<UHexImprovementSetData> ImprovementSetData = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Size")
 	FHexGridSizeSettings SizeSettings;
@@ -50,6 +69,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Generation")
 	FHexGenerationSettings GenerationSettings;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Resources")
+	FHexResourceGenerationSettings ResourceGenerationSettings;
+
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
 	FHexWaterSettings WaterSettings;
 
@@ -57,20 +79,26 @@ private:
 	FHexOverlaySettings OverlaySettings;
 
 	UPROPERTY()
-	USceneComponent* SceneRoot = nullptr;
+	TObjectPtr<USceneComponent> SceneRoot = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid")
-	UProceduralMeshComponent* GridMesh = nullptr;
+	TObjectPtr<UProceduralMeshComponent> GridMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Water")
-	UProceduralMeshComponent* WaterMesh = nullptr;
+	TObjectPtr<UProceduralMeshComponent> WaterMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Overlay")
-	UProceduralMeshComponent* HexGridOverlayMesh = nullptr;
+	TObjectPtr<UProceduralMeshComponent> HexGridOverlayMesh = nullptr;
 
 	FHexGridModel GridModel;
 	FHexMapGenerator Generator;
+	FHexResourceGenerator ResourceGenerator;
 	FHexMeshBuilder MeshBuilder;
+	
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ResourceMeshComponents;
+
+	FHexTileResourceMeshBuilder ResourceMeshBuilder;
 
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();

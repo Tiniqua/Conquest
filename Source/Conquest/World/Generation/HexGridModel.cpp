@@ -1,10 +1,18 @@
 #include "HexGridModel.h"
 
-void FHexGridModel::Initialize(const FHexGridSizeSettings& InSize, const FHexHeightSettings& InHeight, const UHexTileResourceData* InTileData)
+void FHexGridModel::Initialize(
+	const FHexGridSizeSettings& InSize,
+	const FHexHeightSettings& InHeight,
+	const UHexTileResourceData* InTileData,
+	const UHexResourceSetData* InResourceSetData,
+	const UHexImprovementSetData* InImprovementSetData
+)
 {
 	Size = InSize;
 	Height = InHeight;
 	TileData = InTileData;
+	ResourceSetData = InResourceSetData;
+	ImprovementSetData = InImprovementSetData;
 
 	Tiles.Reset();
 	Tiles.SetNum(Size.GridWidth * Size.GridHeight);
@@ -64,35 +72,119 @@ void FHexGridModel::ResolveSharedVertexHeights()
 
 void FHexGridModel::ResolveTileYields()
 {
-	const UHexTileResourceData* Data = TileData.Get();
-	if (!Data)
-	{
-		return;
-	}
+	const UHexTileResourceData* TerrainData = TileData.Get();
+	const UHexResourceSetData* ResourceData = ResourceSetData.Get();
+	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
 
 	for (FHexTileData& Tile : Tiles)
 	{
 		FHexYield TotalYield;
 
-		if (const FHexTileDefinition* TileDefinition = Data->FindTileDefinition(Tile.TileType))
+		if (TerrainData)
 		{
-			TotalYield += TileDefinition->BaseYield;
-		}
-
-		for (const EHexFeatureType FeatureType : Tile.Features)
-		{
-			if (const FHexFeatureDefinition* FeatureDefinition = Data->FindFeatureDefinition(FeatureType))
+			if (const FHexTileDefinition* TileDefinition = TerrainData->FindTileDefinition(Tile.TileType))
 			{
-				TotalYield += FeatureDefinition->YieldModifier;
+				TotalYield += TileDefinition->BaseYield;
+			}
+
+			for (const EHexFeatureType FeatureType : Tile.Features)
+			{
+				if (const FHexFeatureDefinition* FeatureDefinition = TerrainData->FindFeatureDefinition(FeatureType))
+				{
+					TotalYield += FeatureDefinition->YieldModifier;
+				}
 			}
 		}
 
-		if (const FHexResourceDefinition* ResourceDefinition = Data->FindResourceDefinition(Tile.ResourceType))
+		if (ResourceData)
 		{
-			TotalYield += ResourceDefinition->YieldModifier;
+			if (const FHexResourceDefinition* ResourceDefinition = ResourceData->FindResource(Tile.Resource.ResourceId))
+			{
+				TotalYield += ResourceDefinition->YieldModifier;
+			}
 		}
 
-		Tile.Yield = TotalYield;
+		if (ImprovementData)
+		{
+			if (const FHexImprovementDefinition* ImprovementDefinition = ImprovementData->FindImprovement(Tile.ImprovementId))
+			{
+				TotalYield += ImprovementDefinition->YieldModifier;
+			}
+		}
+
+		Tile.FinalYield = TotalYield;
+	}
+}
+
+bool FHexGridModel::SetTileImprovement(int32 Q, int32 R, FName ImprovementId)
+{
+	if (!IsValidTile(Q, R))
+	{
+		return false;
+	}
+
+	FHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
+	if (ImprovementId.IsNone())
+	{
+		Tile.ImprovementId = NAME_None;
+		ResolveTileYields();
+		return true;
+	}
+
+	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	if (!ImprovementData)
+	{
+		return false;
+	}
+
+	const FHexImprovementDefinition* Improvement = ImprovementData->FindImprovement(ImprovementId);
+	if (!Improvement || !Improvement->IsValidForTile(Tile, IsWaterTileType(Tile.TileType)))
+	{
+		return false;
+	}
+
+	if (Improvement->bRemovesFeature)
+	{
+		for (const EHexFeatureType RemovedFeature : Improvement->RemovedFeatures)
+		{
+			Tile.Features.Remove(RemovedFeature);
+		}
+	}
+
+	Tile.ImprovementId = ImprovementId;
+	ResolveTileYields();
+	return true;
+}
+
+void FHexGridModel::GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const
+{
+	OutImprovements.Reset();
+	if (!IsValidTile(Q, R))
+	{
+		return;
+	}
+
+	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	if (!ImprovementData)
+	{
+		return;
+	}
+
+	const FHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
+	ImprovementData->GetPossibleImprovementsForTile(Tile, IsWaterTileType(Tile.TileType), OutImprovements);
+}
+
+void FHexGridModel::GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const
+{
+	OutImprovementIds.Reset();
+	TArray<const FHexImprovementDefinition*> PossibleImprovements;
+	GetPossibleImprovementsForTile(Q, R, PossibleImprovements);
+	for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+	{
+		if (Improvement)
+		{
+			OutImprovementIds.Add(Improvement->ImprovementId);
+		}
 	}
 }
 
@@ -202,4 +294,17 @@ bool FHexGridModel::IsWaterTileType(EHexTileType TileType) const
 	}
 
 	return TileType == EHexTileType::Ocean || TileType == EHexTileType::Coast || TileType == EHexTileType::Lake;
+}
+
+bool FHexGridModel::GetCoordFromIndex(int32 TileIndex, int32& OutQ, int32& OutR) const
+{
+	if (!Tiles.IsValidIndex(TileIndex) || Size.GridWidth <= 0)
+	{
+		return false;
+	}
+
+	OutQ = TileIndex % Size.GridWidth;
+	OutR = TileIndex / Size.GridWidth;
+
+	return IsValidCoord(OutQ, OutR);
 }

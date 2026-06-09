@@ -41,8 +41,17 @@ void AModularHexGridActor::RebuildGrid()
 {
 	EnsureDefaultGenerationRules();
 
-	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData);
+	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData, ResourceSetData, ImprovementSetData);
+
 	Generator.Generate(GridModel, GenerationSettings);
+
+	ResourceGenerator.Generate(
+		GridModel,
+		ResourceSetData,
+		ResourceGenerationSettings,
+		GenerationSettings.RandomSeed
+	);
+
 	GridModel.ResolveTileHeights(GenerationSettings.GenerationRules);
 	GridModel.ResolveSharedVertexHeights();
 	GridModel.ResolveTileYields();
@@ -50,6 +59,14 @@ void AModularHexGridActor::RebuildGrid()
 	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
 	MeshBuilder.BuildWaterMesh(WaterMesh, GridModel, WaterSettings, TileResourceData);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
+
+	ResourceMeshBuilder.BuildResourceMeshes(
+		this,
+		SceneRoot,
+		GridModel,
+		ResourceSetData,
+		ResourceMeshComponents
+	);
 }
 
 void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)
@@ -68,6 +85,22 @@ void AModularHexGridActor::SetWaterLayerVisible(bool bVisible)
 	{
 		WaterMesh->SetVisibility(WaterSettings.bShowWaterLayer);
 	}
+}
+
+void AModularHexGridActor::GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const
+{
+	GridModel.GetPossibleImprovementIdsForTile(Q, R, OutImprovementIds);
+}
+
+bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName ImprovementId)
+{
+	const bool bChanged = GridModel.SetTileImprovement(Q, R, ImprovementId);
+	if (bChanged)
+	{
+		// Terrain shape does not change yet, but this makes material/yield-driven visual changes easy later.
+		MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
+	}
+	return bChanged;
 }
 
 void AModularHexGridActor::EnsureDefaultGenerationRules()

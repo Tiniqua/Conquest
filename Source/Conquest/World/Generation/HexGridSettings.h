@@ -65,6 +65,34 @@ struct FHexGenerationSettings
 };
 
 USTRUCT(BlueprintType)
+struct FHexResourceGenerationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources")
+	bool bGenerateResources = true;
+
+	// If a count is <= 0, the generator computes a simple automatic count from tile count and density.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0"))
+	int32 BonusResourceCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0"))
+	int32 LuxuryResourceCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0"))
+	int32 StrategicResourceCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AutoBonusDensity = 0.08f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AutoLuxuryDensity = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AutoStrategicDensity = 0.04f;
+};
+
+USTRUCT(BlueprintType)
 struct FHexWaterSettings
 {
 	GENERATED_BODY()

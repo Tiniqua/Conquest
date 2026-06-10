@@ -35,6 +35,31 @@ struct FHexHeightSettings
 };
 
 USTRUCT(BlueprintType)
+struct FHexTemperatureSettings
+{
+	GENERATED_BODY()
+
+	// Enables north/south temperature bias.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature")
+	bool bUseTemperatureBias = true;
+
+	// How strongly temperature affects terrain placement.
+	// 0 = no effect, 1 = noticeable, 2+ = strong.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature", meta = (ClampMin = "0.0"))
+	float TemperatureBiasStrength = 2.0f;
+
+	// Controls how wide the cold polar bands are.
+	// Higher values make the cold area tighter to the top/bottom.
+	// Lower values make cold reach further toward the middle.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature", meta = (ClampMin = "0.1"))
+	float PolarFalloffPower = 1.0f;
+
+	// Small noise so terrain bands do not look perfectly horizontal.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature", meta = (ClampMin = "0.0"))
+	float TemperatureNoiseStrength = 0.12f;
+};
+
+USTRUCT(BlueprintType)
 struct FHexGenerationSettings
 {
 	GENERATED_BODY()
@@ -59,6 +84,9 @@ struct FHexGenerationSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
 	int32 SeedSelectionAttempts = 48;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature")
+	FHexTemperatureSettings TemperatureSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation")
 	TArray<FHexTileGenerationRule> GenerationRules;

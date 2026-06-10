@@ -21,5 +21,9 @@ private:
 	bool DoesTileSatisfyRequiredAdjacency(const FHexTileGenerationRule& Rule, int32 Q, int32 R, const TArray<bool>& Assigned) const;
 	int32 GrowClump(const FHexTileGenerationRule& Rule, int32 SeedQ, int32 SeedR, int32 TargetSize, FRandomStream& RandomStream, TArray<bool>& Assigned);
 	int32 PickBestFrontierIndex(const FHexTileGenerationRule& Rule, const TArray<FIntPoint>& Frontier, FRandomStream& RandomStream, const TArray<bool>& Assigned) const;
-	EHexTileType PickWeightedLandTileType(FRandomStream& RandomStream) const;
+	EHexTileType PickWeightedLandTileType(FRandomStream& RandomStream, int32 Q, int32 R) const;
+	bool DoesTileSatisfyTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
+	float GetNormalizedTemperatureAtRow(int32 R) const;
+	float GetTemperatureSuitabilityForRule(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
+	float ScoreTileForRuleTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
 };

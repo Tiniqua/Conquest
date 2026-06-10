@@ -115,6 +115,29 @@ struct FHexTileGenerationRule
 	// Used as fallback if your terrain data asset has no definition for this tile type.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float HeightOffset = 0.0f;
+
+	// 0 = cold/polar, 1 = hot/equator.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PreferredTemperature = 0.5f;
+
+	// How far from PreferredTemperature this tile can comfortably appear.
+	// Smaller = stricter banding.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float TemperatureTolerance = 0.5f;
+
+	// How strongly this specific rule cares about temperature.
+	// Snow/desert high, grass/plains medium, water maybe low.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0"))
+	float TemperatureWeight = 1.0f;
+	
+	// If true, this terrain cannot be placed when temperature suitability is too low.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature")
+	bool bRejectBadTemperature = false;
+
+	// Minimum suitability required if bRejectBadTemperature is true.
+	// 0 = no restriction, 1 = must be perfect.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MinTemperatureSuitability = 0.0f;
 };
 
 struct FHexVertexKey

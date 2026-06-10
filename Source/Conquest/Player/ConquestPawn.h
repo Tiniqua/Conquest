@@ -22,6 +22,16 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Hover Debug")
+	bool bEnableTileHoverDebug = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Hover Debug")
+	float TileHoverTraceDistance = 100000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Hover Debug")
+	TEnumAsByte<ECollisionChannel> TileHoverTraceChannel = ECC_Visibility;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCapsuleComponent> CapsuleComponent = nullptr;

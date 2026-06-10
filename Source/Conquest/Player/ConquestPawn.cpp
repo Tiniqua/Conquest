@@ -4,14 +4,48 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Conquest/World/Generation/HexTileTypes.h"
+#include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 
+static FString HexTileTypeToString(EHexTileType TileType)
+{
+	if (const UEnum* EnumPtr = StaticEnum<EHexTileType>())
+	{
+		return EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(TileType)).ToString();
+	}
+
+	return TEXT("Unknown");
+}
+
+static FString HexFeatureTypeToString(EHexFeatureType FeatureType)
+{
+	if (const UEnum* EnumPtr = StaticEnum<EHexFeatureType>())
+	{
+		return EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(FeatureType)).ToString();
+	}
+
+	return TEXT("Unknown");
+}
+
+static FString HexYieldToString(const FHexYield& Yield)
+{
+	return FString::Printf(
+		TEXT("Food: %d | Production: %d | Gold: %d | Science: %d | Culture: %d | Faith: %d"),
+		Yield.Food,
+		Yield.Production,
+		Yield.Gold,
+		Yield.Science,
+		Yield.Culture,
+		Yield.Faith
+	);
+}
+
 AConquestPawn::AConquestPawn()
 {
-	PrimaryActorTick.bCanEverTick = false;
-
+	PrimaryActorTick.bCanEverTick = true;
 	CapsuleComponent = CreateDefaultSubobject<UCapsuleComponent>(TEXT("CapsuleComponent"));
 	SetRootComponent(CapsuleComponent);
 
@@ -72,6 +106,148 @@ void AConquestPawn::BeginPlay()
 	}
 
 	ConfigurePlayerControllerForGameAndUI();
+}
+
+void AConquestPawn::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!bEnableTileHoverDebug || !Camera)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return;
+	}
+
+	FVector WorldOrigin;
+	FVector WorldDirection;
+
+	if (!PlayerController->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDirection))
+	{
+		return;
+	}
+
+	const FVector TraceStart = WorldOrigin;
+	const FVector TraceEnd = TraceStart + WorldDirection * TileHoverTraceDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(TileHoverTrace), true);
+	QueryParams.AddIgnoredActor(this);
+
+	const bool bHit = World->LineTraceSingleByChannel(
+		Hit,
+		TraceStart,
+		TraceEnd,
+		TileHoverTraceChannel,
+		QueryParams
+	);
+
+	if (!bHit)
+	{
+		return;
+	}
+
+	AModularHexGridActor* HexGridActor = Cast<AModularHexGridActor>(Hit.GetActor());
+
+	if (!HexGridActor && Hit.GetComponent())
+	{
+		HexGridActor = Cast<AModularHexGridActor>(Hit.GetComponent()->GetOwner());
+	}
+
+	if (!HexGridActor)
+	{
+		return;
+	}
+
+	int32 HoveredQ = INDEX_NONE;
+	int32 HoveredR = INDEX_NONE;
+	FHexTileData HoveredTile;
+
+	if (!HexGridActor->GetTileAtWorldLocation(Hit.ImpactPoint, HoveredQ, HoveredR, HoveredTile))
+	{
+		return;
+	}
+
+	FString FeatureString = TEXT("None");
+
+	if (HoveredTile.Features.Num() > 0)
+	{
+		TArray<FString> FeatureNames;
+
+		for (const EHexFeatureType Feature : HoveredTile.Features)
+		{
+			if (Feature == EHexFeatureType::None)
+			{
+				continue;
+			}
+
+			FeatureNames.Add(HexFeatureTypeToString(Feature));
+		}
+
+		if (FeatureNames.Num() > 0)
+		{
+			FeatureString = FString::Join(FeatureNames, TEXT(", "));
+		}
+	}
+
+	const FString ResourceString = HoveredTile.Resource.HasResource()
+	? HoveredTile.Resource.Quantity > 0
+		? FString::Printf(
+			TEXT("%s x%d"),
+			*HoveredTile.Resource.ResourceId.ToString(),
+			HoveredTile.Resource.Quantity
+		)
+		: HoveredTile.Resource.ResourceId.ToString()
+	: TEXT("None");
+
+	const FString ImprovementString = HoveredTile.ImprovementId.IsNone()
+		? TEXT("None")
+		: HoveredTile.ImprovementId.ToString();
+
+	const FString FreshWaterString = HoveredTile.bHasFreshWater ? TEXT("Yes") : TEXT("No");
+	const FString RiverString = HoveredTile.bHasRiver ? TEXT("Yes") : TEXT("No");
+
+	const FString DebugMessage = FString::Printf(
+		TEXT("Tile [%d, %d]\nType: %s\nFeatures: %s\nResource: %s\nImprovement: %s\nFresh Water: %s | River: %s\nHeight: %.2f\nYields: %s"),
+		HoveredQ,
+		HoveredR,
+		*HexTileTypeToString(HoveredTile.TileType),
+		*FeatureString,
+		*ResourceString,
+		*ImprovementString,
+		*FreshWaterString,
+		*RiverString,
+		HoveredTile.Height,
+		*HexYieldToString(HoveredTile.FinalYield)
+	);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			1001,
+			DeltaTime,
+			FColor::Green,
+			DebugMessage
+		);
+	}
 }
 
 void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

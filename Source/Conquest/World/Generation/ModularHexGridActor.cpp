@@ -146,6 +146,67 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 	return bChanged;
 }
 
+bool AModularHexGridActor::GetTileAtWorldLocation(
+	const FVector& WorldLocation,
+	int32& OutQ,
+	int32& OutR,
+	FHexTileData& OutTileData
+) const
+{
+	const FVector LocalLocation = GetActorTransform().InverseTransformPosition(WorldLocation);
+
+	const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
+
+	float BestDistanceSq = TNumericLimits<float>::Max();
+	int32 BestQ = INDEX_NONE;
+	int32 BestR = INDEX_NONE;
+
+	for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+	{
+		for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+		{
+			if (!GridModel.IsValidTile(Q, R))
+			{
+				continue;
+			}
+
+			const FVector Center = GridModel.GetHexCenter(Q, R);
+			const float DistanceSq = FVector::DistSquared2D(LocalLocation, Center);
+
+			if (DistanceSq < BestDistanceSq)
+			{
+				BestDistanceSq = DistanceSq;
+				BestQ = Q;
+				BestR = R;
+			}
+		}
+	}
+
+	if (BestQ == INDEX_NONE || BestR == INDEX_NONE)
+	{
+		return false;
+	}
+
+	// Basic range guard so we do not report a tile when hovering far outside the map.
+	const float MaxDistance = GridModel.GetHexRadius();
+	if (BestDistanceSq > FMath::Square(MaxDistance))
+	{
+		return false;
+	}
+
+	const int32 TileIndex = GridModel.GetTileIndex(BestQ, BestR);
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		return false;
+	}
+
+	OutQ = BestQ;
+	OutR = BestR;
+	OutTileData = Tiles[TileIndex];
+
+	return true;
+}
+
 void AModularHexGridActor::EnsureDefaultGenerationRules()
 {
 	if (GenerationSettings.GenerationRules.Num() <= 0)
@@ -187,5 +248,13 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		FogOfWarMesh->bCastStaticShadow = false;
 		FogOfWarMesh->CastShadow = false;
 		FogOfWarMesh->TranslucencySortPriority = FogOfWarSettings.TranslucencySortPriority;
+	}
+
+	if (GridMesh)
+	{
+		GridMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		GridMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		GridMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		GridMesh->bUseComplexAsSimpleCollision = true;
 	}
 }

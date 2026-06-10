@@ -41,6 +41,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Hover")
+	bool GetTileAtWorldLocation(
+		const FVector& WorldLocation,
+		int32& OutQ,
+		int32& OutR,
+		FHexTileData& OutTileData
+		) const;
+
 protected:
 	virtual void BeginPlay() override;
 

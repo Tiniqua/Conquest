@@ -24,19 +24,19 @@ protected:
 	virtual void BeginPlay() override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UCapsuleComponent* CapsuleComponent = nullptr;
+	TObjectPtr<UCapsuleComponent> CapsuleComponent = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	USpringArmComponent* CameraBoom = nullptr;
+	TObjectPtr<USpringArmComponent> CameraBoom = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UCameraComponent* Camera = nullptr;
+	TObjectPtr<UCameraComponent> Camera = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UStaticMeshComponent* Visual = nullptr;
+	TObjectPtr<UStaticMeshComponent> Visual = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UFloatingPawnMovement* FloatingMovement = nullptr;
+	TObjectPtr<UFloatingPawnMovement> FloatingMovement = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float FlySpeed = 1200.0f;
@@ -50,16 +50,47 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float TurningBoost = 8.0f;
 
+	// Fixed camera angle. Negative pitch looks down.
+	// Example: -35 to -45 gives a Civ-style angled view.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	FRotator FixedCameraRotation = FRotator(-40.0f, 0.0f, 0.0f);
+
+	// If true, MoveForward / MoveRight use the fixed camera yaw but stay flat on the XY plane.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	bool bMoveRelativeToCameraYaw = true;
+
+	// Scroll zoom movement speed.
+	// This moves along the actual camera forward vector, not world up/down.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom")
+	float ZoomSpeed = 1800.0f;
+
+	// Optional bounds so the camera cannot zoom too close or too far.
+	// This clamps actor world Z after zoom movement.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom")
+	bool bClampZoomHeight = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom", meta = (EditCondition = "bClampZoomHeight"))
+	float MinZoomHeight = 600.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom", meta = (EditCondition = "bClampZoomHeight"))
+	float MaxZoomHeight = 5000.0f;
+
+	// If true, BeginPlay configures the local controller for visible cursor + Game/UI input.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-	float BaseTurnRate = 1.0f;
+	bool bConfigureGameAndUIInputMode = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-	float BaseLookUpRate = 1.0f;
+	bool bEnableClickEvents = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+	bool bEnableMouseOverEvents = true;
 
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void MoveUp(float Value);
 
-	void Turn(float Value);
-	void LookUp(float Value);
+	void Zoom(float Value);
+
+	void ConfigurePlayerControllerForGameAndUI();
+	void ClampZoomHeightIfNeeded();
 };

@@ -5,6 +5,7 @@
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 
 AConquestPawn::AConquestPawn()
@@ -24,9 +25,12 @@ AConquestPawn::AConquestPawn()
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(CapsuleComponent);
+
+	// Fixed camera boom. It does not rotate from controller/mouse input.
 	CameraBoom->TargetArmLength = 0.0f;
-	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bUsePawnControlRotation = false;
 	CameraBoom->bDoCollisionTest = false;
+	CameraBoom->SetRelativeRotation(FixedCameraRotation);
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom);
@@ -42,8 +46,9 @@ AConquestPawn::AConquestPawn()
 	bReplicates = true;
 	SetReplicateMovement(true);
 
-	bUseControllerRotationPitch = true;
-	bUseControllerRotationYaw = true;
+	// Mouse/controller movement must not rotate the pawn.
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
 	AutoPossessPlayer = EAutoReceiveInput::Disabled;
@@ -60,6 +65,13 @@ void AConquestPawn::BeginPlay()
 		FloatingMovement->Deceleration = Deceleration;
 		FloatingMovement->TurningBoost = TurningBoost;
 	}
+
+	if (CameraBoom)
+	{
+		CameraBoom->SetRelativeRotation(FixedCameraRotation);
+	}
+
+	ConfigurePlayerControllerForGameAndUI();
 }
 
 void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -72,46 +84,121 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AConquestPawn::MoveRight);
 	PlayerInputComponent->BindAxis(TEXT("MoveUp"), this, &AConquestPawn::MoveUp);
 
-	PlayerInputComponent->BindAxis(TEXT("Turn"), this, &AConquestPawn::Turn);
-	PlayerInputComponent->BindAxis(TEXT("LookUp"), this, &AConquestPawn::LookUp);
+	// Add this axis mapping in Project Settings -> Input:
+	// Zoom
+	//     Mouse Wheel Axis = +1
+	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
+
+	// Intentionally no Turn / LookUp bindings.
+	// Mouse movement is reserved for cursor hover / tile selection.
 }
 
 void AConquestPawn::MoveForward(float Value)
 {
-	if (!FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value))
 	{
-		AddMovementInput(GetActorForwardVector(), Value);
+		return;
 	}
+
+	FVector Direction = GetActorForwardVector();
+
+	if (bMoveRelativeToCameraYaw && Camera)
+	{
+		const FRotator CameraRotation = Camera->GetComponentRotation();
+		const FRotator YawOnlyRotation(0.0f, CameraRotation.Yaw, 0.0f);
+		Direction = FRotationMatrix(YawOnlyRotation).GetUnitAxis(EAxis::X);
+	}
+
+	Direction.Z = 0.0f;
+	Direction.Normalize();
+
+	AddMovementInput(Direction, Value);
 }
 
 void AConquestPawn::MoveRight(float Value)
 {
-	if (!FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value))
 	{
-		AddMovementInput(GetActorRightVector(), Value);
+		return;
 	}
+
+	FVector Direction = GetActorRightVector();
+
+	if (bMoveRelativeToCameraYaw && Camera)
+	{
+		const FRotator CameraRotation = Camera->GetComponentRotation();
+		const FRotator YawOnlyRotation(0.0f, CameraRotation.Yaw, 0.0f);
+		Direction = FRotationMatrix(YawOnlyRotation).GetUnitAxis(EAxis::Y);
+	}
+
+	Direction.Z = 0.0f;
+	Direction.Normalize();
+
+	AddMovementInput(Direction, Value);
 }
 
 void AConquestPawn::MoveUp(float Value)
 {
-	if (!FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value))
 	{
-		AddMovementInput(FVector::UpVector, Value);
+		return;
 	}
+
+	AddMovementInput(FVector::UpVector, Value);
 }
 
-void AConquestPawn::Turn(float Value)
+void AConquestPawn::Zoom(float Value)
 {
-	if (!FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value) || !Camera)
 	{
-		AddControllerYawInput(Value * BaseTurnRate);
+		return;
 	}
+
+	// Scroll zoom moves along the fixed camera forward vector.
+	// Because the camera is pitched downward, zooming in moves forward and downward.
+	// Zooming out moves backward and upward.
+	const FVector ZoomDirection = Camera->GetForwardVector();
+
+	AddActorWorldOffset(
+		ZoomDirection * Value * ZoomSpeed * GetWorld()->GetDeltaSeconds(),
+		true
+	);
+
+	ClampZoomHeightIfNeeded();
 }
 
-void AConquestPawn::LookUp(float Value)
+void AConquestPawn::ClampZoomHeightIfNeeded()
 {
-	if (!FMath::IsNearlyZero(Value))
+	if (!bClampZoomHeight)
 	{
-		AddControllerPitchInput(Value * BaseLookUpRate);
+		return;
 	}
+
+	FVector Location = GetActorLocation();
+	Location.Z = FMath::Clamp(Location.Z, MinZoomHeight, MaxZoomHeight);
+	SetActorLocation(Location);
+}
+
+void AConquestPawn::ConfigurePlayerControllerForGameAndUI()
+{
+	if (!bConfigureGameAndUIInputMode)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	PlayerController->bShowMouseCursor = true;
+	PlayerController->bEnableClickEvents = bEnableClickEvents;
+	PlayerController->bEnableMouseOverEvents = bEnableMouseOverEvents;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+
+	PlayerController->SetInputMode(InputMode);
 }

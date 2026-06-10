@@ -130,3 +130,36 @@ struct FHexOverlaySettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Overlay", meta = (ClampMin = "0.0"))
 	float GridOverlaySurfaceOffset = 2.0f;
 };
+
+USTRUCT(BlueprintType)
+struct FHexFogOfWarSettings
+{
+	GENERATED_BODY()
+
+	// Material using your cloud / fog texture.
+	// Recommended material setup:
+	// Blend Mode: Translucent or Masked
+	// Shading Model: Unlit
+	// Two Sided: true
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog Of War")
+	TObjectPtr<UMaterialInterface> FogMaterial = nullptr;
+
+	// FOW is generated at:
+	// HighestTileHeight + HeightAboveHighestTile
+	// so the whole layer is flat and safely above mountains/resources.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog Of War")
+	float HeightAboveHighestTile = 350.0f;
+
+	// Makes each FOW hex slightly larger than terrain hexes.
+	// Useful to hide tiny seams between translucent hexes.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog Of War", meta = (ClampMin = "0.9", ClampMax = "1.25"))
+	float HexScale = 1.01f;
+
+	// Optional UV tiling per hex. 1 = one full texture per hex.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog Of War", meta = (ClampMin = "0.01"))
+	float UVScale = 1.0f;
+
+	// Higher than water/overlay so the fog draws on top.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog Of War")
+	int32 TranslucencySortPriority = 10;
+};

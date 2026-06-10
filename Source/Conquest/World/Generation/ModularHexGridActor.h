@@ -78,6 +78,18 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Overlay")
 	FHexOverlaySettings OverlaySettings;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Fog Of War")
+	bool bGenerateFogOfWar = true;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Fog Of War")
+	FHexFogOfWarSettings FogOfWarSettings;
+
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Fog Of War")
+	TObjectPtr<UProceduralMeshComponent> FogOfWarMesh = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
+	void SetFogOfWarVisible(bool bVisible);
+
 	UPROPERTY()
 	TObjectPtr<USceneComponent> SceneRoot = nullptr;
 

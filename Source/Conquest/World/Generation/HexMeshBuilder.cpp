@@ -105,6 +105,133 @@ void FHexMeshBuilder::BuildGridOverlayMesh(UProceduralMeshComponent* OverlayMesh
 	}
 }
 
+void FHexMeshBuilder::BuildFogOfWarMesh(
+	UProceduralMeshComponent* FogOfWarMesh,
+	const FHexGridModel& GridModel,
+	const FHexFogOfWarSettings& FogOfWarSettings
+)
+{
+	if (!FogOfWarMesh)
+	{
+		return;
+	}
+
+	FogOfWarMesh->ClearAllMeshSections();
+
+	const int32 GridWidth = GridModel.GetGridWidth();
+	const int32 GridHeight = GridModel.GetGridHeight();
+
+	if (GridWidth <= 0 || GridHeight <= 0)
+	{
+		return;
+	}
+
+	float HighestTileHeight = 0.0f;
+
+	const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
+	for (const FHexTileData& Tile : Tiles)
+	{
+		HighestTileHeight = FMath::Max(HighestTileHeight, Tile.Height);
+	}
+
+	const float FogZ = HighestTileHeight + FogOfWarSettings.HeightAboveHighestTile;
+	const float SafeHexScale = FMath::Max(0.01f, FogOfWarSettings.HexScale);
+	const float SafeUVScale = FMath::Max(0.01f, FogOfWarSettings.UVScale);
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	const int32 TotalTiles = GridWidth * GridHeight;
+
+	// 7 vertices per hex: center + 6 corners.
+	// 6 triangles per hex.
+	Vertices.Reserve(TotalTiles * 7);
+	Triangles.Reserve(TotalTiles * 18);
+	Normals.Reserve(TotalTiles * 7);
+	UVs.Reserve(TotalTiles * 7);
+	VertexColors.Reserve(TotalTiles * 7);
+	Tangents.Reserve(TotalTiles * 7);
+
+	for (int32 R = 0; R < GridHeight; ++R)
+	{
+		for (int32 Q = 0; Q < GridWidth; ++Q)
+		{
+			if (!GridModel.IsValidTile(Q, R))
+			{
+				continue;
+			}
+
+			const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
+			const FVector Center(FlatCenter.X, FlatCenter.Y, FogZ);
+
+			const int32 CenterIndex = Vertices.Num();
+
+			Vertices.Add(Center);
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D(0.5f, 0.5f) * SafeUVScale);
+			VertexColors.Add(FColor::White);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+			int32 CornerIndices[6];
+
+			for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+			{
+				const FVector CornerOffset = GridModel.GetHexCornerOffset(CornerIndex) * SafeHexScale;
+				const FVector FlatCorner = FlatCenter + CornerOffset;
+				const FVector Corner(FlatCorner.X, FlatCorner.Y, FogZ);
+
+				const FVector2D BaseCornerUV = GridModel.GetHexCornerUV(CornerIndex);
+
+				CornerIndices[CornerIndex] = Vertices.Num();
+
+				Vertices.Add(Corner);
+				Normals.Add(FVector::UpVector);
+				UVs.Add(BaseCornerUV * SafeUVScale);
+				VertexColors.Add(FColor::White);
+				Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+			}
+
+			for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+			{
+				const int32 NextCornerIndex = (CornerIndex + 1) % 6;
+
+				// Same winding style as your existing terrain/water fans:
+				// center -> next corner -> current corner.
+				Triangles.Add(CenterIndex);
+				Triangles.Add(CornerIndices[NextCornerIndex]);
+				Triangles.Add(CornerIndices[CornerIndex]);
+			}
+		}
+	}
+
+	FogOfWarMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	if (FogOfWarSettings.FogMaterial)
+	{
+		FogOfWarMesh->SetMaterial(0, FogOfWarSettings.FogMaterial);
+	}
+
+	FogOfWarMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FogOfWarMesh->SetCastShadow(false);
+	FogOfWarMesh->bCastDynamicShadow = false;
+	FogOfWarMesh->bCastStaticShadow = false;
+	FogOfWarMesh->CastShadow = false;
+	FogOfWarMesh->TranslucencySortPriority = FogOfWarSettings.TranslucencySortPriority;
+}
+
 bool FHexMeshBuilder::IsWaterLayerTargetTile(const FHexGridModel& Model, const FHexWaterSettings& WaterSettings, int32 Q, int32 R) const
 {
 	if (!Model.IsValidTile(Q, R)) { return false; }

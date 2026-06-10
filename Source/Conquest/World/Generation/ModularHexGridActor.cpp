@@ -23,6 +23,10 @@ AModularHexGridActor::AModularHexGridActor()
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
 
+	FogOfWarMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FogOfWarMesh"));
+	FogOfWarMesh->SetupAttachment(SceneRoot);
+	FogOfWarMesh->bUseAsyncCooking = true;
+	
 	EnsureDefaultGenerationRules();
 	ConfigureMeshComponents();
 }
@@ -69,6 +73,19 @@ void AModularHexGridActor::RebuildGrid()
 		ResourceMeshComponents
 	);
 
+	if (bGenerateFogOfWar)
+	{
+		MeshBuilder.BuildFogOfWarMesh(
+			FogOfWarMesh,
+			GridModel,
+			FogOfWarSettings
+		);
+	}
+	else if (FogOfWarMesh)
+	{
+		FogOfWarMesh->ClearAllMeshSections();
+		FogOfWarMesh->SetVisibility(false);
+	}
 }
 
 void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)
@@ -77,6 +94,30 @@ void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)
 	if (HexGridOverlayMesh)
 	{
 		HexGridOverlayMesh->SetVisibility(OverlaySettings.bShowHexGridOverlay);
+	}
+}
+
+void AModularHexGridActor::SetFogOfWarVisible(bool bVisible)
+{
+	bGenerateFogOfWar = bVisible;
+
+	if (FogOfWarMesh)
+	{
+		FogOfWarMesh->SetVisibility(bGenerateFogOfWar);
+
+		if (!bGenerateFogOfWar)
+		{
+			FogOfWarMesh->ClearAllMeshSections();
+		}
+	}
+
+	if (bGenerateFogOfWar && FogOfWarMesh && FogOfWarMesh->GetNumSections() <= 0)
+	{
+		MeshBuilder.BuildFogOfWarMesh(
+			FogOfWarMesh,
+			GridModel,
+			FogOfWarSettings
+		);
 	}
 }
 
@@ -135,5 +176,16 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		HexGridOverlayMesh->bCastStaticShadow = false;
 		HexGridOverlayMesh->CastShadow = false;
 		HexGridOverlayMesh->TranslucencySortPriority = 2;
+	}
+
+	if (FogOfWarMesh)
+	{
+		FogOfWarMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FogOfWarMesh->SetVisibility(bGenerateFogOfWar);
+		FogOfWarMesh->SetCastShadow(false);
+		FogOfWarMesh->bCastDynamicShadow = false;
+		FogOfWarMesh->bCastStaticShadow = false;
+		FogOfWarMesh->CastShadow = false;
+		FogOfWarMesh->TranslucencySortPriority = FogOfWarSettings.TranslucencySortPriority;
 	}
 }

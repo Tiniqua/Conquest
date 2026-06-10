@@ -13,7 +13,8 @@ public:
 	void BuildTerrainMesh(UProceduralMeshComponent* GridMesh, const FHexGridModel& Model, const UHexTileResourceData* TileData) const;
 	void BuildWaterMesh(UProceduralMeshComponent* WaterMesh, const FHexGridModel& Model, const FHexWaterSettings& WaterSettings, const UHexTileResourceData* TileData) const;
 	void BuildGridOverlayMesh(UProceduralMeshComponent* OverlayMesh, const FHexGridModel& Model, const FHexOverlaySettings& OverlaySettings, const UHexTileResourceData* TileData) const;
-
+	void BuildFogOfWarMesh(UProceduralMeshComponent* FogOfWarMesh, const FHexGridModel& GridModel, const FHexFogOfWarSettings& FogOfWarSettings);
+	
 	static int32 GetSectionIndexForTileType(EHexTileType TileType);
 	static int32 GetSectionCount();
 

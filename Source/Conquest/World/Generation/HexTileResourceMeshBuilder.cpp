@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInterface.h"
 
 #include "HexGridModel.h"
 #include "HexResourceSetData.h"
@@ -15,6 +16,7 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 	USceneComponent* AttachParent,
 	const FHexGridModel& GridModel,
 	const UHexResourceSetData* ResourceSetData,
+	int32 RandomSeed,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& InOutResourceMeshComponents
 )
 {
@@ -25,7 +27,7 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 		return;
 	}
 
-	TMap<UStaticMesh*, UInstancedStaticMeshComponent*> MeshToComponent;
+	TMap<FMeshComponentKey, UInstancedStaticMeshComponent*> MeshToComponent;
 
 	const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
 
@@ -61,9 +63,8 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 
 		const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
 
-		// Important:
-		// Use Tile.Height, not Z = 0 and not WaterSurfaceZ.
-		// This means fish can sit underwater and mountain/mining resources sit high.
+		// Use the generated tile height, not world Z = 0.
+		// This keeps sea resources low and mountain/mining resources high.
 		const FVector TileCenter(
 			FlatCenter.X,
 			FlatCenter.Y,
@@ -74,6 +75,7 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 			Owner,
 			AttachParent,
 			ResourceMesh,
+			ResourceDefinition->WorldMeshMaterialOverride,
 			MeshToComponent,
 			InOutResourceMeshComponents
 		);
@@ -83,14 +85,14 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 			continue;
 		}
 
-		const FTransform InstanceTransform = BuildResourceTransform(
+		AddResourceInstancesForTile(
+			MeshComponent,
+			*ResourceDefinition,
 			TileCenter,
-			ResourceDefinition->MeshRotation,
-			ResourceDefinition->MeshOffset,
-			ResourceDefinition->MeshScale
+			GridModel.GetHexRadius(),
+			TileIndex,
+			RandomSeed
 		);
-
-		MeshComponent->AddInstance(InstanceTransform);
 	}
 
 	for (TObjectPtr<UInstancedStaticMeshComponent>& MeshComponent : InOutResourceMeshComponents)
@@ -124,7 +126,8 @@ UInstancedStaticMeshComponent* FHexTileResourceMeshBuilder::FindOrCreateMeshComp
 	AActor* Owner,
 	USceneComponent* AttachParent,
 	UStaticMesh* Mesh,
-	TMap<UStaticMesh*, UInstancedStaticMeshComponent*>& MeshToComponent,
+	UMaterialInterface* MaterialOverride,
+	TMap<FMeshComponentKey, UInstancedStaticMeshComponent*>& MeshToComponent,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& InOutResourceMeshComponents
 )
 {
@@ -133,15 +136,27 @@ UInstancedStaticMeshComponent* FHexTileResourceMeshBuilder::FindOrCreateMeshComp
 		return nullptr;
 	}
 
-	if (UInstancedStaticMeshComponent** ExistingComponent = MeshToComponent.Find(Mesh))
+	FMeshComponentKey Key;
+	Key.Mesh = Mesh;
+	Key.MaterialOverride = MaterialOverride;
+
+	if (UInstancedStaticMeshComponent** ExistingComponent = MeshToComponent.Find(Key))
 	{
 		return *ExistingComponent;
 	}
 
+	const FString MaterialName = MaterialOverride
+		? MaterialOverride->GetName()
+		: TEXT("DefaultMat");
+
 	const FName ComponentName = MakeUniqueObjectName(
 		Owner,
 		UInstancedStaticMeshComponent::StaticClass(),
-		FName(*FString::Printf(TEXT("ResourceMesh_%s"), *Mesh->GetName()))
+		FName(*FString::Printf(
+			TEXT("ResourceMesh_%s_%s"),
+			*Mesh->GetName(),
+			*MaterialName
+		))
 	);
 
 	UInstancedStaticMeshComponent* NewComponent =
@@ -153,6 +168,17 @@ UInstancedStaticMeshComponent* FHexTileResourceMeshBuilder::FindOrCreateMeshComp
 	}
 
 	NewComponent->SetStaticMesh(Mesh);
+
+	if (MaterialOverride)
+	{
+		const int32 MaterialSlotCount = Mesh->GetStaticMaterials().Num();
+
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotCount; ++MaterialIndex)
+		{
+			NewComponent->SetMaterial(MaterialIndex, MaterialOverride);
+		}
+	}
+
 	NewComponent->SetupAttachment(AttachParent);
 	NewComponent->RegisterComponent();
 
@@ -166,24 +192,142 @@ UInstancedStaticMeshComponent* FHexTileResourceMeshBuilder::FindOrCreateMeshComp
 
 	Owner->AddInstanceComponent(NewComponent);
 
-	MeshToComponent.Add(Mesh, NewComponent);
+	MeshToComponent.Add(Key, NewComponent);
 	InOutResourceMeshComponents.Add(NewComponent);
 
 	return NewComponent;
 }
 
-FTransform FHexTileResourceMeshBuilder::BuildResourceTransform(
+void FHexTileResourceMeshBuilder::AddResourceInstancesForTile(
+	UInstancedStaticMeshComponent* MeshComponent,
+	const FHexResourceDefinition& ResourceDefinition,
 	const FVector& TileCenter,
-	const FRotator& MeshRotation,
-	const FVector& MeshOffset,
-	const FVector& MeshScale
+	float HexRadius,
+	int32 TileIndex,
+	int32 RandomSeed
 ) const
 {
-	const FVector FinalLocation = TileCenter + MeshOffset;
+	if (!MeshComponent || HexRadius <= 0.0f)
+	{
+		return;
+	}
+
+	const int32 MinCount = FMath::Max(1, ResourceDefinition.MinMeshInstancesPerTile);
+	const int32 MaxCount = FMath::Max(MinCount, ResourceDefinition.MaxMeshInstancesPerTile);
+
+	FRandomStream RandomStream(
+		MakeResourceVisualSeed(
+			RandomSeed,
+			TileIndex,
+			ResourceDefinition.ResourceId
+		)
+	);
+
+	const int32 SpawnedInstanceCount = RandomStream.RandRange(MinCount, MaxCount);
+
+	for (int32 InstanceIndex = 0; InstanceIndex < SpawnedInstanceCount; ++InstanceIndex)
+	{
+		const FVector InstanceLocation = PickRandomPointInsideHex(
+			TileCenter,
+			HexRadius,
+			ResourceDefinition.ScatterRadiusRatio,
+			RandomStream
+		);
+
+		const FTransform InstanceTransform = BuildResourceTransform(
+			ResourceDefinition,
+			InstanceLocation,
+			SpawnedInstanceCount,
+			RandomStream
+		);
+
+		MeshComponent->AddInstance(InstanceTransform);
+	}
+}
+
+FVector FHexTileResourceMeshBuilder::PickRandomPointInsideHex(
+	const FVector& TileCenter,
+	float HexRadius,
+	float ScatterRadiusRatio,
+	FRandomStream& RandomStream
+) const
+{
+	const float ClampedScatterRatio = FMath::Clamp(ScatterRadiusRatio, 0.0f, 1.0f);
+
+	if (ClampedScatterRatio <= KINDA_SMALL_NUMBER)
+	{
+		return TileCenter;
+	}
+
+	// For a flat-top hex with corner radius HexRadius, the apothem is:
+	// cos(30) * HexRadius.
+	// Keeping scatter within the apothem is a safe way to remain inside the hex.
+	const float SafeScatterRadius =
+		HexRadius *
+		FMath::Cos(FMath::DegreesToRadians(30.0f)) *
+		ClampedScatterRatio;
+
+	// sqrt random radius gives an even distribution over the disc.
+	const float Angle = RandomStream.FRandRange(0.0f, TWO_PI);
+	const float Radius = SafeScatterRadius * FMath::Sqrt(RandomStream.FRand());
+
+	const float OffsetX = FMath::Cos(Angle) * Radius;
+	const float OffsetY = FMath::Sin(Angle) * Radius;
+
+	return FVector(
+		TileCenter.X + OffsetX,
+		TileCenter.Y + OffsetY,
+		TileCenter.Z
+	);
+}
+
+FTransform FHexTileResourceMeshBuilder::BuildResourceTransform(
+	const FHexResourceDefinition& ResourceDefinition,
+	const FVector& InstanceLocation,
+	int32 SpawnedInstanceCount,
+	FRandomStream& RandomStream
+) const
+{
+	const float YawVariation = ResourceDefinition.RandomYawVariationDegrees > 0.0f
+		? RandomStream.FRandRange(
+			-ResourceDefinition.RandomYawVariationDegrees,
+			ResourceDefinition.RandomYawVariationDegrees
+		)
+		: 0.0f;
+
+	// Only yaw changes. Pitch/Roll remain exactly as defined in the data asset.
+	const FRotator FinalRotation(
+		ResourceDefinition.MeshRotation.Pitch,
+		ResourceDefinition.MeshRotation.Yaw + YawVariation,
+		ResourceDefinition.MeshRotation.Roll
+	);
+
+	float ScaleMultiplier = 1.0f;
+
+	if (ResourceDefinition.bScaleDownByInstanceCount)
+	{
+		ScaleMultiplier = 1.0f / FMath::Sqrt(static_cast<float>(FMath::Max(1, SpawnedInstanceCount)));
+	}
+
+	const FVector FinalScale = ResourceDefinition.MeshScale * ScaleMultiplier;
+	const FVector FinalLocation = InstanceLocation + ResourceDefinition.MeshOffset;
 
 	return FTransform(
-		MeshRotation,
+		FinalRotation,
 		FinalLocation,
-		MeshScale
+		FinalScale
 	);
+}
+
+int32 FHexTileResourceMeshBuilder::MakeResourceVisualSeed(
+	int32 RandomSeed,
+	int32 TileIndex,
+	FName ResourceId
+) const
+{
+	uint32 Hash = GetTypeHash(RandomSeed);
+	Hash = HashCombine(Hash, GetTypeHash(TileIndex));
+	Hash = HashCombine(Hash, GetTypeHash(ResourceId));
+
+	return static_cast<int32>(Hash);
 }

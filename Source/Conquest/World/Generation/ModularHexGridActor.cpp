@@ -65,8 +65,10 @@ void AModularHexGridActor::RebuildGrid()
 		SceneRoot,
 		GridModel,
 		ResourceSetData,
+		GenerationSettings.RandomSeed,
 		ResourceMeshComponents
 	);
+
 }
 
 void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)

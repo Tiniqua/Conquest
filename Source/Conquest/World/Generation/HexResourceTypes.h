@@ -63,20 +63,57 @@ struct FHexResourceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Placement", meta = (ClampMin = "0.0"))
 	float PlacementWeight = 1.0f;
 
+	// -----------------------------------------------------------------------------
+	// Visual
+	// -----------------------------------------------------------------------------
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<UStaticMesh> WorldMesh = nullptr;
 
+	// Optional material override for the resource mesh.
+	// If null, the mesh keeps its default materials.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<UMaterialInterface> WorldMeshMaterialOverride = nullptr;
+
+	// Offset applied after choosing the per-instance location.
+	// Z is useful for lifting rocks/plants slightly above the terrain.
+	// For underwater resources like Fish, keep this near 0.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	FVector MeshOffset = FVector(0.0f, 0.0f, 8.0f);
 
+	// Base rotation. Pitch/Roll are allowed here if your mesh import needs correction,
+	// but runtime random variation below only changes yaw.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	FRotator MeshRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	FVector MeshScale = FVector(1.0f, 1.0f, 1.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Visual")
-	TObjectPtr<UMaterialInterface> IconMaterial = nullptr;
+	// How many visual instances to spawn on a tile containing this resource.
+	// Defaults to one instance.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta = (ClampMin = "1"))
+	int32 MinMeshInstancesPerTile = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta = (ClampMin = "1"))
+	int32 MaxMeshInstancesPerTile = 1;
+
+	// How far from the tile centre instances can scatter.
+	// 0.0 = centre only.
+	// 1.0 = close to the hex corners.
+	// Recommended: 0.35 - 0.65.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ScatterRadiusRatio = 0.45f;
+
+	// Random yaw variation in degrees.
+	// Keeps the mesh vertical; only yaw changes.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta = (ClampMin = "0.0", ClampMax = "180.0"))
+	float RandomYawVariationDegrees = 25.0f;
+
+	// When multiple instances are spawned, each instance scale is multiplied by:
+	// 1.0 / SpawnedInstanceCount
+	// This matches your requested behaviour: 3 spawned means one-third scale.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	bool bScaleDownByInstanceCount = true;
 
 	bool IsValidForTile(const FHexTileData& Tile) const
 	{

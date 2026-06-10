@@ -1,5 +1,6 @@
 #include "ModularHexGridActor.h"
 
+#include "HexMapTypePresets.h"
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
 
@@ -47,16 +48,34 @@ void AModularHexGridActor::RebuildGrid()
 
 	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData, ResourceSetData, ImprovementSetData);
 
-	Generator.Generate(GridModel, GenerationSettings);
+	FHexGenerationSettings EffectiveGenerationSettings = GenerationSettings;
+
+	FHexMapTypePreset Preset;
+	if (FHexMapTypePresets::GetPreset(EffectiveGenerationSettings.MapTypePreset, Preset))
+	{
+		EffectiveGenerationSettings.MapShapeSettings = Preset.Shape;
+		EffectiveGenerationSettings.TemperatureSettings.TemperatureBiasStrength = Preset.Shape.TemperatureBiasStrength;
+		EffectiveGenerationSettings.TemperatureSettings.PolarFalloffPower = Preset.Shape.PolarFalloffPower;
+
+		for (FHexTileGenerationRule& Rule : EffectiveGenerationSettings.GenerationRules)
+		{
+			if (const float* OverrideWeight = Preset.TerrainWeights.Find(Rule.TileType))
+			{
+				Rule.Weight = *OverrideWeight;
+			}
+		}
+	}
+
+	Generator.Generate(GridModel, EffectiveGenerationSettings);
 
 	ResourceGenerator.Generate(
 		GridModel,
 		ResourceSetData,
 		ResourceGenerationSettings,
-		GenerationSettings.RandomSeed
+		EffectiveGenerationSettings.RandomSeed
 	);
 
-	GridModel.ResolveTileHeights(GenerationSettings.GenerationRules);
+	GridModel.ResolveTileHeights(EffectiveGenerationSettings.GenerationRules);
 	GridModel.ResolveSharedVertexHeights();
 	GridModel.ResolveTileYields();
 
@@ -69,7 +88,7 @@ void AModularHexGridActor::RebuildGrid()
 		SceneRoot,
 		GridModel,
 		ResourceSetData,
-		GenerationSettings.RandomSeed,
+		EffectiveGenerationSettings.RandomSeed,
 		ResourceMeshComponents
 	);
 
@@ -87,6 +106,7 @@ void AModularHexGridActor::RebuildGrid()
 		FogOfWarMesh->SetVisibility(false);
 	}
 }
+
 
 void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)
 {

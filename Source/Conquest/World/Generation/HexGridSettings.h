@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HexTileTypes.h"
+#include "HexMapTypePresets.h"
 #include "HexGridSettings.generated.h"
 
 USTRUCT(BlueprintType)
@@ -67,6 +68,12 @@ struct FHexGenerationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation")
 	int32 RandomSeed = 1337;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Map Type")
+	EHexMapTypePreset MapTypePreset = EHexMapTypePreset::Continents;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Map Type")
+	FHexMapShapeSettings MapShapeSettings;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float CountRandomness = 0.15f;
 
@@ -85,7 +92,7 @@ struct FHexGenerationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
 	int32 SeedSelectionAttempts = 48;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Temperature")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Temperature")
 	FHexTemperatureSettings TemperatureSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation")

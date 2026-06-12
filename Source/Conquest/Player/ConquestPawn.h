@@ -5,6 +5,7 @@
 #include "GameFramework/Pawn.h"
 #include "ConquestPawn.generated.h"
 
+class AModularHexGridActor;
 class UCapsuleComponent;
 class UCameraComponent;
 class USpringArmComponent;
@@ -99,6 +100,11 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
 	bool bEnableMouseOverEvents = true;
+
+	void ToggleFogOfWar();
+	void ToggleHexGridOverlay();
+
+	AModularHexGridActor* FindHexGridActor() const;
 
 	void MoveForward(float Value);
 	void MoveRight(float Value);

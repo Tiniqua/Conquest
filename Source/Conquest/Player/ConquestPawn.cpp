@@ -10,6 +10,7 @@
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 static FString HexTileTypeToString(EHexTileType TileType)
 {
@@ -195,13 +196,46 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AConquestPawn::MoveRight);
 	PlayerInputComponent->BindAxis(TEXT("MoveUp"), this, &AConquestPawn::MoveUp);
 
-	// Add this axis mapping in Project Settings -> Input:
-	// Zoom
-	//     Mouse Wheel Axis = +1
 	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
+
+	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
+	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
 
 	// Intentionally no Turn / LookUp bindings.
 	// Mouse movement is reserved for cursor hover / tile selection.
+}
+
+AModularHexGridActor* AConquestPawn::FindHexGridActor() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	return Cast<AModularHexGridActor>(UGameplayStatics::GetActorOfClass(World, AModularHexGridActor::StaticClass()));
+}
+
+void AConquestPawn::ToggleFogOfWar()
+{
+	AModularHexGridActor* HexGridActor = FindHexGridActor();
+	if (!HexGridActor)
+	{
+		return;
+	}
+
+	HexGridActor->SetFogOfWarVisible(!HexGridActor->IsFogOfWarVisible());
+}
+
+void AConquestPawn::ToggleHexGridOverlay()
+{
+	AModularHexGridActor* HexGridActor = FindHexGridActor();
+	if (!HexGridActor)
+	{
+		return;
+	}
+
+	HexGridActor->SetHexGridOverlayVisible(!HexGridActor->IsHexGridOverlayVisible());
 }
 
 UConquestGameWidget* AConquestPawn::GetActiveGameWidget() const

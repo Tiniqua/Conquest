@@ -58,6 +58,15 @@ public:
 		FHexTileData& OutTileData
 		) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
+	void SetFogOfWarVisible(bool bVisible);
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Overlay")
+	bool IsHexGridOverlayVisible() const { return OverlaySettings.bShowHexGridOverlay; }
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Fog Of War")
+	bool IsFogOfWarVisible() const { return bGenerateFogOfWar; }
+	
 protected:
 	virtual void BeginPlay() override;
 
@@ -112,8 +121,7 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Fog Of War")
 	TObjectPtr<UProceduralMeshComponent> FogOfWarMesh = nullptr;
 
-	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
-	void SetFogOfWarVisible(bool bVisible);
+	
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> SceneRoot = nullptr;

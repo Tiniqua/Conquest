@@ -153,20 +153,6 @@ void AModularHexGridActor::SetFogOfWarVisible(bool bVisible)
 	if (FogOfWarMesh)
 	{
 		FogOfWarMesh->SetVisibility(bGenerateFogOfWar);
-
-		if (!bGenerateFogOfWar)
-		{
-			FogOfWarMesh->ClearAllMeshSections();
-		}
-	}
-
-	if (bGenerateFogOfWar && FogOfWarMesh && FogOfWarMesh->GetNumSections() <= 0)
-	{
-		MeshBuilder.BuildFogOfWarMesh(
-			FogOfWarMesh,
-			GridModel,
-			FogOfWarSettings
-		);
 	}
 }
 

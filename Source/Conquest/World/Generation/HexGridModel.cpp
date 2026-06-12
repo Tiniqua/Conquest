@@ -308,3 +308,257 @@ bool FHexGridModel::GetCoordFromIndex(int32 TileIndex, int32& OutQ, int32& OutR)
 
 	return IsValidCoord(OutQ, OutR);
 }
+
+void FHexGridModel::ClearRivers()
+{
+	for (FHexTileData& Tile : Tiles)
+	{
+		Tile.bHasRiver = false;
+		Tile.bHasFreshWater = false;
+
+		if (Tile.RiverEdges.Num() != 6)
+		{
+			Tile.RiverEdges.SetNum(6);
+		}
+
+		for (FHexRiverEdgeData& RiverEdge : Tile.RiverEdges)
+		{
+			RiverEdge = FHexRiverEdgeData();
+		}
+	}
+}
+
+bool FHexGridModel::HasRiverOnEdge(int32 Q, int32 R, int32 EdgeIndex) const
+{
+	if (!IsValidTile(Q, R) || EdgeIndex < 0 || EdgeIndex >= 6)
+	{
+		return false;
+	}
+
+	const int32 TileIndex = GetTileIndex(Q, R);
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		return false;
+	}
+
+	const FHexTileData& Tile = Tiles[TileIndex];
+
+	return Tile.RiverEdges.IsValidIndex(EdgeIndex) && Tile.RiverEdges[EdgeIndex].bHasRiver;
+}
+
+void FHexGridModel::SetRiverOnEdge(
+	int32 Q,
+	int32 R,
+	int32 EdgeIndex,
+	int32 RiverId,
+	float Width,
+	float Depth
+)
+{
+	if (!IsValidTile(Q, R) || EdgeIndex < 0 || EdgeIndex >= 6)
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverOnEdge FAILED invalid main edge: Q=%d R=%d Edge=%d RiverId=%d"),
+			Q,
+			R,
+			EdgeIndex,
+			RiverId
+		);
+
+		return;
+	}
+
+	SetRiverEdgeData(Q, R, EdgeIndex, RiverId, Width, Depth);
+
+	int32 NQ = 0;
+	int32 NR = 0;
+
+	if (GetNeighbourCoord(Q, R, EdgeIndex, NQ, NR) && IsValidTile(NQ, NR))
+	{
+		const int32 OppositeEdgeIndex = GetOppositeEdgeIndex(EdgeIndex);
+
+		SetRiverEdgeData(NQ, NR, OppositeEdgeIndex, RiverId, Width, Depth);
+
+		UE_LOG(
+			LogHexRivers,
+			Verbose,
+			TEXT("SetRiverOnEdge RiverId=%d Main=(%d,%d,E%d) Mirror=(%d,%d,E%d) Width=%.2f Depth=%.2f MainCount=%d MirrorCount=%d"),
+			RiverId,
+			Q,
+			R,
+			EdgeIndex,
+			NQ,
+			NR,
+			OppositeEdgeIndex,
+			Width,
+			Depth,
+			GetRiverEdgeCount(Q, R),
+			GetRiverEdgeCount(NQ, NR)
+		);
+	}
+	else
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverOnEdge RiverId=%d Main=(%d,%d,E%d) has no valid mirror neighbour Width=%.2f Depth=%.2f"),
+			RiverId,
+			Q,
+			R,
+			EdgeIndex,
+			Width,
+			Depth
+		);
+	}
+}
+
+void FHexGridModel::SetRiverEdgeData(
+	int32 Q,
+	int32 R,
+	int32 EdgeIndex,
+	int32 RiverId,
+	float Width,
+	float Depth
+)
+{
+	if (!IsValidTile(Q, R) || EdgeIndex < 0 || EdgeIndex >= 6)
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverEdgeData FAILED invalid: Q=%d R=%d Edge=%d RiverId=%d"),
+			Q,
+			R,
+			EdgeIndex,
+			RiverId
+		);
+
+		return;
+	}
+
+	const int32 TileIndex = GetTileIndex(Q, R);
+
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverEdgeData FAILED invalid TileIndex=%d for Q=%d R=%d Edge=%d RiverId=%d"),
+			TileIndex,
+			Q,
+			R,
+			EdgeIndex,
+			RiverId
+		);
+
+		return;
+	}
+
+	FHexTileData& Tile = Tiles[TileIndex];
+
+	if (Tile.RiverEdges.Num() != 6)
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverEdgeData resizing RiverEdges for Q=%d R=%d OldNum=%d"),
+			Q,
+			R,
+			Tile.RiverEdges.Num()
+		);
+
+		Tile.RiverEdges.SetNum(6);
+	}
+
+	FHexRiverEdgeData& RiverEdge = Tile.RiverEdges[EdgeIndex];
+
+	const bool bWasAlreadyRiver = RiverEdge.bHasRiver;
+	const int32 OldRiverId = RiverEdge.RiverId;
+
+	RiverEdge.bHasRiver = true;
+	RiverEdge.RiverId = RiverId;
+	RiverEdge.Width = Width;
+	RiverEdge.Depth = Depth;
+
+	if (bWasAlreadyRiver)
+	{
+		UE_LOG(
+			LogHexRivers,
+			Warning,
+			TEXT("SetRiverEdgeData overwrote existing river edge: Q=%d R=%d Edge=%d OldRiverId=%d NewRiverId=%d"),
+			Q,
+			R,
+			EdgeIndex,
+			OldRiverId,
+			RiverId
+		);
+	}
+}
+
+int32 FHexGridModel::GetRiverEdgeCount(int32 Q, int32 R) const
+{
+	if (!IsValidTile(Q, R))
+	{
+		return 0;
+	}
+
+	const int32 TileIndex = GetTileIndex(Q, R);
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		return 0;
+	}
+
+	const FHexTileData& Tile = Tiles[TileIndex];
+
+	int32 Count = 0;
+
+	for (const FHexRiverEdgeData& RiverEdge : Tile.RiverEdges)
+	{
+		if (RiverEdge.bHasRiver)
+		{
+			++Count;
+		}
+	}
+
+	return Count;
+}
+
+int32 FHexGridModel::GetOppositeEdgeIndex(int32 EdgeIndex)
+{
+	return (EdgeIndex + 3) % 6;
+}
+
+bool FHexGridModel::IsRiverEndTileType(EHexTileType TileType, const FHexRiverGenerationSettings& Settings) const
+{
+	switch (TileType)
+	{
+	case EHexTileType::Lake:
+		return Settings.bAllowRiversIntoLakes;
+
+	case EHexTileType::Coast:
+		return Settings.bAllowRiversIntoCoast;
+
+	case EHexTileType::Ocean:
+		return Settings.bAllowRiversIntoOcean;
+
+	default:
+		return false;
+	}
+}
+
+bool FHexGridModel::IsValidRiverPassThroughTileType(EHexTileType TileType, const FHexRiverGenerationSettings& Settings) const
+{
+	if (Settings.bDisallowRiversThroughMountains && TileType == EHexTileType::Mountain)
+	{
+		return false;
+	}
+
+	if (IsRiverEndTileType(TileType, Settings))
+	{
+		return false;
+	}
+
+	return !IsWaterTileType(TileType);
+}

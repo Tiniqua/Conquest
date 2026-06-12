@@ -6,6 +6,7 @@
 #include "HexMapGenerator.h"
 #include "HexResourceGenerator.h"
 #include "HexMeshBuilder.h"
+#include "HexRiverGenerator.h"
 #include "HexTileResourceMeshBuilder.h"
 #include "ModularHexGridActor.generated.h"
 
@@ -34,6 +35,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Water")
 	void SetWaterLayerVisible(bool bVisible);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Rivers")
+	void SetRiverLayerVisible(bool bVisible);
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid")
 	const TArray<FHexTileData>& GetTiles() const { return GridModel.GetTiles(); }
@@ -82,6 +86,14 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Resources")
 	FHexResourceGenerationSettings ResourceGenerationSettings;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Rivers")
+	FHexRiverGenerationSettings RiverGenerationSettings;
+
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Rivers")
+	TObjectPtr<UProceduralMeshComponent> RiverMesh = nullptr;
+	
+	FHexRiverGenerator RiverGenerator;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Water")
 	FHexWaterSettings WaterSettings;

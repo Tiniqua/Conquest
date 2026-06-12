@@ -20,6 +20,10 @@ AModularHexGridActor::AModularHexGridActor()
 	WaterMesh->SetupAttachment(SceneRoot);
 	WaterMesh->bUseAsyncCooking = true;
 
+	RiverMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("RiverMesh"));
+	RiverMesh->SetupAttachment(SceneRoot);
+	RiverMesh->bUseAsyncCooking = true;
+
 	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
@@ -68,6 +72,15 @@ void AModularHexGridActor::RebuildGrid()
 
 	Generator.Generate(GridModel, EffectiveGenerationSettings);
 
+	GridModel.ResolveTileHeights(EffectiveGenerationSettings.GenerationRules);
+	GridModel.ResolveSharedVertexHeights();
+
+	RiverGenerator.Generate(
+		GridModel,
+		RiverGenerationSettings,
+		EffectiveGenerationSettings.RandomSeed
+	);
+
 	ResourceGenerator.Generate(
 		GridModel,
 		ResourceSetData,
@@ -75,12 +88,11 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed
 	);
 
-	GridModel.ResolveTileHeights(EffectiveGenerationSettings.GenerationRules);
-	GridModel.ResolveSharedVertexHeights();
 	GridModel.ResolveTileYields();
 
 	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
 	MeshBuilder.BuildWaterMesh(WaterMesh, GridModel, WaterSettings, TileResourceData);
+	MeshBuilder.BuildRiverMesh(RiverMesh, GridModel, RiverGenerationSettings, TileResourceData);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
 
 	ResourceMeshBuilder.BuildResourceMeshes(
@@ -151,6 +163,16 @@ void AModularHexGridActor::SetWaterLayerVisible(bool bVisible)
 	if (WaterMesh)
 	{
 		WaterMesh->SetVisibility(WaterSettings.bShowWaterLayer);
+	}
+}
+
+void AModularHexGridActor::SetRiverLayerVisible(bool bVisible)
+{
+	RiverGenerationSettings.bShowRiverLayer = bVisible;
+
+	if (RiverMesh)
+	{
+		RiverMesh->SetVisibility(RiverGenerationSettings.bShowRiverLayer);
 	}
 }
 
@@ -280,5 +302,16 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		GridMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 		GridMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 		GridMesh->bUseComplexAsSimpleCollision = true;
+	}
+
+	if (RiverMesh)
+	{
+		RiverMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RiverMesh->SetVisibility(RiverGenerationSettings.bShowRiverLayer);
+		RiverMesh->SetCastShadow(false);
+		RiverMesh->bCastDynamicShadow = false;
+		RiverMesh->bCastStaticShadow = false;
+		RiverMesh->CastShadow = false;
+		RiverMesh->TranslucencySortPriority = RiverGenerationSettings.TranslucencySortPriority;
 	}
 }

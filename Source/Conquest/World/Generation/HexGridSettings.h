@@ -128,6 +128,93 @@ struct FHexResourceGenerationSettings
 };
 
 USTRUCT(BlueprintType)
+struct FHexRiverGenerationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bGenerateRivers = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0"))
+	int32 RiverCount = 12;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "1"))
+	int32 MinRiverLength = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "1"))
+	int32 MaxRiverLength = 20;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0"))
+	int32 MaxRiverBuildRetriesPerRiver = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bRequireRiverToEndAtWaterOrMapEdge = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float EarlyStoppedRiverAcceptanceChance = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bDisallowOceanVertexRivers = true;
+
+	// If a river gets blocked before reaching this ratio of its target length,
+	// reject it and retry instead of accepting a short fragment.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MinBlockedRiverCompletionRatio = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bAllowCoastVertexRiversOnlyWhenTouchingLand = true;
+
+	// Optional chance gate per attempted river start.
+	// Useful if you want rivers to be sparse even when RiverCount is high.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RiverStartChance = 1.f;
+
+	// Prevents one hex from being almost/completely surrounded by river edges.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "1", ClampMax = "6"))
+	int32 MaxRiverEdgesPerTile = 2;
+
+	// Soft spacing between separate rivers.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0"))
+	int32 RiverAvoidanceRadius = 5;
+
+	// Lower = stronger avoidance.
+	// 0.15 means nearby-river candidates become much less likely.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ExistingRiverAvoidanceWeight = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bAllowRiversIntoLakes = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bAllowRiversIntoCoast = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bAllowRiversIntoOcean = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bDisallowRiversThroughMountains = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "1.0"))
+	float RiverWidth = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0"))
+	float RiverDepth = 25.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers", meta = (ClampMin = "0.0"))
+	float RiverBankInset = 35.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	float RiverSurfaceOffset = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	int32 TranslucencySortPriority = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Rivers")
+	bool bShowRiverLayer = true;
+	
+};
+
+USTRUCT(BlueprintType)
 struct FHexWaterSettings
 {
 	GENERATED_BODY()

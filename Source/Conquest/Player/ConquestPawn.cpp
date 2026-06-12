@@ -200,7 +200,7 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
-
+	PlayerInputComponent->BindAction(TEXT("RegenerateGrid"), IE_Pressed, this, &AConquestPawn::RegenerateMapWithNewSeed);
 	// Intentionally no Turn / LookUp bindings.
 	// Mouse movement is reserved for cursor hover / tile selection.
 }
@@ -236,6 +236,20 @@ void AConquestPawn::ToggleHexGridOverlay()
 	}
 
 	HexGridActor->SetHexGridOverlayVisible(!HexGridActor->IsHexGridOverlayVisible());
+}
+
+void AConquestPawn::RegenerateMapWithNewSeed()
+{
+	AModularHexGridActor* HexGridActor = FindHexGridActor();
+	if (!HexGridActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RegenerateMapWithNewSeed failed: no ModularHexGridActor found."));
+		return;
+	}
+
+	ClearHoveredTileInfoWidget();
+
+	HexGridActor->RegenerateGridWithNewRandomSeed();
 }
 
 UConquestGameWidget* AConquestPawn::GetActiveGameWidget() const

@@ -138,6 +138,20 @@ void AModularHexGridActor::RebuildGrid()
 	}
 }
 
+void AModularHexGridActor::RegenerateGridWithNewRandomSeed()
+{
+	GenerationSettings.RandomSeed = FMath::RandRange(1, TNumericLimits<int32>::Max() - 1);
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Regenerating hex grid with new random seed: %d"),
+		GenerationSettings.RandomSeed
+	);
+
+	RebuildGrid();
+}
+
 void AModularHexGridActor::SetMapTypePreset(EHexMapTypePreset MapTypePreset)
 {
 	GenerationSettings.MapTypePreset = MapTypePreset;

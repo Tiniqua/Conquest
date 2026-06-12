@@ -103,6 +103,7 @@ protected:
 
 	void ToggleFogOfWar();
 	void ToggleHexGridOverlay();
+	void RegenerateMapWithNewSeed();
 
 	AModularHexGridActor* FindHexGridActor() const;
 

@@ -29,6 +29,9 @@ public:
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid")
+	void RegenerateGridWithNewRandomSeed();
+
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Map Type")
 	void SetMapTypePreset(EHexMapTypePreset MapTypePreset);
 

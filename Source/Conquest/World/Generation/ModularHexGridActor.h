@@ -26,6 +26,9 @@ public:
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Map Type")
+	void SetMapTypePreset(EHexMapTypePreset MapTypePreset);
+
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Overlay")
 	void SetHexGridOverlayVisible(bool bVisible);
 

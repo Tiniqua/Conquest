@@ -107,6 +107,10 @@ void AModularHexGridActor::RebuildGrid()
 	}
 }
 
+void AModularHexGridActor::SetMapTypePreset(EHexMapTypePreset MapTypePreset)
+{
+	GenerationSettings.MapTypePreset = MapTypePreset;
+}
 
 void AModularHexGridActor::SetHexGridOverlayVisible(bool bVisible)
 {

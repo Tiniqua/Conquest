@@ -27,8 +27,9 @@ private:
 	float ScoreSeedTileForRule(const FHexTileGenerationRule& Rule, int32 Q, int32 R, const TArray<bool>& Assigned) const;
 	float ScoreTileForRuleAdjacency(const FHexTileGenerationRule& Rule, int32 Q, int32 R, const TArray<bool>& Assigned) const;
 
-	float GetNormalizedTemperatureAtRow(int32 R) const;
-	float GetTemperatureSuitabilityForRule(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
+	float GetNormalizedTemperatureAtTile(int32 Q, int32 R) const;
+	float GetDeterministicValueNoise2D(int32 Q, int32 R, int32 Salt) const;	float GetTemperatureSuitabilityForRule(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
+	float GetRawTemperatureAtTile(int32 Q, int32 R) const;
 	float ScoreTileForRuleTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
 	bool DoesTileSatisfyTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const;
 

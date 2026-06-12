@@ -154,6 +154,15 @@ struct FHexTileGenerationRule
 	// Snow/desert high, grass/plains medium, water maybe low.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0"))
 	float TemperatureWeight = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature")
+	bool bUseTemperatureRangeGate = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MinAllowedTemperature = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MaxAllowedTemperature = 1.0f;
 	
 	// If true, this terrain cannot be placed when temperature suitability is too low.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature")

@@ -400,7 +400,28 @@ void FHexMapGenerator::SetupDefaultGenerationRules(TArray<FHexTileGenerationRule
 {
 	OutRules.Reset();
 
-	auto AddRule = [&OutRules](EHexTileType Type, float Weight, int32 Min, int32 Max, TArray<EHexTileType> Preferred, TArray<EHexTileType> Avoid, TArray<EHexTileType> Required, bool bSoft, bool bReject, float MinScore, float Height, float PreferredTemperature, float TemperatureTolerance, float TemperatureWeight, bool bRejectBadTemperature, float MinTemperatureSuitability, float RingVariancePercent)
+	auto AddRule = [&OutRules](
+		EHexTileType Type,
+		float Weight,
+		int32 Min,
+		int32 Max,
+		TArray<EHexTileType> Preferred,
+		TArray<EHexTileType> Avoid,
+		TArray<EHexTileType> Required,
+		bool bSoft,
+		bool bReject,
+		float MinScore,
+		float Height,
+		float PreferredTemperature,
+		float TemperatureTolerance,
+		float TemperatureWeight,
+		bool bRejectBadTemperature,
+		float MinTemperatureSuitability,
+		float RingVariancePercent,
+		bool bUseTemperatureRangeGate,
+		float MinAllowedTemperature,
+		float MaxAllowedTemperature
+	)
 	{
 		FHexTileGenerationRule Rule;
 		Rule.TileType = Type;
@@ -420,18 +441,219 @@ void FHexMapGenerator::SetupDefaultGenerationRules(TArray<FHexTileGenerationRule
 		Rule.bRejectBadTemperature = bRejectBadTemperature;
 		Rule.MinTemperatureSuitability = MinTemperatureSuitability;
 		Rule.RingVertexHeightVariancePercent = RingVariancePercent;
+		Rule.bUseTemperatureRangeGate = bUseTemperatureRangeGate;
+		Rule.MinAllowedTemperature = MinAllowedTemperature;
+		Rule.MaxAllowedTemperature = MaxAllowedTemperature;
+
 		OutRules.Add(Rule);
 	};
 
-	AddRule(EHexTileType::Ocean, 8.0f, 10, 28, { EHexTileType::Ocean, EHexTileType::Coast }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Mountain, EHexTileType::Lake }, {}, true, true, 1.0f, -2.0f, 0.5f, 1.0f, 0.0f, false, 0.0f, 0.0f);
-	AddRule(EHexTileType::Coast, 5.0f, 3, 10, { EHexTileType::Ocean, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Lake }, {}, true, true, 2.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f, 0.0f);
-	AddRule(EHexTileType::Mountain, 3.5f, 1, 6, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Lake }, {}, true, true, 0.5f, 5.0f, 0.45f, 0.90f, 0.35f, false, 0.0f, 0.30f);
-	AddRule(EHexTileType::Snow, 8.0f, 4, 16, { EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Desert, EHexTileType::Coast, EHexTileType::Lake }, {}, false, false, 0.5f, 1.0f, 0.0f, 0.24f, 2.75f, true, 0.30f, 0.04f);
-	AddRule(EHexTileType::Tundra, 13.0f, 5, 20, { EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Plains, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Desert }, {}, false, false, 0.5f, 0.0f, 0.25f, 0.32f, 1.75f, true, 0.22f, 0.02f);
-	AddRule(EHexTileType::Grassland, 28.0f, 8, 28, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Coast, EHexTileType::Lake, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 0.5f, 0.65f, 0.45f, 0.75f, false, 0.0f, 0.02f);
-	AddRule(EHexTileType::Plains, 22.0f, 7, 24, { EHexTileType::Plains, EHexTileType::Grassland, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 1.0f, 0.72f, 0.42f, 1.0f, true, 0.12f, 0.03f);
-	AddRule(EHexTileType::Desert, 9.0f, 5, 18, { EHexTileType::Desert, EHexTileType::Plains, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Lake }, {}, false, false, 0.5f, 2.0f, 1.0f, 0.25f, 2.0f, true, 0.45f, 0.025f);
-	AddRule(EHexTileType::Lake, 3.0f, 1, 4, { EHexTileType::Lake, EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Mountain }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, true, true, 1.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f, 0.0f);
+	AddRule(
+		EHexTileType::Ocean,
+		8.0f,
+		10,
+		28,
+		{ EHexTileType::Ocean, EHexTileType::Coast },
+		{ EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Mountain, EHexTileType::Lake },
+		{},
+		true,
+		true,
+		1.0f,
+		-2.0f,
+		0.5f,
+		1.0f,
+		0.0f,
+		false,
+		0.0f,
+		0.0f,
+		false,
+		0.0f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Coast,
+		5.0f,
+		3,
+		10,
+		{ EHexTileType::Ocean, EHexTileType::Grassland, EHexTileType::Plains },
+		{ EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Lake },
+		{},
+		true,
+		true,
+		2.0f,
+		-1.0f,
+		0.55f,
+		0.75f,
+		0.25f,
+		false,
+		0.0f,
+		0.0f,
+		false,
+		0.0f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Mountain,
+		3.5f,
+		1,
+		6,
+		{ EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Grassland, EHexTileType::Plains },
+		{ EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Lake },
+		{},
+		true,
+		true,
+		0.5f,
+		5.0f,
+		0.45f,
+		0.90f,
+		0.35f,
+		false,
+		0.0f,
+		0.30f,
+		false,
+		0.0f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Snow,
+		8.0f,
+		4,
+		16,
+		{ EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Mountain },
+		{ EHexTileType::Ocean, EHexTileType::Desert, EHexTileType::Coast, EHexTileType::Lake },
+		{},
+		false,
+		false,
+		0.5f,
+		1.0f,
+		0.0f,
+		0.32f,
+		2.25f,
+		false,
+		0.0f,
+		0.04f,
+		true,
+		0.0f,
+		0.42f
+	);
+
+	AddRule(
+		EHexTileType::Tundra,
+		13.0f,
+		5,
+		20,
+		{ EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Plains, EHexTileType::Mountain, EHexTileType::Lake },
+		{ EHexTileType::Ocean, EHexTileType::Desert },
+		{},
+		false,
+		false,
+		0.5f,
+		0.0f,
+		0.25f,
+		0.42f,
+		1.50f,
+		false,
+		0.0f,
+		0.02f,
+		true,
+		0.0f,
+		0.62f
+	);
+
+	AddRule(
+		EHexTileType::Grassland,
+		28.0f,
+		8,
+		28,
+		{ EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Coast, EHexTileType::Lake, EHexTileType::Mountain },
+		{ EHexTileType::Ocean, EHexTileType::Snow },
+		{},
+		false,
+		false,
+		0.5f,
+		0.5f,
+		0.65f,
+		0.45f,
+		0.75f,
+		false,
+		0.0f,
+		0.02f,
+		false,
+		0.0f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Plains,
+		22.0f,
+		7,
+		24,
+		{ EHexTileType::Plains, EHexTileType::Grassland, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Mountain, EHexTileType::Lake },
+		{ EHexTileType::Ocean, EHexTileType::Snow },
+		{},
+		false,
+		false,
+		0.5f,
+		1.0f,
+		0.72f,
+		0.42f,
+		1.0f,
+		false,
+		0.0f,
+		0.03f,
+		false,
+		0.0f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Desert,
+		9.0f,
+		5,
+		18,
+		{ EHexTileType::Desert, EHexTileType::Plains, EHexTileType::Mountain },
+		{ EHexTileType::Ocean, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Lake },
+		{},
+		false,
+		false,
+		0.5f,
+		2.0f,
+		1.0f,
+		0.25f,
+		2.0f,
+		false,
+		0.0f,
+		0.025f,
+		true,
+		0.58f,
+		1.0f
+	);
+
+	AddRule(
+		EHexTileType::Lake,
+		3.0f,
+		1,
+		4,
+		{ EHexTileType::Lake, EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra },
+		{ EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Mountain },
+		{ EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra },
+		true,
+		true,
+		1.0f,
+		-1.0f,
+		0.55f,
+		0.75f,
+		0.25f,
+		false,
+		0.0f,
+		0.0f,
+		false,
+		0.0f,
+		1.0f
+	);
 }
 
 void FHexMapGenerator::BuildDesiredTileCounts(FRandomStream& RandomStream, TMap<EHexTileType, int32>& OutDesiredCounts, int32 AvailableTileCount) const
@@ -614,7 +836,26 @@ float FHexMapGenerator::ScoreTileForRuleAdjacency(const FHexTileGenerationRule& 
 	return Score;
 }
 
-float FHexMapGenerator::GetNormalizedTemperatureAtRow(int32 R) const
+float FHexMapGenerator::GetDeterministicValueNoise2D(
+	int32 Q,
+	int32 R,
+	int32 Salt
+) const
+{
+	const int32 HashInput =
+		(Q * 73856093) ^
+		(R * 19349663) ^
+		(Salt * 83492791) ^
+		(Settings.RandomSeed * 2654435761);
+
+	const float Noise = FMath::Frac(
+		FMath::Sin(static_cast<float>(HashInput) * 0.0001f) * 43758.5453f
+	);
+
+	return (Noise * 2.0f) - 1.0f;
+}
+
+float FHexMapGenerator::GetRawTemperatureAtTile(int32 Q, int32 R) const
 {
 	if (!Model)
 	{
@@ -627,37 +868,68 @@ float FHexMapGenerator::GetNormalizedTemperatureAtRow(int32 R) const
 		return 0.5f;
 	}
 
-	const float NormalizedY = static_cast<float>(R) / static_cast<float>(GridHeight - 1);
-	const float DistanceFromNearestPole = FMath::Min(NormalizedY, 1.0f - NormalizedY);
-	float Temperature = FMath::Clamp(DistanceFromNearestPole / 0.5f, 0.0f, 1.0f);
+	const float NormalizedY =
+		static_cast<float>(R) / static_cast<float>(GridHeight - 1);
 
-	const FHexTemperatureSettings& TemperatureSettings = Settings.TemperatureSettings;
-	Temperature = FMath::Pow(Temperature, FMath::Max(0.1f, TemperatureSettings.PolarFalloffPower));
+	const float DistanceFromNearestPole =
+		FMath::Min(NormalizedY, 1.0f - NormalizedY);
+
+	float Temperature =
+		FMath::Clamp(DistanceFromNearestPole / 0.5f, 0.0f, 1.0f);
+
+	const FHexTemperatureSettings& TemperatureSettings =
+		Settings.TemperatureSettings;
+
+	Temperature = FMath::Pow(
+		Temperature,
+		FMath::Max(0.1f, TemperatureSettings.PolarFalloffPower)
+	);
 
 	if (TemperatureSettings.TemperatureNoiseStrength > 0.0f)
 	{
-		const float Noise = FMath::Frac(FMath::Sin(static_cast<float>(R) * 12.9898f + Settings.RandomSeed * 0.123f) * 43758.5453f);
-		const float SignedNoise = (Noise * 2.0f) - 1.0f;
-		Temperature += SignedNoise * TemperatureSettings.TemperatureNoiseStrength;
+		const float NoiseA = GetDeterministicValueNoise2D(Q / 3, R / 3, 11);
+		const float NoiseB = GetDeterministicValueNoise2D(Q / 7, R / 7, 23);
+		const float NoiseC = GetDeterministicValueNoise2D(Q, R, 37);
+
+		const float CombinedNoise =
+			(NoiseA * 0.55f) +
+			(NoiseB * 0.35f) +
+			(NoiseC * 0.10f);
+
+		Temperature += CombinedNoise * TemperatureSettings.TemperatureNoiseStrength;
 	}
 
 	return FMath::Clamp(Temperature, 0.0f, 1.0f);
 }
 
-float FHexMapGenerator::GetTemperatureSuitabilityForRule(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const
+// redundant but cba fixed references
+float FHexMapGenerator::GetNormalizedTemperatureAtTile(int32 Q, int32 R) const
+{
+	return GetRawTemperatureAtTile(Q, R);
+}
+
+float FHexMapGenerator::GetTemperatureSuitabilityForRule(
+	const FHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R) const
 {
 	if (!Settings.TemperatureSettings.bUseTemperatureBias)
 	{
 		return 1.0f;
 	}
 
-	const float Temperature = GetNormalizedTemperatureAtRow(R);
+	const float Temperature = GetNormalizedTemperatureAtTile(Q, R);
 	const float Tolerance = FMath::Max(0.01f, Rule.TemperatureTolerance);
 	const float Difference = FMath::Abs(Temperature - Rule.PreferredTemperature);
+
 	return 1.0f - FMath::Clamp(Difference / Tolerance, 0.0f, 1.0f);
 }
 
-float FHexMapGenerator::ScoreTileForRuleTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const
+float FHexMapGenerator::ScoreTileForRuleTemperature(
+	const FHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R
+) const
 {
 	if (!Settings.TemperatureSettings.bUseTemperatureBias)
 	{
@@ -665,12 +937,38 @@ float FHexMapGenerator::ScoreTileForRuleTemperature(const FHexTileGenerationRule
 	}
 
 	const float Suitability = GetTemperatureSuitabilityForRule(Rule, Q, R);
-	return Suitability * Settings.TemperatureSettings.TemperatureBiasStrength * Rule.TemperatureWeight;
+
+	const float ShapedSuitability =
+		FMath::SmoothStep(0.0f, 1.0f, Suitability);
+
+	return ShapedSuitability
+		* Settings.TemperatureSettings.TemperatureBiasStrength
+		* Rule.TemperatureWeight;
 }
 
-bool FHexMapGenerator::DoesTileSatisfyTemperature(const FHexTileGenerationRule& Rule, int32 Q, int32 R) const
+bool FHexMapGenerator::DoesTileSatisfyTemperature(
+	const FHexTileGenerationRule& Rule,
+	int32 Q,
+	int32 R
+) const
 {
-	if (!Settings.TemperatureSettings.bUseTemperatureBias || !Rule.bRejectBadTemperature)
+	if (!Settings.TemperatureSettings.bUseTemperatureBias)
+	{
+		return true;
+	}
+
+	if (Rule.bUseTemperatureRangeGate)
+	{
+		const float Temperature = GetRawTemperatureAtTile(Q, R);
+
+		if (Temperature < Rule.MinAllowedTemperature ||
+			Temperature > Rule.MaxAllowedTemperature)
+		{
+			return false;
+		}
+	}
+
+	if (!Rule.bRejectBadTemperature)
 	{
 		return true;
 	}
@@ -839,8 +1137,9 @@ EHexTileType FHexMapGenerator::PickWeightedLandTileType(FRandomStream& RandomStr
 		if (Settings.TemperatureSettings.bUseTemperatureBias)
 		{
 			const float Suitability = GetTemperatureSuitabilityForRule(Rule, Q, R);
-			const float TemperatureMultiplier = FMath::Lerp(0.15f, 1.0f, Suitability);
-			Weight *= FMath::Lerp(1.0f, TemperatureMultiplier, FMath::Clamp(Rule.TemperatureWeight, 0.0f, 1.0f));
+			const float TemperatureStrength = FMath::Clamp(Rule.TemperatureWeight, 0.0f, 4.0f);
+			const float TemperatureMultiplier =	FMath::Lerp(0.05f, 1.0f, Suitability);
+			Weight *= FMath::Pow(TemperatureMultiplier,TemperatureStrength);
 		}
 
 		RuleWeights[RuleIndex] = Weight;

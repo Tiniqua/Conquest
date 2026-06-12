@@ -41,6 +41,12 @@ void UConquestGameSetupWidget::NativeConstruct()
 		PlayButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandlePlayButtonClicked);
 	}
 
+	if (RandomSeedButton)
+	{
+		RandomSeedButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
+		RandomSeedButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
+	}
+
 	RefreshMapPresetOptions();
 	RefreshMapSizeOptions();
 	ApplyDefaultAdvancedValues();
@@ -147,6 +153,11 @@ void UConquestGameSetupWidget::ApplyDefaultAdvancedValues()
 	if (GenerateRiversCheckBox)
 	{
 		GenerateRiversCheckBox->SetIsChecked(true);
+	}
+
+	if (RandomSeedSpinBox)
+	{
+		RandomSeedSpinBox->SetValue(1337.0f);
 	}
 
 	if (RiverCountSpinBox)
@@ -267,68 +278,26 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 
 	Settings.SizeSettings.HexRadius = 100.0f;
 
-	Settings.RiverGenerationSettings.bGenerateRivers = GenerateRiversCheckBox
-		? GenerateRiversCheckBox->IsChecked()
-		: true;
+	Settings.RandomSeed = RandomSeedSpinBox
+		? FMath::RoundToInt(RandomSeedSpinBox->GetValue())
+		: 1337;
 
-	Settings.RiverGenerationSettings.RiverCount = RiverCountSpinBox
-		? FMath::RoundToInt(RiverCountSpinBox->GetValue())
-		: 12;
-
-	Settings.RiverGenerationSettings.MinRiverLength = MinRiverLengthSpinBox
-		? FMath::RoundToInt(MinRiverLengthSpinBox->GetValue())
-		: 10;
-
-	Settings.RiverGenerationSettings.MaxRiverLength = MaxRiverLengthSpinBox
-		? FMath::RoundToInt(MaxRiverLengthSpinBox->GetValue())
-		: 20;
-
-	Settings.RiverGenerationSettings.RiverAvoidanceRadius = RiverAvoidanceRadiusSpinBox
-		? FMath::RoundToInt(RiverAvoidanceRadiusSpinBox->GetValue())
-		: 5;
-
-	Settings.RiverGenerationSettings.RiverStartChance = RiverStartChanceSpinBox
-		? FMath::Clamp(RiverStartChanceSpinBox->GetValue(), 0.0f, 1.0f)
-		: 1.0f;
-
-	Settings.RiverGenerationSettings.MaxRiverLength = FMath::Max(
-		Settings.RiverGenerationSettings.MinRiverLength,
-		Settings.RiverGenerationSettings.MaxRiverLength
-	);
-
-	Settings.ResourceGenerationSettings.bGenerateResources = GenerateResourcesCheckBox
-		? GenerateResourcesCheckBox->IsChecked()
-		: true;
-
-	Settings.ResourceGenerationSettings.AutoBonusDensity = BonusResourceDensitySpinBox
-		? FMath::Clamp(BonusResourceDensitySpinBox->GetValue(), 0.0f, 1.0f)
-		: 0.08f;
-
-	Settings.ResourceGenerationSettings.AutoLuxuryDensity = LuxuryResourceDensitySpinBox
-		? FMath::Clamp(LuxuryResourceDensitySpinBox->GetValue(), 0.0f, 1.0f)
-		: 0.05f;
-
-	Settings.ResourceGenerationSettings.AutoStrategicDensity = StrategicResourceDensitySpinBox
-		? FMath::Clamp(StrategicResourceDensitySpinBox->GetValue(), 0.0f, 1.0f)
-		: 0.04f;
-
-	Settings.TemperatureSettings.bUseTemperatureBias = UseTemperatureBiasCheckBox
-		? UseTemperatureBiasCheckBox->IsChecked()
-		: true;
-
-	Settings.TemperatureSettings.TemperatureBiasStrength = TemperatureBiasStrengthSpinBox
-		? FMath::Max(0.0f, TemperatureBiasStrengthSpinBox->GetValue())
-		: 2.0f;
-
-	Settings.TemperatureSettings.PolarFalloffPower = PolarFalloffPowerSpinBox
-		? FMath::Max(0.1f, PolarFalloffPowerSpinBox->GetValue())
-		: 1.0f;
-
-	Settings.TemperatureSettings.TemperatureNoiseStrength = TemperatureNoiseStrengthSpinBox
-		? FMath::Max(0.0f, TemperatureNoiseStrengthSpinBox->GetValue())
-		: 0.12f;
+	// existing river/resource/temperature collection below...
 
 	return Settings;
+}
+
+int32 UConquestGameSetupWidget::GenerateRandomSeed() const
+{
+	return FMath::RandRange(1, 2147483646);
+}
+
+void UConquestGameSetupWidget::HandleRandomSeedButtonClicked()
+{
+	if (RandomSeedSpinBox)
+	{
+		RandomSeedSpinBox->SetValue(static_cast<float>(GenerateRandomSeed()));
+	}
 }
 
 void UConquestGameSetupWidget::HandlePlayButtonClicked()

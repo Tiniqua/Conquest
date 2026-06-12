@@ -43,6 +43,7 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 
 	SetMapTypePreset(SetupSettings.MapTypePreset);
 
+	GenerationSettings.RandomSeed = SetupSettings.RandomSeed;
 	GenerationSettings.TemperatureSettings = SetupSettings.TemperatureSettings;
 
 	ResourceGenerationSettings = SetupSettings.ResourceGenerationSettings;

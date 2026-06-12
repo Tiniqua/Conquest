@@ -87,6 +87,12 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<USpinBox> TemperatureNoiseStrengthSpinBox = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RandomSeedSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RandomSeedButton = nullptr;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PlayButton = nullptr;
 
@@ -115,6 +121,11 @@ protected:
 
 	UFUNCTION()
 	void HandlePlayButtonClicked();
+
+	UFUNCTION()
+	void HandleRandomSeedButtonClicked();
+
+	int32 GenerateRandomSeed() const;
 
 private:
 	void ApplyDefaultAdvancedValues();

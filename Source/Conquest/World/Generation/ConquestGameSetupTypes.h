@@ -58,6 +58,9 @@ struct FConquestGameSetupSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rivers")
 	FHexRiverGenerationSettings RiverGenerationSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	int32 RandomSeed = 1337;
 };
 
 class FConquestMapSizePresets

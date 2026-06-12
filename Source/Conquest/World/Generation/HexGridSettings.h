@@ -21,6 +21,26 @@ struct FHexGridSizeSettings
 };
 
 USTRUCT(BlueprintType)
+struct FHexFeatureGenerationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Features")
+	bool bGenerateFeatures = true;
+
+	// Optional explicit total. If <= 0, each feature uses its own AutoDensity.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Features", meta = (ClampMin = "0"))
+	int32 TotalFeatureCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Features", meta = (ClampMin = "1"))
+	int32 SeedSelectionAttempts = 64;
+
+	// Prevents the generator from looping forever when valid terrain is rare.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Features", meta = (ClampMin = "1"))
+	int32 MaxPlacementAttemptsMultiplier = 20;
+};
+
+USTRUCT(BlueprintType)
 struct FHexHeightSettings
 {
 	GENERATED_BODY()

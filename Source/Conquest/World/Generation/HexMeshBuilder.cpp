@@ -1039,23 +1039,26 @@ int32 FHexMeshBuilder::GetSectionIndexForTileType(EHexTileType TileType)
 	case EHexTileType::Desert:
 		return 2;
 
-	case EHexTileType::Tundra:
+	case EHexTileType::Jungle:
 		return 3;
 
-	case EHexTileType::Snow:
+	case EHexTileType::Tundra:
 		return 4;
 
-	case EHexTileType::Coast:
+	case EHexTileType::Snow:
 		return 5;
 
-	case EHexTileType::Ocean:
+	case EHexTileType::Coast:
 		return 6;
 
-	case EHexTileType::Mountain:
+	case EHexTileType::Ocean:
 		return 7;
 
-	case EHexTileType::Lake:
+	case EHexTileType::Mountain:
 		return 8;
+
+	case EHexTileType::Lake:
+		return 9;
 
 	default:
 		return 0;
@@ -1064,7 +1067,7 @@ int32 FHexMeshBuilder::GetSectionIndexForTileType(EHexTileType TileType)
 
 int32 FHexMeshBuilder::GetSectionCount()
 {
-	return 9;
+	return 10;
 }
 
 int32 FHexMeshBuilder::MakeTileRenderKey(int32 Q, int32 R)

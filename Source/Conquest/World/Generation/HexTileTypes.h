@@ -10,6 +10,7 @@ enum class EHexTileType : uint8
 	Grassland UMETA(DisplayName = "Grassland"),
 	Plains    UMETA(DisplayName = "Plains"),
 	Desert    UMETA(DisplayName = "Desert"),
+	Jungle    UMETA(DisplayName = "Jungle"),
 	Tundra    UMETA(DisplayName = "Tundra"),
 	Snow      UMETA(DisplayName = "Snow"),
 	Coast     UMETA(DisplayName = "Coast"),
@@ -27,6 +28,15 @@ enum class EHexFeatureType : uint8
 	Oasis       UMETA(DisplayName = "Oasis"),
 	Marsh       UMETA(DisplayName = "Marsh"),
 	FloodPlains UMETA(DisplayName = "Flood Plains")
+};
+
+UENUM(BlueprintType)
+enum class EHexFeaturePlacementPattern : uint8
+{
+	RandomSparse     UMETA(DisplayName = "Random Sparse"),
+	RandomIntermittent UMETA(DisplayName = "Random Intermittent"),
+	SmallClumps     UMETA(DisplayName = "Small Clumps"),
+	BigClumps        UMETA(DisplayName = "Big Clumps")
 };
 
 USTRUCT(BlueprintType)

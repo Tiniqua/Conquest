@@ -100,6 +100,13 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed
 	);
 
+	FeatureGenerator.Generate(
+		GridModel,
+		TileResourceData,
+		FeatureGenerationSettings,
+		EffectiveGenerationSettings.RandomSeed
+	);
+
 	ResourceGenerator.Generate(
 		GridModel,
 		ResourceSetData,
@@ -114,6 +121,16 @@ void AModularHexGridActor::RebuildGrid()
 	MeshBuilder.BuildRiverMesh(RiverMesh, GridModel, RiverGenerationSettings, TileResourceData);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
 
+
+	FeatureMeshBuilder.BuildFeatureMeshes(
+		this,
+		SceneRoot,
+		GridModel,
+		TileResourceData,
+		EffectiveGenerationSettings.RandomSeed,
+		FeatureMeshComponents
+	);
+	
 	ResourceMeshBuilder.BuildResourceMeshes(
 		this,
 		SceneRoot,
@@ -122,6 +139,7 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed,
 		ResourceMeshComponents
 	);
+	
 
 	if (bGenerateFogOfWar)
 	{

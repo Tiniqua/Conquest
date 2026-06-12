@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "ConquestGameSetupTypes.h"
+#include "HexFeatureGenerator.h"
+#include "HexFeatureMeshBuilder.h"
 #include "GameFramework/Actor.h"
 #include "HexGridModel.h"
 #include "HexMapGenerator.h"
@@ -103,6 +105,15 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Rivers")
 	FHexRiverGenerationSettings RiverGenerationSettings;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Features")
+	FHexFeatureGenerationSettings FeatureGenerationSettings;
+	
+	FHexFeatureGenerator FeatureGenerator;
+	FHexFeatureMeshBuilder FeatureMeshBuilder;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> FeatureMeshComponents;
 
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Rivers")
 	TObjectPtr<UProceduralMeshComponent> RiverMesh = nullptr;

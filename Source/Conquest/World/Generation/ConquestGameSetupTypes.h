@@ -12,7 +12,8 @@ enum class EConquestMapSizePreset : uint8
 	Small    UMETA(DisplayName = "Small"),
 	Standard UMETA(DisplayName = "Standard"),
 	Large    UMETA(DisplayName = "Large"),
-	Huge     UMETA(DisplayName = "Huge")
+	Huge     UMETA(DisplayName = "Huge"),
+	Stupid     UMETA(DisplayName = "Stupid")
 };
 
 USTRUCT(BlueprintType)
@@ -73,7 +74,8 @@ public:
 			Make(EConquestMapSizePreset::Small,    TEXT("Small"),    75,  75),
 			Make(EConquestMapSizePreset::Standard, TEXT("Standard"), 100, 100),
 			Make(EConquestMapSizePreset::Large,    TEXT("Large"),    150, 150),
-			Make(EConquestMapSizePreset::Huge,     TEXT("Huge"),     200, 200)
+			Make(EConquestMapSizePreset::Huge,     TEXT("Huge"),     200, 200),
+			Make(EConquestMapSizePreset::Stupid,   TEXT("Stupid"),     300, 300)
 		};
 	}
 

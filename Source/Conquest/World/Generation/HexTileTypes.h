@@ -138,6 +138,9 @@ struct FHexTileGenerationRule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation")
 	float HeightOffset = 0.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Height", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RingVertexHeightVariancePercent = 0.0f;
+
 	// 0 = cold/polar, 1 = hot/equator.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Generation|Temperature", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float PreferredTemperature = 0.5f;

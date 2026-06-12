@@ -400,7 +400,7 @@ void FHexMapGenerator::SetupDefaultGenerationRules(TArray<FHexTileGenerationRule
 {
 	OutRules.Reset();
 
-	auto AddRule = [&OutRules](EHexTileType Type, float Weight, int32 Min, int32 Max, TArray<EHexTileType> Preferred, TArray<EHexTileType> Avoid, TArray<EHexTileType> Required, bool bSoft, bool bReject, float MinScore, float Height, float PreferredTemperature, float TemperatureTolerance, float TemperatureWeight, bool bRejectBadTemperature, float MinTemperatureSuitability)
+	auto AddRule = [&OutRules](EHexTileType Type, float Weight, int32 Min, int32 Max, TArray<EHexTileType> Preferred, TArray<EHexTileType> Avoid, TArray<EHexTileType> Required, bool bSoft, bool bReject, float MinScore, float Height, float PreferredTemperature, float TemperatureTolerance, float TemperatureWeight, bool bRejectBadTemperature, float MinTemperatureSuitability, float RingVariancePercent)
 	{
 		FHexTileGenerationRule Rule;
 		Rule.TileType = Type;
@@ -419,18 +419,19 @@ void FHexMapGenerator::SetupDefaultGenerationRules(TArray<FHexTileGenerationRule
 		Rule.TemperatureWeight = TemperatureWeight;
 		Rule.bRejectBadTemperature = bRejectBadTemperature;
 		Rule.MinTemperatureSuitability = MinTemperatureSuitability;
+		Rule.RingVertexHeightVariancePercent = RingVariancePercent;
 		OutRules.Add(Rule);
 	};
 
-	AddRule(EHexTileType::Ocean, 8.0f, 10, 28, { EHexTileType::Ocean, EHexTileType::Coast }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Mountain, EHexTileType::Lake }, {}, true, true, 1.0f, -2.0f, 0.5f, 1.0f, 0.0f, false, 0.0f);
-	AddRule(EHexTileType::Coast, 5.0f, 3, 10, { EHexTileType::Ocean, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Lake }, {}, true, true, 2.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f);
-	AddRule(EHexTileType::Mountain, 3.5f, 1, 6, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Lake }, {}, true, true, 0.5f, 5.0f, 0.45f, 0.90f, 0.35f, false, 0.0f);
-	AddRule(EHexTileType::Snow, 8.0f, 4, 16, { EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Desert, EHexTileType::Coast, EHexTileType::Lake }, {}, false, false, 0.5f, 1.0f, 0.0f, 0.24f, 2.75f, true, 0.30f);
-	AddRule(EHexTileType::Tundra, 13.0f, 5, 20, { EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Plains, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Desert }, {}, false, false, 0.5f, 0.0f, 0.25f, 0.32f, 1.75f, true, 0.22f);
-	AddRule(EHexTileType::Grassland, 28.0f, 8, 28, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Coast, EHexTileType::Lake, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 0.5f, 0.65f, 0.45f, 0.75f, false, 0.0f);
-	AddRule(EHexTileType::Plains, 22.0f, 7, 24, { EHexTileType::Plains, EHexTileType::Grassland, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 1.0f, 0.72f, 0.42f, 1.0f, true, 0.12f);
-	AddRule(EHexTileType::Desert, 9.0f, 5, 18, { EHexTileType::Desert, EHexTileType::Plains, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Lake }, {}, false, false, 0.5f, 2.0f, 1.0f, 0.25f, 2.0f, true, 0.45f);
-	AddRule(EHexTileType::Lake, 3.0f, 1, 4, { EHexTileType::Lake, EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Mountain }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, true, true, 1.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f);
+	AddRule(EHexTileType::Ocean, 8.0f, 10, 28, { EHexTileType::Ocean, EHexTileType::Coast }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Mountain, EHexTileType::Lake }, {}, true, true, 1.0f, -2.0f, 0.5f, 1.0f, 0.0f, false, 0.0f, 0.0f);
+	AddRule(EHexTileType::Coast, 5.0f, 3, 10, { EHexTileType::Ocean, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Lake }, {}, true, true, 2.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f, 0.0f);
+	AddRule(EHexTileType::Mountain, 3.5f, 1, 6, { EHexTileType::Mountain, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Grassland, EHexTileType::Plains }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Lake }, {}, true, true, 0.5f, 5.0f, 0.45f, 0.90f, 0.35f, false, 0.0f, 0.30f);
+	AddRule(EHexTileType::Snow, 8.0f, 4, 16, { EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Desert, EHexTileType::Coast, EHexTileType::Lake }, {}, false, false, 0.5f, 1.0f, 0.0f, 0.24f, 2.75f, true, 0.30f, 0.04f);
+	AddRule(EHexTileType::Tundra, 13.0f, 5, 20, { EHexTileType::Tundra, EHexTileType::Snow, EHexTileType::Plains, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Desert }, {}, false, false, 0.5f, 0.0f, 0.25f, 0.32f, 1.75f, true, 0.22f, 0.02f);
+	AddRule(EHexTileType::Grassland, 28.0f, 8, 28, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Coast, EHexTileType::Lake, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 0.5f, 0.65f, 0.45f, 0.75f, false, 0.0f, 0.02f);
+	AddRule(EHexTileType::Plains, 22.0f, 7, 24, { EHexTileType::Plains, EHexTileType::Grassland, EHexTileType::Desert, EHexTileType::Tundra, EHexTileType::Mountain, EHexTileType::Lake }, { EHexTileType::Ocean, EHexTileType::Snow }, {}, false, false, 0.5f, 1.0f, 0.72f, 0.42f, 1.0f, true, 0.12f, 0.03f);
+	AddRule(EHexTileType::Desert, 9.0f, 5, 18, { EHexTileType::Desert, EHexTileType::Plains, EHexTileType::Mountain }, { EHexTileType::Ocean, EHexTileType::Snow, EHexTileType::Tundra, EHexTileType::Lake }, {}, false, false, 0.5f, 2.0f, 1.0f, 0.25f, 2.0f, true, 0.45f, 0.025f);
+	AddRule(EHexTileType::Lake, 3.0f, 1, 4, { EHexTileType::Lake, EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, { EHexTileType::Ocean, EHexTileType::Coast, EHexTileType::Mountain }, { EHexTileType::Grassland, EHexTileType::Plains, EHexTileType::Tundra }, true, true, 1.0f, -1.0f, 0.55f, 0.75f, 0.25f, false, 0.0f, 0.0f);
 }
 
 void FHexMapGenerator::BuildDesiredTileCounts(FRandomStream& RandomStream, TMap<EHexTileType, int32>& OutDesiredCounts, int32 AvailableTileCount) const

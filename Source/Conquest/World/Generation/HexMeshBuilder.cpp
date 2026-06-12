@@ -613,6 +613,9 @@ void FHexMeshBuilder::AddHexTile(
 	FHexMeshSection& Section = MeshSections[SectionIndex];
 
 	const FVector FlatCenter = Model.GetHexCenter(Q, R);
+
+	// Centre remains unmodified.
+	// The variance is only for the outer shared vertices.
 	const FVector Center(FlatCenter.X, FlatCenter.Y, Tile.Height);
 	const FVector2D CenterUV(0.5f, 0.5f);
 
@@ -625,9 +628,23 @@ void FHexMeshBuilder::AddHexTile(
 	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
 	{
 		const FVector FlatCorner = FlatCenter + Model.GetHexCornerOffset(CornerIndex);
-		const float CornerHeight = Model.UsesHeightOffsets() ? Model.GetResolvedCornerHeight(FlatCorner) : Tile.Height;
 
-		Corners[CornerIndex] = FVector(FlatCorner.X, FlatCorner.Y, CornerHeight);
+		const float BaseCornerHeight = Model.UsesHeightOffsets()
+			? Model.GetResolvedCornerHeight(FlatCorner)
+			: Tile.Height;
+
+		const float SharedVarianceOffset =
+			Model.GetResolvedCornerHeightVarianceOffset(FlatCorner);
+
+		const float FinalCornerHeight =
+			BaseCornerHeight + SharedVarianceOffset;
+
+		Corners[CornerIndex] = FVector(
+			FlatCorner.X,
+			FlatCorner.Y,
+			FinalCornerHeight
+		);
+
 		CornerUVs[CornerIndex] = Model.GetHexCornerUV(CornerIndex);
 	}
 

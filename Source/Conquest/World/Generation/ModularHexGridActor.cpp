@@ -89,6 +89,11 @@ void AModularHexGridActor::RebuildGrid()
 	GridModel.ResolveTileHeights(EffectiveGenerationSettings.GenerationRules);
 	GridModel.ResolveSharedVertexHeights();
 
+	GridModel.ResolveSharedVertexHeightVariance(
+		EffectiveGenerationSettings.GenerationRules,
+		EffectiveGenerationSettings.RandomSeed
+	);
+
 	RiverGenerator.Generate(
 		GridModel,
 		RiverGenerationSettings,

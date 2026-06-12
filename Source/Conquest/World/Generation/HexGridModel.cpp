@@ -19,6 +19,105 @@ void FHexGridModel::Initialize(
 	ResolvedVertexHeights.Reset();
 }
 
+float FHexGridModel::GetHeightVariancePercentForTileType(
+	EHexTileType TileType,
+	const TArray<FHexTileGenerationRule>& GenerationRules
+) const
+{
+	for (const FHexTileGenerationRule& Rule : GenerationRules)
+	{
+		if (Rule.TileType == TileType)
+		{
+			return FMath::Max(0.0f, Rule.RingVertexHeightVariancePercent);
+		}
+	}
+
+	return 0.0f;
+}
+
+void FHexGridModel::ResolveSharedVertexHeightVariance(
+	const TArray<FHexTileGenerationRule>& GenerationRules,
+	int32 RandomSeed
+)
+{
+	ResolvedVertexHeightVarianceOffsets.Reset();
+
+	for (int32 R = 0; R < Size.GridHeight; ++R)
+	{
+		for (int32 Q = 0; Q < Size.GridWidth; ++Q)
+		{
+			const int32 TileIndex = GetTileIndex(Q, R);
+			if (!Tiles.IsValidIndex(TileIndex))
+			{
+				continue;
+			}
+
+			const FHexTileData& Tile = Tiles[TileIndex];
+			const FVector FlatCenter = GetHexCenter(Q, R);
+
+			for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+			{
+				const FVector FlatCorner = FlatCenter + GetHexCornerOffset(CornerIndex);
+				const FHexVertexKey VertexKey = MakeVertexKey(FlatCorner);
+
+				// Important: if this shared vertex was already assigned by another tile,
+				// keep that value. This prevents neighbouring tiles from creating gaps.
+				if (ResolvedVertexHeightVarianceOffsets.Contains(VertexKey))
+				{
+					continue;
+				}
+
+				const float VariancePercent = GetHeightVariancePercentForTileType(
+					Tile.TileType,
+					GenerationRules
+				);
+
+				if (VariancePercent <= 0.0f)
+				{
+					ResolvedVertexHeightVarianceOffsets.Add(VertexKey, 0.0f);
+					continue;
+				}
+
+				const float MaxVariance = FMath::Abs(Tile.Height) * VariancePercent;
+
+				if (MaxVariance <= KINDA_SMALL_NUMBER)
+				{
+					ResolvedVertexHeightVarianceOffsets.Add(VertexKey, 0.0f);
+					continue;
+				}
+
+				const int32 VertexSeed =
+					RandomSeed ^
+					(VertexKey.X * 73856093) ^
+					(VertexKey.Y * 19349663);
+
+				FRandomStream VertexRandom(VertexSeed);
+
+				const float Offset = VertexRandom.FRandRange(
+					-MaxVariance,
+					MaxVariance
+				);
+
+				ResolvedVertexHeightVarianceOffsets.Add(VertexKey, Offset);
+			}
+		}
+	}
+}
+
+float FHexGridModel::GetResolvedCornerHeightVarianceOffset(
+	const FVector& FlatCornerPosition
+) const
+{
+	const FHexVertexKey VertexKey = MakeVertexKey(FlatCornerPosition);
+
+	if (const float* Offset = ResolvedVertexHeightVarianceOffsets.Find(VertexKey))
+	{
+		return *Offset;
+	}
+
+	return 0.0f;
+}
+
 void FHexGridModel::ResolveTileHeights(const TArray<FHexTileGenerationRule>& GenerationRules)
 {
 	for (FHexTileData& Tile : Tiles)

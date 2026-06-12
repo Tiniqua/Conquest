@@ -19,6 +19,18 @@ public:
 		const UHexImprovementSetData* InImprovementSetData
 	);
 
+	void ResolveSharedVertexHeightVariance(
+	const TArray<FHexTileGenerationRule>& GenerationRules,
+	int32 RandomSeed
+);
+
+	float GetResolvedCornerHeightVarianceOffset(const FVector& FlatCornerPosition) const;
+
+	float GetHeightVariancePercentForTileType(
+		EHexTileType TileType,
+		const TArray<FHexTileGenerationRule>& GenerationRules
+	) const;
+
 	TArray<FHexTileData>& GetMutableTiles() { return Tiles; }
 	const TArray<FHexTileData>& GetTiles() const { return Tiles; }
 	const TMap<FHexVertexKey, float>& GetResolvedVertexHeights() const { return ResolvedVertexHeights; }
@@ -85,4 +97,5 @@ private:
 	TWeakObjectPtr<const UHexImprovementSetData> ImprovementSetData;
 	TArray<FHexTileData> Tiles;
 	TMap<FHexVertexKey, float> ResolvedVertexHeights;
+	TMap<FHexVertexKey, float> ResolvedVertexHeightVarianceOffsets;
 };

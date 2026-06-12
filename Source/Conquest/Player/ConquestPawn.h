@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/UI/ConquestGameWidget.h"
 #include "GameFramework/Pawn.h"
 #include "ConquestPawn.generated.h"
 
@@ -19,6 +20,10 @@ public:
 	AConquestPawn();
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	UConquestGameWidget* GetActiveGameWidget() const;
+	void ClearHoveredTileInfoWidget() const;
+	void UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTileData& TileData) const;
 
 protected:
 	virtual void BeginPlay() override;

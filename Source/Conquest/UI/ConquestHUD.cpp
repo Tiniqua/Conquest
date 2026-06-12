@@ -79,6 +79,21 @@ void AConquestHUD::ShowGame()
 	}
 }
 
+UConquestGameWidget* AConquestHUD::GetGameWidget() const
+{
+	return HUDWidget ? HUDWidget->GetGameWidget() : nullptr;
+}
+
+UConquestGameWidget* AConquestHUD::GetActiveGameWidget() const
+{
+	if (!HUDWidget || !HUDWidget->IsGameWidgetActive())
+	{
+		return nullptr;
+	}
+
+	return HUDWidget->GetGameWidget();
+}
+
 void AConquestHUD::StartGameWithMapPreset(EHexMapTypePreset MapPreset)
 {
 	UWorld* World = GetWorld();

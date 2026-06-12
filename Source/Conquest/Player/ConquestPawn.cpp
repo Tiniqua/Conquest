@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "GameFramework/FloatingPawnMovement.h"
@@ -28,19 +29,6 @@ static FString HexFeatureTypeToString(EHexFeatureType FeatureType)
 	}
 
 	return TEXT("Unknown");
-}
-
-static FString HexYieldToString(const FHexYield& Yield)
-{
-	return FString::Printf(
-		TEXT("Food: %d | Production: %d | Gold: %d | Science: %d | Culture: %d | Faith: %d"),
-		Yield.Food,
-		Yield.Production,
-		Yield.Gold,
-		Yield.Science,
-		Yield.Culture,
-		Yield.Faith
-	);
 }
 
 AConquestPawn::AConquestPawn()
@@ -114,18 +102,21 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!bEnableTileHoverDebug || !Camera)
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
 	UWorld* World = GetWorld();
 	if (!World)
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	if (!PlayerController || !PlayerController->IsLocalController())
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
@@ -134,6 +125,7 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!PlayerController->GetMousePosition(MouseX, MouseY))
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
@@ -142,6 +134,7 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!PlayerController->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDirection))
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
@@ -162,6 +155,7 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!bHit)
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
@@ -174,6 +168,7 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!HexGridActor)
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
@@ -183,71 +178,11 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	if (!HexGridActor->GetTileAtWorldLocation(Hit.ImpactPoint, HoveredQ, HoveredR, HoveredTile))
 	{
+		ClearHoveredTileInfoWidget();
 		return;
 	}
 
-	FString FeatureString = TEXT("None");
-
-	if (HoveredTile.Features.Num() > 0)
-	{
-		TArray<FString> FeatureNames;
-
-		for (const EHexFeatureType Feature : HoveredTile.Features)
-		{
-			if (Feature == EHexFeatureType::None)
-			{
-				continue;
-			}
-
-			FeatureNames.Add(HexFeatureTypeToString(Feature));
-		}
-
-		if (FeatureNames.Num() > 0)
-		{
-			FeatureString = FString::Join(FeatureNames, TEXT(", "));
-		}
-	}
-
-	const FString ResourceString = HoveredTile.Resource.HasResource()
-	? HoveredTile.Resource.Quantity > 0
-		? FString::Printf(
-			TEXT("%s x%d"),
-			*HoveredTile.Resource.ResourceId.ToString(),
-			HoveredTile.Resource.Quantity
-		)
-		: HoveredTile.Resource.ResourceId.ToString()
-	: TEXT("None");
-
-	const FString ImprovementString = HoveredTile.ImprovementId.IsNone()
-		? TEXT("None")
-		: HoveredTile.ImprovementId.ToString();
-
-	const FString FreshWaterString = HoveredTile.bHasFreshWater ? TEXT("Yes") : TEXT("No");
-	const FString RiverString = HoveredTile.bHasRiver ? TEXT("Yes") : TEXT("No");
-
-	const FString DebugMessage = FString::Printf(
-		TEXT("Tile [%d, %d]\nType: %s\nFeatures: %s\nResource: %s\nImprovement: %s\nFresh Water: %s | River: %s\nHeight: %.2f\nYields: %s"),
-		HoveredQ,
-		HoveredR,
-		*HexTileTypeToString(HoveredTile.TileType),
-		*FeatureString,
-		*ResourceString,
-		*ImprovementString,
-		*FreshWaterString,
-		*RiverString,
-		HoveredTile.Height,
-		*HexYieldToString(HoveredTile.FinalYield)
-	);
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			1001,
-			DeltaTime,
-			FColor::Green,
-			DebugMessage
-		);
-	}
+	UpdateHoveredTileInfoWidget(HoveredQ, HoveredR, HoveredTile);
 }
 
 void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -267,6 +202,90 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	// Intentionally no Turn / LookUp bindings.
 	// Mouse movement is reserved for cursor hover / tile selection.
+}
+
+UConquestGameWidget* AConquestPawn::GetActiveGameWidget() const
+{
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return nullptr;
+	}
+
+	AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD());
+	if (!ConquestHUD)
+	{
+		return nullptr;
+	}
+
+	return ConquestHUD->GetActiveGameWidget();
+}
+
+void AConquestPawn::ClearHoveredTileInfoWidget() const
+{
+	if (UConquestGameWidget* GameWidget = GetActiveGameWidget())
+	{
+		GameWidget->ClearHoveredTileInfo();
+	}
+}
+
+void AConquestPawn::UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTileData& TileData) const
+{
+	UConquestGameWidget* GameWidget = GetActiveGameWidget();
+	if (!GameWidget)
+	{
+		return;
+	}
+
+	FString FeatureString = TEXT("None");
+
+	if (TileData.Features.Num() > 0)
+	{
+		TArray<FString> FeatureNames;
+
+		for (const EHexFeatureType Feature : TileData.Features)
+		{
+			if (Feature == EHexFeatureType::None)
+			{
+				continue;
+			}
+
+			FeatureNames.Add(HexFeatureTypeToString(Feature));
+		}
+
+		if (FeatureNames.Num() > 0)
+		{
+			FeatureString = FString::Join(FeatureNames, TEXT(", "));
+		}
+	}
+
+	const FString ResourceString = TileData.Resource.HasResource()
+		? TileData.Resource.Quantity > 0
+			? FString::Printf(
+				TEXT("%s x%d"),
+				*TileData.Resource.ResourceId.ToString(),
+				TileData.Resource.Quantity
+			)
+			: TileData.Resource.ResourceId.ToString()
+		: TEXT("None");
+
+	const FString ImprovementString = TileData.ImprovementId.IsNone()
+		? TEXT("None")
+		: TileData.ImprovementId.ToString();
+
+	FHoveredHexTileWidgetData WidgetData;
+	WidgetData.Q = Q;
+	WidgetData.R = R;
+	WidgetData.TileType = HexTileTypeToString(TileData.TileType);
+	WidgetData.Features = FeatureString;
+	WidgetData.Resource = ResourceString;
+	WidgetData.Improvement = ImprovementString;
+	WidgetData.FreshWater = TileData.bHasFreshWater ? TEXT("Yes") : TEXT("No");
+	WidgetData.River = TileData.bHasRiver ? TEXT("Yes") : TEXT("No");
+	WidgetData.Height = TileData.Height;
+	WidgetData.Yield = TileData.FinalYield;
+
+	GameWidget->UpdateHoveredTileInfo(WidgetData);
 }
 
 void AConquestPawn::MoveForward(float Value)

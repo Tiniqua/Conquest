@@ -36,6 +36,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void RequestStartGame(EHexMapTypePreset MapPreset);
 
+	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
+	UConquestGameWidget* GetGameWidget() const { return GameWidget; }
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
+	bool IsGameWidgetActive() const;
+
 protected:
 	UPROPERTY(Transient)
 	TObjectPtr<AConquestHUD> OwningConquestHUD = nullptr;

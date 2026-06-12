@@ -83,6 +83,11 @@ void UConquestHUDWidget::RequestStartGame(EHexMapTypePreset MapPreset)
 	}
 }
 
+bool UConquestHUDWidget::IsGameWidgetActive() const
+{
+	return CurrentScreenWidget == GameWidget && GameWidget != nullptr;
+}
+
 void UConquestHUDWidget::HideCurrentScreen()
 {
 	if (CurrentScreenWidget)

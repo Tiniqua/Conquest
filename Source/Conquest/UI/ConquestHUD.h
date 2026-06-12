@@ -33,6 +33,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void StartGameWithMapPreset(EHexMapTypePreset MapPreset);
 
+	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
+	UConquestGameWidget* GetGameWidget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
+	UConquestGameWidget* GetActiveGameWidget() const;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;

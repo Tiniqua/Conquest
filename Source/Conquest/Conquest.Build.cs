@@ -18,7 +18,8 @@ public class Conquest : ModuleRules
 			"ProceduralMeshComponent",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"GameplayTags"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

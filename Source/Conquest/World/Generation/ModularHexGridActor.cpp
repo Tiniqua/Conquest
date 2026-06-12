@@ -1,5 +1,6 @@
 #include "ModularHexGridActor.h"
 
+#include "ConquestGameSetupTypes.h"
 #include "HexMapTypePresets.h"
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
@@ -34,6 +35,18 @@ AModularHexGridActor::AModularHexGridActor()
 	
 	EnsureDefaultGenerationRules();
 	ConfigureMeshComponents();
+}
+
+void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
+{
+	SizeSettings = SetupSettings.SizeSettings;
+
+	SetMapTypePreset(SetupSettings.MapTypePreset);
+
+	GenerationSettings.TemperatureSettings = SetupSettings.TemperatureSettings;
+
+	ResourceGenerationSettings = SetupSettings.ResourceGenerationSettings;
+	RiverGenerationSettings = SetupSettings.RiverGenerationSettings;
 }
 
 void AModularHexGridActor::BeginPlay()

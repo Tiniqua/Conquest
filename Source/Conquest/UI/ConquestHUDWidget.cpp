@@ -75,11 +75,11 @@ void UConquestHUDWidget::ShowGame()
 	}
 }
 
-void UConquestHUDWidget::RequestStartGame(EHexMapTypePreset MapPreset)
+void UConquestHUDWidget::RequestStartGame(const FConquestGameSetupSettings& SetupSettings)
 {
 	if (OwningConquestHUD)
 	{
-		OwningConquestHUD->StartGameWithMapPreset(MapPreset);
+		OwningConquestHUD->RequestStartGame(SetupSettings);
 	}
 }
 

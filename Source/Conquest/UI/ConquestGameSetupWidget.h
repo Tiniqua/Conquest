@@ -1,12 +1,18 @@
-﻿#pragma once
+﻿// ConquestGameSetupWidget.h
+
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Conquest/World/Generation/HexMapTypePresets.h"
+#include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "ConquestGameSetupWidget.generated.h"
 
 class UButton;
 class UComboBoxString;
+class USpinBox;
+class UCheckBox;
+class UTextBlock;
 class UConquestHUDWidget;
 
 UCLASS()
@@ -21,14 +27,65 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void RefreshMapPresetOptions();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
+	void RefreshMapSizeOptions();
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup")
-	EHexMapTypePreset GetSelectedMapPreset() const { return SelectedMapPreset; }
+	FConquestGameSetupSettings GetSelectedGameSetupSettings() const;
 
 protected:
 	virtual void NativeConstruct() override;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UComboBoxString> MapPresetComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UComboBoxString> MapSizeComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> MapSizeTooltipText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> GenerateRiversCheckBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RiverCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MinRiverLengthSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MaxRiverLengthSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RiverAvoidanceRadiusSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RiverStartChanceSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> GenerateResourcesCheckBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> BonusResourceDensitySpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LuxuryResourceDensitySpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> StrategicResourceDensitySpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> UseTemperatureBiasCheckBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> TemperatureBiasStrengthSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> PolarFalloffPowerSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> TemperatureNoiseStrengthSpinBox = nullptr;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PlayButton = nullptr;
@@ -40,11 +97,26 @@ protected:
 	TMap<FString, EHexMapTypePreset> OptionToPreset;
 
 	UPROPERTY(Transient)
+	TMap<FString, EConquestMapSizePreset> OptionToMapSizePreset;
+
+	UPROPERTY(Transient)
 	EHexMapTypePreset SelectedMapPreset = EHexMapTypePreset::Continents;
+
+	UPROPERTY(Transient)
+	EConquestMapSizePreset SelectedMapSizePreset = EConquestMapSizePreset::Standard;
 
 	UFUNCTION()
 	void HandleMapPresetSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
 	UFUNCTION()
+	void HandleMapSizeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	int32 GetRecommendedRiverCountForMapSize(EConquestMapSizePreset MapSizePreset) const;
+
+	UFUNCTION()
 	void HandlePlayButtonClicked();
+
+private:
+	void ApplyDefaultAdvancedValues();
+	void UpdateMapSizeTooltip();
 };

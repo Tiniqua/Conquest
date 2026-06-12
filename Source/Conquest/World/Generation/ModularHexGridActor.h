@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ConquestGameSetupTypes.h"
 #include "GameFramework/Actor.h"
 #include "HexGridModel.h"
 #include "HexMapGenerator.h"
@@ -23,6 +24,7 @@ class CONQUEST_API AModularHexGridActor : public AActor
 
 public:
 	AModularHexGridActor();
+	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();

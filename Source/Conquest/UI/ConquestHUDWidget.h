@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "Conquest/World/Generation/HexMapTypePresets.h"
 #include "ConquestHUDWidget.generated.h"
 
@@ -34,7 +35,7 @@ public:
 	void ShowGame();
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
-	void RequestStartGame(EHexMapTypePreset MapPreset);
+	void RequestStartGame(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
 	UConquestGameWidget* GetGameWidget() const { return GameWidget; }

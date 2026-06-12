@@ -79,22 +79,7 @@ void AConquestHUD::ShowGame()
 	}
 }
 
-UConquestGameWidget* AConquestHUD::GetGameWidget() const
-{
-	return HUDWidget ? HUDWidget->GetGameWidget() : nullptr;
-}
-
-UConquestGameWidget* AConquestHUD::GetActiveGameWidget() const
-{
-	if (!HUDWidget || !HUDWidget->IsGameWidgetActive())
-	{
-		return nullptr;
-	}
-
-	return HUDWidget->GetGameWidget();
-}
-
-void AConquestHUD::StartGameWithMapPreset(EHexMapTypePreset MapPreset)
+void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSettings)
 {
 	UWorld* World = GetWorld();
 	if (!World || !HexGridActorClass)
@@ -121,13 +106,36 @@ void AConquestHUD::StartGameWithMapPreset(EHexMapTypePreset MapPreset)
 		return;
 	}
 
-	NewGridActor->SetMapTypePreset(MapPreset);
+	NewGridActor->ApplyGameSetupSettings(SetupSettings);
 
 	UGameplayStatics::FinishSpawningActor(NewGridActor, HexGridSpawnTransform);
 
 	SpawnedHexGridActor = NewGridActor;
 
 	ShowGame();
+}
+
+UConquestGameWidget* AConquestHUD::GetGameWidget() const
+{
+	return HUDWidget ? HUDWidget->GetGameWidget() : nullptr;
+}
+
+UConquestGameWidget* AConquestHUD::GetActiveGameWidget() const
+{
+	if (!HUDWidget || !HUDWidget->IsGameWidgetActive())
+	{
+		return nullptr;
+	}
+
+	return HUDWidget->GetGameWidget();
+}
+
+void AConquestHUD::StartGameWithMapPreset(EHexMapTypePreset MapPreset)
+{
+	FConquestGameSetupSettings SetupSettings;
+	SetupSettings.MapTypePreset = MapPreset;
+
+	RequestStartGame(SetupSettings);
 }
 
 void AConquestHUD::ConfigureMenuInputMode()

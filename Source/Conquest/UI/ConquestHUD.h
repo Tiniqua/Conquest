@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "GameFramework/HUD.h"
 #include "Conquest/World/Generation/HexMapTypePresets.h"
 #include "ConquestHUD.generated.h"
@@ -29,6 +30,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|HUD")
 	void ShowGame();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
+	void RequestStartGame(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void StartGameWithMapPreset(EHexMapTypePreset MapPreset);

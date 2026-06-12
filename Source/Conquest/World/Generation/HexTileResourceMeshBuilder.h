@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+struct FHexTileData;
 class FHexGridModel;
 class AActor;
 class USceneComponent;
@@ -57,31 +58,40 @@ private:
 	);
 
 	void AddResourceInstancesForTile(
-		UInstancedStaticMeshComponent* MeshComponent,
-		const FHexResourceDefinition& ResourceDefinition,
-		const FVector& TileCenter,
-		float HexRadius,
-		int32 TileIndex,
-		int32 RandomSeed
-	) const;
+	UInstancedStaticMeshComponent* MeshComponent,
+	const FHexGridModel& GridModel,
+	const FHexResourceDefinition& ResourceDefinition,
+	int32 Q,
+	int32 R,
+	int32 TileIndex,
+	int32 RandomSeed
+) const;
 
-	FVector PickRandomPointInsideHex(
-		const FVector& TileCenter,
+	FVector PickRandomPointInsideHex2D(
+		const FVector& FlatTileCenter,
 		float HexRadius,
 		float ScatterRadiusRatio,
 		FRandomStream& RandomStream
 	) const;
 
+	float GetTerrainSurfaceHeightAtTilePoint(
+		const FHexGridModel& GridModel,
+		int32 Q,
+		int32 R,
+		const FVector& FlatPoint
+	) const;
+
+	float GetHeightForTerrainCorner(
+		const FHexGridModel& GridModel,
+		const FHexTileData& Tile,
+		const FVector& FlatCorner
+	) const;
+
 	FTransform BuildResourceTransform(
 		const FHexResourceDefinition& ResourceDefinition,
-		const FVector& InstanceLocation,
+		const FVector& SurfaceLocation,
 		int32 SpawnedInstanceCount,
 		FRandomStream& RandomStream
 	) const;
-
-	int32 MakeResourceVisualSeed(
-		int32 RandomSeed,
-		int32 TileIndex,
-		FName ResourceId
-	) const;
+	int32 MakeResourceVisualSeed(int32 RandomSeed, int32 TileIndex, FName ResourceId) const;
 };

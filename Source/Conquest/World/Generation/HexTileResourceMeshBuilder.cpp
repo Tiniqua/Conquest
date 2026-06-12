@@ -61,16 +61,6 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 			continue;
 		}
 
-		const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
-
-		// Use the generated tile height, not world Z = 0.
-		// This keeps sea resources low and mountain/mining resources high.
-		const FVector TileCenter(
-			FlatCenter.X,
-			FlatCenter.Y,
-			Tile.Height
-		);
-
 		UInstancedStaticMeshComponent* MeshComponent = FindOrCreateMeshComponent(
 			Owner,
 			AttachParent,
@@ -87,9 +77,10 @@ void FHexTileResourceMeshBuilder::BuildResourceMeshes(
 
 		AddResourceInstancesForTile(
 			MeshComponent,
+			GridModel,
 			*ResourceDefinition,
-			TileCenter,
-			GridModel.GetHexRadius(),
+			Q,
+			R,
 			TileIndex,
 			RandomSeed
 		);
@@ -200,14 +191,20 @@ UInstancedStaticMeshComponent* FHexTileResourceMeshBuilder::FindOrCreateMeshComp
 
 void FHexTileResourceMeshBuilder::AddResourceInstancesForTile(
 	UInstancedStaticMeshComponent* MeshComponent,
+	const FHexGridModel& GridModel,
 	const FHexResourceDefinition& ResourceDefinition,
-	const FVector& TileCenter,
-	float HexRadius,
+	int32 Q,
+	int32 R,
 	int32 TileIndex,
 	int32 RandomSeed
 ) const
 {
-	if (!MeshComponent || HexRadius <= 0.0f)
+	if (!MeshComponent || GridModel.GetHexRadius() <= 0.0f)
+	{
+		return;
+	}
+
+	if (!GridModel.IsValidTile(Q, R))
 	{
 		return;
 	}
@@ -224,19 +221,33 @@ void FHexTileResourceMeshBuilder::AddResourceInstancesForTile(
 	);
 
 	const int32 SpawnedInstanceCount = RandomStream.RandRange(MinCount, MaxCount);
+	const FVector FlatTileCenter = GridModel.GetHexCenter(Q, R);
 
 	for (int32 InstanceIndex = 0; InstanceIndex < SpawnedInstanceCount; ++InstanceIndex)
 	{
-		const FVector InstanceLocation = PickRandomPointInsideHex(
-			TileCenter,
-			HexRadius,
+		const FVector FlatInstanceLocation = PickRandomPointInsideHex2D(
+			FlatTileCenter,
+			GridModel.GetHexRadius(),
 			ResourceDefinition.ScatterRadiusRatio,
 			RandomStream
 		);
 
+		const float SurfaceZ = GetTerrainSurfaceHeightAtTilePoint(
+			GridModel,
+			Q,
+			R,
+			FlatInstanceLocation
+		);
+
+		const FVector SurfaceLocation(
+			FlatInstanceLocation.X,
+			FlatInstanceLocation.Y,
+			SurfaceZ
+		);
+
 		const FTransform InstanceTransform = BuildResourceTransform(
 			ResourceDefinition,
-			InstanceLocation,
+			SurfaceLocation,
 			SpawnedInstanceCount,
 			RandomStream
 		);
@@ -245,8 +256,8 @@ void FHexTileResourceMeshBuilder::AddResourceInstancesForTile(
 	}
 }
 
-FVector FHexTileResourceMeshBuilder::PickRandomPointInsideHex(
-	const FVector& TileCenter,
+FVector FHexTileResourceMeshBuilder::PickRandomPointInsideHex2D(
+	const FVector& FlatTileCenter,
 	float HexRadius,
 	float ScatterRadiusRatio,
 	FRandomStream& RandomStream
@@ -256,18 +267,14 @@ FVector FHexTileResourceMeshBuilder::PickRandomPointInsideHex(
 
 	if (ClampedScatterRatio <= KINDA_SMALL_NUMBER)
 	{
-		return TileCenter;
+		return FVector(FlatTileCenter.X, FlatTileCenter.Y, 0.0f);
 	}
 
-	// For a flat-top hex with corner radius HexRadius, the apothem is:
-	// cos(30) * HexRadius.
-	// Keeping scatter within the apothem is a safe way to remain inside the hex.
 	const float SafeScatterRadius =
 		HexRadius *
 		FMath::Cos(FMath::DegreesToRadians(30.0f)) *
 		ClampedScatterRatio;
 
-	// sqrt random radius gives an even distribution over the disc.
 	const float Angle = RandomStream.FRandRange(0.0f, TWO_PI);
 	const float Radius = SafeScatterRadius * FMath::Sqrt(RandomStream.FRand());
 
@@ -275,10 +282,113 @@ FVector FHexTileResourceMeshBuilder::PickRandomPointInsideHex(
 	const float OffsetY = FMath::Sin(Angle) * Radius;
 
 	return FVector(
-		TileCenter.X + OffsetX,
-		TileCenter.Y + OffsetY,
-		TileCenter.Z
+		FlatTileCenter.X + OffsetX,
+		FlatTileCenter.Y + OffsetY,
+		0.0f
 	);
+}
+
+float FHexTileResourceMeshBuilder::GetHeightForTerrainCorner(
+	const FHexGridModel& GridModel,
+	const FHexTileData& Tile,
+	const FVector& FlatCorner
+) const
+{
+	const float BaseCornerHeight = GridModel.UsesHeightOffsets()
+		? GridModel.GetResolvedCornerHeight(FlatCorner)
+		: Tile.Height;
+
+	// If you added the shared vertex variance fix, use it here too.
+	// This keeps resources aligned to the actual rendered terrain surface.
+	const float SharedVarianceOffset =
+		GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
+
+	return BaseCornerHeight + SharedVarianceOffset;
+}
+
+float FHexTileResourceMeshBuilder::GetTerrainSurfaceHeightAtTilePoint(
+	const FHexGridModel& GridModel,
+	int32 Q,
+	int32 R,
+	const FVector& FlatPoint
+) const
+{
+	const int32 TileIndex = GridModel.GetTileIndex(Q, R);
+	const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
+
+	if (!Tiles.IsValidIndex(TileIndex))
+	{
+		return 0.0f;
+	}
+
+	const FHexTileData& Tile = Tiles[TileIndex];
+
+	const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
+	const FVector2D LocalPoint(
+		FlatPoint.X - FlatCenter.X,
+		FlatPoint.Y - FlatCenter.Y
+	);
+
+	float AngleRadians = FMath::Atan2(LocalPoint.Y, LocalPoint.X);
+	if (AngleRadians < 0.0f)
+	{
+		AngleRadians += TWO_PI;
+	}
+
+	const float SectorSizeRadians = TWO_PI / 6.0f;
+
+	// This assumes GetHexCornerOffset(0) starts at angle 0 and corners progress around the hex.
+	int32 CornerIndex = FMath::FloorToInt(AngleRadians / SectorSizeRadians);
+	CornerIndex = FMath::Clamp(CornerIndex, 0, 5);
+
+	const int32 NextCornerIndex = (CornerIndex + 1) % 6;
+
+	const FVector FlatCornerA = FlatCenter + GridModel.GetHexCornerOffset(CornerIndex);
+	const FVector FlatCornerB = FlatCenter + GridModel.GetHexCornerOffset(NextCornerIndex);
+
+	const FVector A(FlatCenter.X, FlatCenter.Y, Tile.Height);
+	const FVector B(
+		FlatCornerA.X,
+		FlatCornerA.Y,
+		GetHeightForTerrainCorner(GridModel, Tile, FlatCornerA)
+	);
+	const FVector C(
+		FlatCornerB.X,
+		FlatCornerB.Y,
+		GetHeightForTerrainCorner(GridModel, Tile, FlatCornerB)
+	);
+
+	const FVector P(FlatPoint.X, FlatPoint.Y, 0.0f);
+
+	const FVector2D A2D(A.X, A.Y);
+	const FVector2D B2D(B.X, B.Y);
+	const FVector2D C2D(C.X, C.Y);
+	const FVector2D P2D(P.X, P.Y);
+
+	const FVector2D V0 = B2D - A2D;
+	const FVector2D V1 = C2D - A2D;
+	const FVector2D V2 = P2D - A2D;
+
+	const float D00 = FVector2D::DotProduct(V0, V0);
+	const float D01 = FVector2D::DotProduct(V0, V1);
+	const float D11 = FVector2D::DotProduct(V1, V1);
+	const float D20 = FVector2D::DotProduct(V2, V0);
+	const float D21 = FVector2D::DotProduct(V2, V1);
+
+	const float Denom = D00 * D11 - D01 * D01;
+	if (FMath::IsNearlyZero(Denom))
+	{
+		return Tile.Height;
+	}
+
+	const float V = (D11 * D20 - D01 * D21) / Denom;
+	const float W = (D00 * D21 - D01 * D20) / Denom;
+	const float U = 1.0f - V - W;
+
+	return
+		(U * A.Z) +
+		(V * B.Z) +
+		(W * C.Z);
 }
 
 FTransform FHexTileResourceMeshBuilder::BuildResourceTransform(

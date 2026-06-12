@@ -145,8 +145,13 @@ void FHexMeshBuilder::BuildGridOverlayMesh(
 				const FVector FlatA = FlatCenter + Model.GetHexCornerOffset(EdgeIndex);
 				const FVector FlatB = FlatCenter + Model.GetHexCornerOffset((EdgeIndex + 1) % 6);
 
-				const float HeightA = Model.UsesHeightOffsets() ? Model.GetResolvedCornerHeight(FlatA) : 0.0f;
-				const float HeightB = Model.UsesHeightOffsets() ? Model.GetResolvedCornerHeight(FlatB) : 0.0f;
+				const float HeightA = Model.UsesHeightOffsets()
+					? Model.GetResolvedCornerHeight(FlatA) + Model.GetResolvedCornerHeightVarianceOffset(FlatA)
+					: 0.0f;
+
+				const float HeightB = Model.UsesHeightOffsets()
+					? Model.GetResolvedCornerHeight(FlatB) + Model.GetResolvedCornerHeightVarianceOffset(FlatB)
+					: 0.0f;
 
 				AddGridEdgeQuad(
 					Section,

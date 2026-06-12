@@ -104,6 +104,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!bEnableTileHoverDebug || !Camera)
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -111,6 +112,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!World)
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -118,6 +120,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!PlayerController || !PlayerController->IsLocalController())
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -127,6 +130,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!PlayerController->GetMousePosition(MouseX, MouseY))
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -136,6 +140,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!PlayerController->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDirection))
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -157,6 +162,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!bHit)
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -170,6 +176,7 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!HexGridActor)
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
@@ -180,10 +187,12 @@ void AConquestPawn::Tick(float DeltaTime)
 	if (!HexGridActor->GetTileAtWorldLocation(Hit.ImpactPoint, HoveredQ, HoveredR, HoveredTile))
 	{
 		ClearHoveredTileInfoWidget();
+		ClearHoveredTileVisual();
 		return;
 	}
 
 	UpdateHoveredTileInfoWidget(HoveredQ, HoveredR, HoveredTile);
+	UpdateHoveredTileVisual(HexGridActor, HoveredQ, HoveredR);
 }
 
 void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -203,6 +212,43 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAction(TEXT("RegenerateGrid"), IE_Pressed, this, &AConquestPawn::RegenerateMapWithNewSeed);
 	// Intentionally no Turn / LookUp bindings.
 	// Mouse movement is reserved for cursor hover / tile selection.
+}
+
+void AConquestPawn::ClearHoveredTileVisual()
+{
+	if (LastHoveredGridActor)
+	{
+		LastHoveredGridActor->ClearHoveredTile();
+	}
+
+	LastHoveredGridActor = nullptr;
+	LastHoveredQ = INDEX_NONE;
+	LastHoveredR = INDEX_NONE;
+}
+
+void AConquestPawn::UpdateHoveredTileVisual(AModularHexGridActor* HexGridActor, int32 Q, int32 R)
+{
+	if (!HexGridActor)
+	{
+		ClearHoveredTileVisual();
+		return;
+	}
+
+	if (LastHoveredGridActor == HexGridActor && LastHoveredQ == Q && LastHoveredR == R)
+	{
+		return;
+	}
+
+	if (LastHoveredGridActor && LastHoveredGridActor != HexGridActor)
+	{
+		LastHoveredGridActor->ClearHoveredTile();
+	}
+
+	LastHoveredGridActor = HexGridActor;
+	LastHoveredQ = Q;
+	LastHoveredR = R;
+
+	HexGridActor->SetHoveredTile(Q, R);
 }
 
 AModularHexGridActor* AConquestPawn::FindHexGridActor() const

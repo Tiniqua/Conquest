@@ -32,6 +32,26 @@ AModularHexGridActor::AModularHexGridActor()
 	FogOfWarMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FogOfWarMesh"));
 	FogOfWarMesh->SetupAttachment(SceneRoot);
 	FogOfWarMesh->bUseAsyncCooking = true;
+
+	HoverHighlightMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HoverHighlightMesh"));
+	HoverHighlightMesh->SetupAttachment(SceneRoot);
+	HoverHighlightMesh->bUseAsyncCooking = true;
+	HoverHighlightMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HoverHighlightMesh->SetCastShadow(false);
+	HoverHighlightMesh->bCastDynamicShadow = false;
+	HoverHighlightMesh->bCastStaticShadow = false;
+	HoverHighlightMesh->CastShadow = false;
+	HoverHighlightMesh->TranslucencySortPriority = 5;
+	
+	if (HoverHighlightMesh)
+	{
+		HoverHighlightMesh->SetVisibility(false);
+
+		if (HoverHighlightMaterial)
+		{
+			HoverHighlightMesh->SetMaterial(0, HoverHighlightMaterial);
+		}
+	}
 	
 	EnsureDefaultGenerationRules();
 	ConfigureMeshComponents();
@@ -168,6 +188,159 @@ void AModularHexGridActor::RegenerateGridWithNewRandomSeed()
 	);
 
 	RebuildGrid();
+}
+
+void AModularHexGridActor::SetHoveredTile(int32 Q, int32 R)
+{
+	if (HoveredQ == Q && HoveredR == R)
+	{
+		return;
+	}
+
+	HoveredQ = Q;
+	HoveredR = R;
+
+	if (!HoverHighlightMesh || !GridModel.IsValidTile(Q, R))
+	{
+		ClearHoveredTile();
+		return;
+	}
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	auto AddQuad = [&](
+	const FVector& A,
+	const FVector& B,
+	const FVector& C,
+	const FVector& D
+)
+	{
+		const int32 StartIndex = Vertices.Num();
+
+		Vertices.Add(A);
+		Vertices.Add(B);
+		Vertices.Add(C);
+		Vertices.Add(D);
+
+		// Flipped winding so the quad faces upward.
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 1);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 3);
+		Triangles.Add(StartIndex + 2);
+
+		for (int32 i = 0; i < 4; ++i)
+		{
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(FColor::White);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+	};
+
+	const FVector Center = GridModel.GetHexCenter(Q, R);
+
+	TArray<FVector> Corners;
+	Corners.SetNum(6);
+
+	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+	{
+		const FVector FlatCorner = Center + GridModel.GetHexCornerOffset(CornerIndex);
+
+		float CornerZ = 0.0f;
+
+		if (GridModel.UsesHeightOffsets())
+		{
+			CornerZ = GridModel.GetResolvedCornerHeight(FlatCorner);
+			CornerZ += GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
+		}
+
+		Corners[CornerIndex] = FVector(
+			FlatCorner.X,
+			FlatCorner.Y,
+			CornerZ + HoverSurfaceOffset
+		);
+	}
+
+	// Edge strips
+	for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+	{
+		const FVector A = Corners[EdgeIndex];
+		const FVector B = Corners[(EdgeIndex + 1) % 6];
+
+		FVector EdgeDirection = B - A;
+		EdgeDirection.Z = 0.0f;
+		EdgeDirection.Normalize();
+
+		FVector ToCenter = Center - ((A + B) * 0.5f);
+		ToCenter.Z = 0.0f;
+		ToCenter.Normalize();
+
+		const FVector HalfWidth = ToCenter * HoverEdgeWidth * 0.5f;
+
+		AddQuad(
+			A - HalfWidth,
+			B - HalfWidth,
+			B + HalfWidth,
+			A + HalfWidth
+		);
+	}
+
+	// Vertex highlights
+	for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+	{
+		const FVector Corner = Corners[CornerIndex];
+
+		FVector ToCenter = Center - Corner;
+		ToCenter.Z = 0.0f;
+		ToCenter.Normalize();
+
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, ToCenter).GetSafeNormal();
+
+		const FVector A = Corner + ToCenter * HoverVertexRadius;
+		const FVector B = Corner + Right * HoverVertexRadius;
+		const FVector C = Corner - ToCenter * HoverVertexRadius;
+		const FVector D = Corner - Right * HoverVertexRadius;
+
+		AddQuad(A, B, C, D);
+	}
+
+	HoverHighlightMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	if (HoverHighlightMaterial)
+	{
+		HoverHighlightMesh->SetMaterial(0, HoverHighlightMaterial);
+	}
+
+	HoverHighlightMesh->SetVisibility(true);
+}
+
+void AModularHexGridActor::ClearHoveredTile()
+{
+	HoveredQ = INDEX_NONE;
+	HoveredR = INDEX_NONE;
+
+	if (HoverHighlightMesh)
+	{
+		HoverHighlightMesh->ClearAllMeshSections();
+		HoverHighlightMesh->SetVisibility(false);
+	}
 }
 
 void AModularHexGridActor::SetMapTypePreset(EHexMapTypePreset MapTypePreset)

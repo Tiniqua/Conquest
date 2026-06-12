@@ -101,6 +101,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
 	bool bEnableMouseOverEvents = true;
 
+	UPROPERTY(Transient)
+	TObjectPtr<AModularHexGridActor> LastHoveredGridActor = nullptr;
+
+	int32 LastHoveredQ = INDEX_NONE;
+	int32 LastHoveredR = INDEX_NONE;
+
+	void ClearHoveredTileVisual();
+	void UpdateHoveredTileVisual(AModularHexGridActor* HexGridActor, int32 Q, int32 R);
+
 	void ToggleFogOfWar();
 	void ToggleHexGridOverlay();
 	void RegenerateMapWithNewSeed();

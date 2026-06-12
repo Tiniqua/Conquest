@@ -71,6 +71,24 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Fog Of War")
 	bool IsFogOfWarVisible() const { return bGenerateFogOfWar; }
+
+	void SetHoveredTile(int32 Q, int32 R);
+	void ClearHoveredTile();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UProceduralMeshComponent> HoverHighlightMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Hover")
+	TObjectPtr<UMaterialInterface> HoverHighlightMaterial = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Hover")
+	float HoverEdgeWidth = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Hover")
+	float HoverVertexRadius = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Hover")
+	float HoverSurfaceOffset = 8.0f;
 	
 protected:
 	virtual void BeginPlay() override;
@@ -135,7 +153,8 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Fog Of War")
 	TObjectPtr<UProceduralMeshComponent> FogOfWarMesh = nullptr;
 
-	
+	int32 HoveredQ = INDEX_NONE;
+	int32 HoveredR = INDEX_NONE;
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> SceneRoot = nullptr;
@@ -161,4 +180,6 @@ private:
 
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
+
+	
 };

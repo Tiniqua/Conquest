@@ -26,7 +26,7 @@
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "WebServerToolWindowFactoryState": "false",
-    "XThreadsFramesViewSplitterKey": "0.084990956",
+    "XThreadsFramesViewSplitterKey": "0.047016274",
     "nodejs_package_manager_path": "npm",
     "vue.rearranger.settings.migration": "true"
   }
@@ -397,7 +397,7 @@
       <workItem from="1781080352734" duration="8346000" />
       <workItem from="1781119295005" duration="830000" />
       <workItem from="1781252468977" duration="6638000" />
-      <workItem from="1781261819376" duration="14198000" />
+      <workItem from="1781261819376" duration="17696000" />
     </task>
     <servers />
   </component>

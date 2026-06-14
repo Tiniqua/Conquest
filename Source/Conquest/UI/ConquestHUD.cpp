@@ -1,10 +1,14 @@
 ﻿#include "ConquestHUD.h"
 
+#include "ConquestCityPanelWidget.h"
 #include "Blueprint/UserWidget.h"
 #include "ConquestHUDWidget.h"
 #include "ConquestGameSetupWidget.h"
 #include "ConquestGameWidget.h"
 #include "ConquestMainMenuWidget.h"
+#include "ConquestResearchPanelWidget.h"
+#include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -46,6 +50,26 @@ void AConquestHUD::BeginPlay()
 		GameWidgetClass
 	);
 
+	if (CityPanelWidgetClass)
+	{
+		CityPanelWidget = CreateWidget<UConquestCityPanelWidget>(PlayerController, CityPanelWidgetClass);
+		if (CityPanelWidget)
+		{
+			CityPanelWidget->AddToViewport(5);
+			CityPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (ResearchPanelWidgetClass)
+	{
+		ResearchPanelWidget = CreateWidget<UConquestResearchPanelWidget>(PlayerController, ResearchPanelWidgetClass);
+		if (ResearchPanelWidget)
+		{
+			ResearchPanelWidget->AddToViewport(6);
+			ResearchPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
 	ShowMainMenu();
 }
 
@@ -56,6 +80,44 @@ void AConquestHUD::ShowMainMenu()
 	if (HUDWidget)
 	{
 		HUDWidget->ShowMainMenu();
+	}
+}
+
+void AConquestHUD::ShowCityPanel(int32 CityId)
+{
+	if (!CityPanelWidget)
+	{
+		return;
+	}
+
+	CityPanelWidget->SetCity(CityId);
+	CityPanelWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void AConquestHUD::HideCityPanel()
+{
+	if (CityPanelWidget)
+	{
+		CityPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void AConquestHUD::ShowResearchPanel()
+{
+	if (!ResearchPanelWidget)
+	{
+		return;
+	}
+
+	ResearchPanelWidget->RefreshResearchOptions();
+	ResearchPanelWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void AConquestHUD::HideResearchPanel()
+{
+	if (ResearchPanelWidget)
+	{
+		ResearchPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -111,6 +173,15 @@ void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSetti
 	UGameplayStatics::FinishSpawningActor(NewGridActor, HexGridSpawnTransform);
 
 	SpawnedHexGridActor = NewGridActor;
+	if (AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>())
+	{
+		ConquestGS->ActiveGridActor = SpawnedHexGridActor;
+	}
+
+	if (AConquestGameMode* ConquestGM = World->GetAuthGameMode<AConquestGameMode>())
+	{
+		ConquestGM->StartSinglePlayerGame();
+	}
 
 	ShowGame();
 }

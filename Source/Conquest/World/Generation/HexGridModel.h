@@ -39,6 +39,12 @@ public:
 	void ResolveSharedVertexHeights();
 	void ResolveTileYields();
 
+	FHexTileData* GetTileMutable(int32 Q, int32 R);
+	FHexTileData* GetTileMutable(const FIntPoint& Coord);
+
+	const FHexTileData* GetTile(int32 Q, int32 R) const;
+	const FHexTileData* GetTile(const FIntPoint& Coord) const;
+
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
 	void GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const;
 	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
@@ -52,6 +58,7 @@ public:
 	float GetHeightOffsetForTileType(EHexTileType TileType, const TArray<FHexTileGenerationRule>& GenerationRules) const;
 
 	bool GetNeighbourCoord(int32 Q, int32 R, int32 Direction, int32& OutQ, int32& OutR) const;
+	TArray<FIntPoint> GetCoordsInRange(const FIntPoint& Center, int32 Range) const;
 	int32 GetTileIndex(int32 Q, int32 R) const;
 	bool IsValidCoord(int32 Q, int32 R) const;
 	bool IsValidTile(int32 Q, int32 R) const;

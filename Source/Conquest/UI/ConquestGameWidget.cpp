@@ -1,13 +1,66 @@
 ﻿#include "ConquestGameWidget.h"
 
+#include "ConquestHUD.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestTurnManager.h"
 
 void UConquestGameWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	if (EndTurnButton)
+	{
+		EndTurnButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleEndTurnClicked);
+	}
+
+	if (ResearchButton)
+	{
+		ResearchButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleResearchClicked);
+	}
+	
 	ClearHoveredTileInfo();
+	RefreshTurnInfo();
+}
+
+void UConquestGameWidget::HandleEndTurnClicked()
+{
+	if (AConquestGameMode* ConquestGM = GetWorld() ? GetWorld()->GetAuthGameMode<AConquestGameMode>() : nullptr)
+	{
+		ConquestGM->EndCurrentTurn();
+	}
+
+	RefreshTurnInfo();
+}
+
+void UConquestGameWidget::HandleResearchClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		return;
+	}
+
+	if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PC->GetHUD()))
+	{
+		ConquestHUD->ShowResearchPanel();
+	}
+}
+
+void UConquestGameWidget::RefreshTurnInfo()
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->TurnManager || !TurnText)
+	{
+		return;
+	}
+
+	TurnText->SetText(FText::Format(
+		NSLOCTEXT("Conquest", "TurnTextFormat", "Turn {0}"),
+		FText::AsNumber(ConquestGS->TurnManager->CurrentTurn)
+	));
 }
 
 void UConquestGameWidget::UpdateHoveredTileInfo(const FHoveredHexTileWidgetData& HoveredTileData)

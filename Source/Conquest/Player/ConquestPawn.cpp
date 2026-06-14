@@ -4,6 +4,10 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
@@ -206,6 +210,7 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAxis(TEXT("MoveUp"), this, &AConquestPawn::MoveUp);
 
 	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
+	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Pressed, this, &AConquestPawn::HandlePrimaryClick);
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
@@ -249,6 +254,177 @@ void AConquestPawn::UpdateHoveredTileVisual(AModularHexGridActor* HexGridActor, 
 	LastHoveredR = R;
 
 	HexGridActor->SetHoveredTile(Q, R);
+}
+
+bool AConquestPawn::GetTileUnderMouse(
+	AModularHexGridActor*& OutGridActor,
+	int32& OutQ,
+	int32& OutR,
+	FHexTileData& OutTileData
+) const
+{
+	OutGridActor = nullptr;
+	OutQ = INDEX_NONE;
+	OutR = INDEX_NONE;
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return false;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return false;
+	}
+
+	FVector WorldOrigin;
+	FVector WorldDirection;
+
+	if (!PlayerController->DeprojectScreenPositionToWorld(MouseX, MouseY, WorldOrigin, WorldDirection))
+	{
+		return false;
+	}
+
+	const FVector TraceStart = WorldOrigin;
+	const FVector TraceEnd = TraceStart + WorldDirection * TileHoverTraceDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(TileClickTrace), true);
+	QueryParams.AddIgnoredActor(this);
+
+	const bool bHit = World->LineTraceSingleByChannel(
+		Hit,
+		TraceStart,
+		TraceEnd,
+		TileHoverTraceChannel,
+		QueryParams
+	);
+
+	if (!bHit)
+	{
+		return false;
+	}
+
+	AModularHexGridActor* HexGridActor = Cast<AModularHexGridActor>(Hit.GetActor());
+
+	if (!HexGridActor && Hit.GetComponent())
+	{
+		HexGridActor = Cast<AModularHexGridActor>(Hit.GetComponent()->GetOwner());
+	}
+
+	if (!HexGridActor)
+	{
+		return false;
+	}
+
+	if (!HexGridActor->GetTileAtWorldLocation(Hit.ImpactPoint, OutQ, OutR, OutTileData))
+	{
+		return false;
+	}
+
+	OutGridActor = HexGridActor;
+	return true;
+}
+
+void AConquestPawn::TryOpenCityPanelAtTile(const FIntPoint& Coord)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>();
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return;
+	}
+
+	const int32 CityId = ConquestGS->CityManager->FindCityAtTile(Coord);
+	if (CityId == INDEX_NONE)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD());
+	if (!ConquestHUD)
+	{
+		return;
+	}
+
+	ConquestHUD->ShowCityPanel(CityId);
+}
+
+void AConquestPawn::HandlePrimaryClick()
+{
+	AModularHexGridActor* HexGridActor = nullptr;
+	int32 Q = INDEX_NONE;
+	int32 R = INDEX_NONE;
+	FHexTileData TileData;
+
+	if (!GetTileUnderMouse(HexGridActor, Q, R, TileData))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>();
+	AConquestGameMode* ConquestGM = World->GetAuthGameMode<AConquestGameMode>();
+
+	if (!ConquestGS || !ConquestGM || !ConquestGS->TurnManager)
+	{
+		return;
+	}
+
+	if (!ConquestGS->ActiveGridActor && HexGridActor)
+	{
+		ConquestGS->ActiveGridActor = HexGridActor;
+	}
+
+	const FIntPoint ClickedCoord(Q, R);
+
+	// First click: found capital.
+	if (ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
+	{
+		const bool bFounded = ConquestGM->FoundStartingCity(
+			ClickedCoord,
+			FName(TEXT("Capital"))
+		);
+
+		if (bFounded)
+		{
+			TryOpenCityPanelAtTile(ClickedCoord);
+		}
+
+		return;
+	}
+
+	// Normal click: if this tile has a city, open its city panel.
+	TryOpenCityPanelAtTile(ClickedCoord);
+
+	// Later:
+	// select unit / tile action panel / improvement actions.
 }
 
 AModularHexGridActor* AConquestPawn::FindHexGridActor() const

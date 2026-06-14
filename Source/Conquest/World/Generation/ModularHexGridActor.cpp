@@ -4,6 +4,7 @@
 #include "HexMapTypePresets.h"
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 AModularHexGridActor::AModularHexGridActor()
 {
@@ -55,6 +56,129 @@ AModularHexGridActor::AModularHexGridActor()
 	
 	EnsureDefaultGenerationRules();
 	ConfigureMeshComponents();
+}
+
+void AModularHexGridActor::EnsureCityPlaceholderMeshComponent()
+{
+	if (CityPlaceholderMeshComponent)
+	{
+		return;
+	}
+
+	if (!CityPlaceholderMesh)
+	{
+		return;
+	}
+
+	const FName ComponentName = MakeUniqueObjectName(
+		this,
+		UInstancedStaticMeshComponent::StaticClass(),
+		TEXT("CityPlaceholderMesh")
+	);
+
+	CityPlaceholderMeshComponent =
+		NewObject<UInstancedStaticMeshComponent>(this, ComponentName);
+
+	if (!CityPlaceholderMeshComponent)
+	{
+		return;
+	}
+
+	CityPlaceholderMeshComponent->SetStaticMesh(CityPlaceholderMesh);
+
+	if (CityPlaceholderMaterialOverride)
+	{
+		const int32 MaterialSlotCount = CityPlaceholderMesh->GetStaticMaterials().Num();
+
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotCount; ++MaterialIndex)
+		{
+			CityPlaceholderMeshComponent->SetMaterial(
+				MaterialIndex,
+				CityPlaceholderMaterialOverride
+			);
+		}
+	}
+
+	CityPlaceholderMeshComponent->SetupAttachment(SceneRoot);
+	CityPlaceholderMeshComponent->RegisterComponent();
+
+	CityPlaceholderMeshComponent->SetMobility(EComponentMobility::Static);
+	CityPlaceholderMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CityPlaceholderMeshComponent->SetGenerateOverlapEvents(false);
+
+	CityPlaceholderMeshComponent->bCastDynamicShadow = true;
+	CityPlaceholderMeshComponent->bCastStaticShadow = true;
+	CityPlaceholderMeshComponent->CastShadow = true;
+
+	AddInstanceComponent(CityPlaceholderMeshComponent);
+}
+
+FTransform AModularHexGridActor::BuildCityPlaceholderTransform(const FIntPoint& Coord) const
+{
+	const FVector FlatCenter = GridModel.GetHexCenter(Coord.X, Coord.Y);
+
+	float SurfaceZ = 0.0f;
+
+	const FHexTileData* Tile = GridModel.GetTile(Coord);
+	if (Tile)
+	{
+		SurfaceZ = Tile->Height;
+	}
+
+	const FVector Location(
+		FlatCenter.X,
+		FlatCenter.Y,
+		SurfaceZ
+	);
+
+	return FTransform(
+		CityPlaceholderRotation,
+		Location + CityPlaceholderOffset,
+		CityPlaceholderScale
+	);
+}
+
+void AModularHexGridActor::AddCityPlaceholder(int32 CityId, const FIntPoint& Coord)
+{
+	if (CityId == INDEX_NONE)
+	{
+		return;
+	}
+
+	if (!GridModel.IsValidTile(Coord.X, Coord.Y))
+	{
+		return;
+	}
+
+	EnsureCityPlaceholderMeshComponent();
+
+	if (!CityPlaceholderMeshComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AddCityPlaceholder failed: CityPlaceholderMeshComponent is null. Assign CityPlaceholderMesh on the grid actor."));
+		return;
+	}
+
+	if (CityIdToPlaceholderInstanceIndex.Contains(CityId))
+	{
+		return;
+	}
+
+	const FTransform InstanceTransform = BuildCityPlaceholderTransform(Coord);
+	const int32 InstanceIndex = CityPlaceholderMeshComponent->AddInstance(InstanceTransform);
+
+	CityIdToPlaceholderInstanceIndex.Add(CityId, InstanceIndex);
+	CityPlaceholderMeshComponent->MarkRenderStateDirty();
+}
+
+void AModularHexGridActor::ClearCityPlaceholders()
+{
+	CityIdToPlaceholderInstanceIndex.Reset();
+
+	if (CityPlaceholderMeshComponent)
+	{
+		CityPlaceholderMeshComponent->ClearInstances();
+		CityPlaceholderMeshComponent->MarkRenderStateDirty();
+	}
 }
 
 void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
@@ -174,6 +298,8 @@ void AModularHexGridActor::RebuildGrid()
 		FogOfWarMesh->ClearAllMeshSections();
 		FogOfWarMesh->SetVisibility(false);
 	}
+
+	ClearCityPlaceholders();
 }
 
 void AModularHexGridActor::RegenerateGridWithNewRandomSeed()

@@ -169,6 +169,36 @@ void FHexGridModel::ResolveSharedVertexHeights()
 	}
 }
 
+FHexTileData* FHexGridModel::GetTileMutable(int32 Q, int32 R)
+{
+	if (!IsValidTile(Q, R))
+	{
+		return nullptr;
+	}
+
+	return &Tiles[GetTileIndex(Q, R)];
+}
+
+FHexTileData* FHexGridModel::GetTileMutable(const FIntPoint& Coord)
+{
+	return GetTileMutable(Coord.X, Coord.Y);
+}
+
+const FHexTileData* FHexGridModel::GetTile(int32 Q, int32 R) const
+{
+	if (!IsValidTile(Q, R))
+	{
+		return nullptr;
+	}
+
+	return &Tiles[GetTileIndex(Q, R)];
+}
+
+const FHexTileData* FHexGridModel::GetTile(const FIntPoint& Coord) const
+{
+	return GetTile(Coord.X, Coord.Y);
+}
+
 void FHexGridModel::ResolveTileYields()
 {
 	const UHexTileResourceData* TerrainData = TileData.Get();
@@ -365,6 +395,29 @@ bool FHexGridModel::GetNeighbourCoord(int32 Q, int32 R, int32 Direction, int32& 
 	}
 
 	return IsValidCoord(OutQ, OutR);
+}
+
+TArray<FIntPoint> FHexGridModel::GetCoordsInRange(const FIntPoint& Center, int32 Range) const
+{
+	TArray<FIntPoint> Result;
+
+	for (int32 Q = -Range; Q <= Range; ++Q)
+	{
+		const int32 R1 = FMath::Max(-Range, -Q - Range);
+		const int32 R2 = FMath::Min(Range, -Q + Range);
+
+		for (int32 R = R1; R <= R2; ++R)
+		{
+			const FIntPoint Coord(Center.X + Q, Center.Y + R);
+
+			if (IsValidTile(Coord.X, Coord.Y))
+			{
+				Result.Add(Coord);
+			}
+		}
+	}
+
+	return Result;
 }
 
 int32 FHexGridModel::GetTileIndex(int32 Q, int32 R) const

@@ -26,7 +26,36 @@ class CONQUEST_API AModularHexGridActor : public AActor
 
 public:
 	AModularHexGridActor();
+	void EnsureCityPlaceholderMeshComponent();
+	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord) const;
+	void AddCityPlaceholder(int32 CityId, const FIntPoint& Coord);
+	void ClearCityPlaceholders();
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
+
+	// -----------------------------------------------------------------------------
+	// Cities - temporary placeholder visuals
+	// -----------------------------------------------------------------------------
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	TObjectPtr<UStaticMesh> CityPlaceholderMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	TObjectPtr<UMaterialInterface> CityPlaceholderMaterialOverride = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	FVector CityPlaceholderOffset = FVector(0.0f, 0.0f, 35.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	FRotator CityPlaceholderRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	FVector CityPlaceholderScale = FVector(0.5f, 0.5f, 0.5f);
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> CityPlaceholderMeshComponent = nullptr;
+
+	UPROPERTY()
+	TMap<int32, int32> CityIdToPlaceholderInstanceIndex;
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();
@@ -51,6 +80,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
 	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
+
+	const FHexGridModel& GetGridModel() const
+	{
+		return GridModel;
+	}
+
+	FHexGridModel& GetMutableGridModel()
+	{
+		return GridModel;
+	}
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "ConquestGameWidget.generated.h"
 
@@ -56,6 +57,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Hover")
 	void ClearHoveredTileInfo();
 
+	UFUNCTION()
+	void HandleEndTurnClicked();
+
+	UFUNCTION()
+	void HandleResearchClicked();
+
+	UFUNCTION(BlueprintCallable)
+	void RefreshTurnInfo();
+
 protected:
 	virtual void NativeConstruct() override;
 
@@ -109,4 +119,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TileFaithText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> EndTurnButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ResearchButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TurnText = nullptr;
 };

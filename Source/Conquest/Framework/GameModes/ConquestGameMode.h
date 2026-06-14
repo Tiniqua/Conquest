@@ -11,4 +11,15 @@ class CONQUEST_API AConquestGameMode : public AGameModeBase
 
 public:
 	AConquestGameMode();
+
+	virtual void BeginPlay() override;
+
+	UFUNCTION(BlueprintCallable)
+	void StartSinglePlayerGame();
+
+	UFUNCTION(BlueprintCallable)
+	void EndCurrentTurn();
+
+	UFUNCTION(BlueprintCallable)
+	bool FoundStartingCity(const FIntPoint& TileCoord, FName CityName);
 };

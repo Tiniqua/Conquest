@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HexYieldTypes.h"
+#include "Conquest/Core/ConquestGameplayTypes.h"
 #include "HexTileTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -25,6 +26,7 @@ enum class EHexFeatureType : uint8
 	None        UMETA(DisplayName = "None"),
 	Forest      UMETA(DisplayName = "Forest"),
 	Jungle      UMETA(DisplayName = "Jungle"),
+	Hill      UMETA(DisplayName = "Hill"),
 	Oasis       UMETA(DisplayName = "Oasis"),
 	Marsh       UMETA(DisplayName = "Marsh"),
 	FloodPlains UMETA(DisplayName = "Flood Plains")
@@ -107,6 +109,9 @@ struct FHexTileData
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
 	TArray<FHexRiverEdgeData> RiverEdges;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FHexTileGameplayState Gameplay;
 };
 
 USTRUCT(BlueprintType)

@@ -6,6 +6,8 @@
 #include "Conquest/World/Generation/HexMapTypePresets.h"
 #include "ConquestHUD.generated.h"
 
+class UConquestResearchPanelWidget;
+class UConquestCityPanelWidget;
 class UConquestHUDWidget;
 class UConquestMainMenuWidget;
 class UConquestGameSetupWidget;
@@ -42,6 +44,33 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|HUD")
 	UConquestGameWidget* GetActiveGameWidget() const;
+
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestCityPanelWidget> CityPanelWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestResearchPanelWidget> ResearchPanelWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UConquestGameWidget> GameWidget;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UConquestCityPanelWidget> CityPanelWidget;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UConquestResearchPanelWidget> ResearchPanelWidget;
+
+	UFUNCTION(BlueprintCallable)
+	void ShowCityPanel(int32 CityId);
+
+	UFUNCTION(BlueprintCallable)
+	void HideCityPanel();
+
+	UFUNCTION(BlueprintCallable)
+	void ShowResearchPanel();
+
+	UFUNCTION(BlueprintCallable)
+	void HideResearchPanel();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")

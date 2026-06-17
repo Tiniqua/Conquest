@@ -6,8 +6,6 @@
 #include "HexResourceSetData.h"
 #include "HexImprovementSetData.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogHexRivers, Log, All);
-
 class FHexGridModel
 {
 public:
@@ -70,31 +68,6 @@ public:
 	bool UsesHeightOffsets() const { return Height.bUseHeightOffsets; }
 	
 	bool GetCoordFromIndex(int32 TileIndex, int32& OutQ, int32& OutR) const;
-	
-	void ClearRivers();
-	bool HasRiverOnEdge(int32 Q, int32 R, int32 EdgeIndex) const;
-	void SetRiverOnEdge(
-		int32 Q,
-		int32 R,
-		int32 EdgeIndex,
-		int32 RiverId,
-		float Width,
-		float Depth
-	);
-
-	void SetRiverEdgeData(
-		int32 Q,
-		int32 R,
-		int32 EdgeIndex,
-		int32 RiverId,
-		float Width,
-		float Depth
-	);
-
-	int32 GetRiverEdgeCount(int32 Q, int32 R) const;
-	static int32 GetOppositeEdgeIndex(int32 EdgeIndex);
-	bool IsRiverEndTileType(EHexTileType TileType, const FHexRiverGenerationSettings& Settings) const;
-	bool IsValidRiverPassThroughTileType(EHexTileType TileType, const FHexRiverGenerationSettings& Settings) const;
 
 private:
 	FHexGridSizeSettings Size;

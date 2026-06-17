@@ -22,10 +22,6 @@ AModularHexGridActor::AModularHexGridActor()
 	WaterMesh->SetupAttachment(SceneRoot);
 	WaterMesh->bUseAsyncCooking = true;
 
-	RiverMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("RiverMesh"));
-	RiverMesh->SetupAttachment(SceneRoot);
-	RiverMesh->bUseAsyncCooking = true;
-
 	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
@@ -191,7 +187,6 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 	GenerationSettings.TemperatureSettings = SetupSettings.TemperatureSettings;
 
 	ResourceGenerationSettings = SetupSettings.ResourceGenerationSettings;
-	RiverGenerationSettings = SetupSettings.RiverGenerationSettings;
 }
 
 void AModularHexGridActor::BeginPlay()
@@ -238,12 +233,6 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed
 	);
 
-	RiverGenerator.Generate(
-		GridModel,
-		RiverGenerationSettings,
-		EffectiveGenerationSettings.RandomSeed
-	);
-
 	FeatureGenerator.Generate(
 		GridModel,
 		TileResourceData,
@@ -262,7 +251,6 @@ void AModularHexGridActor::RebuildGrid()
 
 	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
 	MeshBuilder.BuildWaterMesh(WaterMesh, GridModel, WaterSettings, TileResourceData);
-	MeshBuilder.BuildRiverMesh(RiverMesh, GridModel, RiverGenerationSettings, TileResourceData);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
 
 
@@ -502,16 +490,6 @@ void AModularHexGridActor::SetWaterLayerVisible(bool bVisible)
 	}
 }
 
-void AModularHexGridActor::SetRiverLayerVisible(bool bVisible)
-{
-	RiverGenerationSettings.bShowRiverLayer = bVisible;
-
-	if (RiverMesh)
-	{
-		RiverMesh->SetVisibility(RiverGenerationSettings.bShowRiverLayer);
-	}
-}
-
 void AModularHexGridActor::GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const
 {
 	GridModel.GetPossibleImprovementIdsForTile(Q, R, OutImprovementIds);
@@ -640,14 +618,4 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		GridMesh->bUseComplexAsSimpleCollision = true;
 	}
 
-	if (RiverMesh)
-	{
-		RiverMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		RiverMesh->SetVisibility(RiverGenerationSettings.bShowRiverLayer);
-		RiverMesh->SetCastShadow(false);
-		RiverMesh->bCastDynamicShadow = false;
-		RiverMesh->bCastStaticShadow = false;
-		RiverMesh->CastShadow = false;
-		RiverMesh->TranslucencySortPriority = RiverGenerationSettings.TranslucencySortPriority;
-	}
 }

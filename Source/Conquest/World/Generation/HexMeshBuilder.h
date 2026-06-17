@@ -7,12 +7,6 @@
 class UProceduralMeshComponent;
 class UHexTileResourceData;
 
-struct FRiverRenderVertex
-{
-	FVector Position = FVector::ZeroVector;
-	float Radius = 0.0f;
-};
-
 class FHexMeshBuilder
 {
 public:
@@ -42,13 +36,6 @@ public:
 		const FHexFogOfWarSettings& FogOfWarSettings
 	);
 
-	void BuildRiverMesh(
-		UProceduralMeshComponent* RiverMesh,
-		const FHexGridModel& Model,
-		const FHexRiverGenerationSettings& RiverSettings,
-		const UHexTileResourceData* TileData
-	) const;
-
 	static int32 GetSectionIndexForTileType(EHexTileType TileType);
 	static int32 GetSectionCount();
 
@@ -74,13 +61,6 @@ private:
 	) const;
 
 	bool ShouldDrawGridEdge(
-		const FHexGridModel& Model,
-		int32 Q,
-		int32 R,
-		int32 EdgeIndex
-	) const;
-
-	bool ShouldDrawRiverEdge(
 		const FHexGridModel& Model,
 		int32 Q,
 		int32 R,
@@ -126,30 +106,4 @@ private:
 		float Width
 	) const;
 
-	void AddRiverEdgeStrip(
-		const FHexGridModel& Model,
-		const FHexRiverGenerationSettings& RiverSettings,
-		int32 Q,
-		int32 R,
-		int32 EdgeIndex,
-		FHexMeshSection& Section
-	) const;
-
-	void AddRiverJointVerticesForEdge(
-		const FHexGridModel& Model,
-		const FHexRiverGenerationSettings& RiverSettings,
-		int32 Q,
-		int32 R,
-		int32 EdgeIndex,
-		TMap<FHexVertexKey, FRiverRenderVertex>& OutJointVertices
-	) const;
-
-	void AddRiverJointDisc(
-		FHexMeshSection& Section,
-		const FVector& Center,
-		float Radius,
-		int32 SegmentCount
-	) const;
-
-	static int32 MakeTileRenderKey(int32 Q, int32 R);
 };

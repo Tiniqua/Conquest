@@ -166,9 +166,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water")
 	TObjectPtr<UMaterialInterface> WaterMaterial = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water")
-	TObjectPtr<UMaterialInterface> RiverMaterial = nullptr;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Overlay")
 	TObjectPtr<UMaterialInterface> GridOverlayMaterial = nullptr;
 

@@ -57,9 +57,6 @@ struct FConquestGameSetupSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resources")
 	FHexResourceGenerationSettings ResourceGenerationSettings;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rivers")
-	FHexRiverGenerationSettings RiverGenerationSettings;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	int32 RandomSeed = 1337;
 };

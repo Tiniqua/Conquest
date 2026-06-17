@@ -150,39 +150,9 @@ void UConquestGameSetupWidget::RefreshMapSizeOptions()
 void UConquestGameSetupWidget::ApplyDefaultAdvancedValues()
 {
 	// Match your current defaults from HexGridSettings.h.
-	if (GenerateRiversCheckBox)
-	{
-		GenerateRiversCheckBox->SetIsChecked(true);
-	}
-
 	if (RandomSeedSpinBox)
 	{
 		RandomSeedSpinBox->SetValue(1337.0f);
-	}
-
-	if (RiverCountSpinBox)
-	{
-		RiverCountSpinBox->SetValue(12.0f);
-	}
-
-	if (MinRiverLengthSpinBox)
-	{
-		MinRiverLengthSpinBox->SetValue(10.0f);
-	}
-
-	if (MaxRiverLengthSpinBox)
-	{
-		MaxRiverLengthSpinBox->SetValue(20.0f);
-	}
-
-	if (RiverAvoidanceRadiusSpinBox)
-	{
-		RiverAvoidanceRadiusSpinBox->SetValue(5.0f);
-	}
-
-	if (RiverStartChanceSpinBox)
-	{
-		RiverStartChanceSpinBox->SetValue(1.0f);
 	}
 
 	if (GenerateResourcesCheckBox)
@@ -282,8 +252,6 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 		? FMath::RoundToInt(RandomSeedSpinBox->GetValue())
 		: 1337;
 
-	// existing river/resource/temperature collection below...
-
 	return Settings;
 }
 
@@ -314,34 +282,5 @@ void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedIte
 	{
 		SelectedMapSizePreset = *FoundPreset;
 		UpdateMapSizeTooltip();
-
-		if (RiverCountSpinBox)
-		{
-			RiverCountSpinBox->SetValue(GetRecommendedRiverCountForMapSize(SelectedMapSizePreset));
-		}
-	}
-}
-
-int32 UConquestGameSetupWidget::GetRecommendedRiverCountForMapSize(EConquestMapSizePreset MapSizePreset) const
-{
-	switch (MapSizePreset)
-	{
-	case EConquestMapSizePreset::Tiny:
-		return 6;
-
-	case EConquestMapSizePreset::Small:
-		return 9;
-
-	case EConquestMapSizePreset::Standard:
-		return 12;
-
-	case EConquestMapSizePreset::Large:
-		return 24;
-
-	case EConquestMapSizePreset::Huge:
-		return 40;
-
-	default:
-		return 12;
 	}
 }

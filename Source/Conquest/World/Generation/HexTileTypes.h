@@ -61,24 +61,6 @@ struct FHexTileResourceInstance
 
 
 USTRUCT(BlueprintType)
-struct FHexRiverEdgeData
-{
-	GENERATED_BODY()
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
-	bool bHasRiver = false;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
-	int32 RiverId = INDEX_NONE;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
-	float Width = 0.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
-	float Depth = 0.0f;
-};
-
-USTRUCT(BlueprintType)
 struct FHexTileData
 {
 	GENERATED_BODY()
@@ -106,9 +88,6 @@ struct FHexTileData
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Tile")
 	float Height = 0.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Rivers")
-	TArray<FHexRiverEdgeData> RiverEdges;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FHexTileGameplayState Gameplay;

@@ -46,24 +46,6 @@ protected:
 	TObjectPtr<UTextBlock> MapSizeTooltipText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UCheckBox> GenerateRiversCheckBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USpinBox> RiverCountSpinBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USpinBox> MinRiverLengthSpinBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USpinBox> MaxRiverLengthSpinBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USpinBox> RiverAvoidanceRadiusSpinBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USpinBox> RiverStartChanceSpinBox = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCheckBox> GenerateResourcesCheckBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -116,8 +98,6 @@ protected:
 
 	UFUNCTION()
 	void HandleMapSizeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
-
-	int32 GetRecommendedRiverCountForMapSize(EConquestMapSizePreset MapSizePreset) const;
 
 	UFUNCTION()
 	void HandlePlayButtonClicked();

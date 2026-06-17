@@ -203,6 +203,11 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 	RiverSettings.RiverWidth = ExistingRiverSettings.RiverWidth;
 	RiverSettings.RiverSurfaceOffset = ExistingRiverSettings.RiverSurfaceOffset;
 	RiverSettings.TranslucencySortPriority = ExistingRiverSettings.TranslucencySortPriority;
+
+	if (HasActorBegunPlay() && bGenerateOnBeginPlay)
+	{
+		RebuildGrid();
+	}
 }
 
 void AModularHexGridActor::BeginPlay()

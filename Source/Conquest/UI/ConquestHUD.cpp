@@ -168,9 +168,9 @@ void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSetti
 		return;
 	}
 
-	NewGridActor->ApplyGameSetupSettings(SetupSettings);
-
 	UGameplayStatics::FinishSpawningActor(NewGridActor, HexGridSpawnTransform);
+
+	NewGridActor->ApplyGameSetupSettings(SetupSettings);
 
 	SpawnedHexGridActor = NewGridActor;
 	if (AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>())

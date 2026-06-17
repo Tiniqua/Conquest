@@ -105,9 +105,23 @@ protected:
 	UFUNCTION()
 	void HandleRandomSeedButtonClicked();
 
+	UFUNCTION()
+	void HandleRandomSeedValueChanged(float NewValue);
+
 	int32 GenerateRandomSeed() const;
 
 private:
 	void ApplyDefaultAdvancedValues();
+	void SetSelectedRandomSeed(int32 NewSeed, bool bUpdateSpinBox);
+	void ConfigureRandomSeedSpinBox();
 	void UpdateMapSizeTooltip();
+
+	UPROPERTY(Transient)
+	int32 SelectedRandomSeed = 1337;
+
+	UPROPERTY(Transient)
+	bool bHasAppliedDefaultAdvancedValues = false;
+
+	UPROPERTY(Transient)
+	bool bUpdatingRandomSeedSpinBox = false;
 };

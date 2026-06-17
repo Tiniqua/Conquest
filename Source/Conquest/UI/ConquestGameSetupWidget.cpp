@@ -8,6 +8,7 @@
 #include "Components/SpinBox.h"
 #include "Components/TextBlock.h"
 #include "ConquestHUDWidget.h"
+#include "Misc/Guid.h"
 
 void UConquestGameSetupWidget::InitializeGameSetupWidget(UConquestHUDWidget* InParentHUDWidget)
 {
@@ -46,6 +47,8 @@ void UConquestGameSetupWidget::NativeConstruct()
 		RandomSeedButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
 		RandomSeedButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
 	}
+
+	ConfigureRandomSeedSpinBox();
 
 	RefreshMapPresetOptions();
 	RefreshMapSizeOptions();
@@ -149,11 +152,18 @@ void UConquestGameSetupWidget::RefreshMapSizeOptions()
 
 void UConquestGameSetupWidget::ApplyDefaultAdvancedValues()
 {
-	// Match your current defaults from HexGridSettings.h.
-	if (RandomSeedSpinBox)
+	if (bHasAppliedDefaultAdvancedValues)
 	{
-		RandomSeedSpinBox->SetValue(1337.0f);
+		ConfigureRandomSeedSpinBox();
+		SetSelectedRandomSeed(SelectedRandomSeed, true);
+		return;
 	}
+
+	bHasAppliedDefaultAdvancedValues = true;
+
+	// Match your current defaults from HexGridSettings.h.
+	ConfigureRandomSeedSpinBox();
+	SetSelectedRandomSeed(1337, true);
 
 	if (GenerateResourcesCheckBox)
 	{
@@ -248,24 +258,35 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 
 	Settings.SizeSettings.HexRadius = 100.0f;
 
-	Settings.RandomSeed = RandomSeedSpinBox
-		? FMath::RoundToInt(RandomSeedSpinBox->GetValue())
-		: 1337;
+	Settings.RandomSeed = SelectedRandomSeed;
 
 	return Settings;
 }
 
 int32 UConquestGameSetupWidget::GenerateRandomSeed() const
 {
-	return FMath::RandRange(1, 2147483646);
+	const FGuid Guid = FGuid::NewGuid();
+	const uint32 MixedSeed = Guid.A ^ Guid.B ^ Guid.C ^ Guid.D;
+	return FMath::Max(1, static_cast<int32>(MixedSeed & 0x7FFFFFFF));
 }
 
 void UConquestGameSetupWidget::HandleRandomSeedButtonClicked()
 {
-	if (RandomSeedSpinBox)
+	SetSelectedRandomSeed(GenerateRandomSeed(), true);
+}
+
+void UConquestGameSetupWidget::HandleRandomSeedValueChanged(float NewValue)
+{
+	if (bUpdatingRandomSeedSpinBox)
 	{
-		RandomSeedSpinBox->SetValue(static_cast<float>(GenerateRandomSeed()));
+		return;
 	}
+
+	SelectedRandomSeed = FMath::Clamp(
+		FMath::RoundToInt(NewValue),
+		1,
+		2147483646
+	);
 }
 
 void UConquestGameSetupWidget::HandlePlayButtonClicked()
@@ -283,4 +304,30 @@ void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedIte
 		SelectedMapSizePreset = *FoundPreset;
 		UpdateMapSizeTooltip();
 	}
+}
+
+void UConquestGameSetupWidget::SetSelectedRandomSeed(int32 NewSeed, bool bUpdateSpinBox)
+{
+	SelectedRandomSeed = FMath::Clamp(NewSeed, 1, 2147483646);
+
+	if (bUpdateSpinBox && RandomSeedSpinBox)
+	{
+		ConfigureRandomSeedSpinBox();
+		bUpdatingRandomSeedSpinBox = true;
+		RandomSeedSpinBox->SetValue(static_cast<float>(SelectedRandomSeed));
+		bUpdatingRandomSeedSpinBox = false;
+	}
+}
+
+void UConquestGameSetupWidget::ConfigureRandomSeedSpinBox()
+{
+	if (!RandomSeedSpinBox)
+	{
+		return;
+	}
+
+	RandomSeedSpinBox->SetMinValue(1.0f);
+	RandomSeedSpinBox->SetMaxValue(2147483646.0f);
+	RandomSeedSpinBox->OnValueChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedValueChanged);
+	RandomSeedSpinBox->OnValueChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedValueChanged);
 }

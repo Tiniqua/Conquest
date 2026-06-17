@@ -120,7 +120,17 @@ private:
 		TSet<int32>& InOutAvoidanceTiles
 	) const;
 
-	void MarkRiverTiles(FHexGridModel& Model, const FHexSimpleRiverPath& River) const;
+	void MarkRiverTiles(
+		FHexGridModel& Model,
+		const FHexSimpleRiverSettings& Settings,
+		const FHexSimpleRiverPath& River
+	) const;
+
+	void MarkTilesTouchingRiverEdge(
+		FHexGridModel& Model,
+		const FHexSimpleRiverSettings& Settings,
+		const FHexSimpleRiverEdge& Edge
+	) const;
 
 	bool GetEdgeVertexKeys(
 		const FHexGridModel& Model,

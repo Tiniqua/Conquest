@@ -67,7 +67,7 @@ void FHexSimpleRiverGenerator::Generate(
 			}
 		}
 
-		MarkRiverTiles(Model, River);
+		MarkRiverTiles(Model, Settings, River);
 		AddAvoidanceTilesForRiver(Model, Settings, River, AvoidanceTiles);
 		OutRivers.Add(River);
 		++RiverId;
@@ -534,24 +534,68 @@ void FHexSimpleRiverGenerator::AddAvoidanceTilesForRiver(
 	}
 }
 
-void FHexSimpleRiverGenerator::MarkRiverTiles(FHexGridModel& Model, const FHexSimpleRiverPath& River) const
+void FHexSimpleRiverGenerator::MarkRiverTiles(
+	FHexGridModel& Model,
+	const FHexSimpleRiverSettings& Settings,
+	const FHexSimpleRiverPath& River
+) const
 {
 	for (const FHexSimpleRiverEdge& Edge : River.Edges)
 	{
-		if (FHexTileData* Tile = Model.GetTileMutable(Edge.Tile))
-		{
-			Tile->bHasRiver = true;
-			Tile->bHasFreshWater = true;
-		}
+		MarkTilesTouchingRiverEdge(Model, Settings, Edge);
+	}
+}
 
-		int32 NQ = 0;
-		int32 NR = 0;
-		if (Model.GetNeighbourCoord(Edge.Tile.X, Edge.Tile.Y, Edge.EdgeIndex, NQ, NR))
+void FHexSimpleRiverGenerator::MarkTilesTouchingRiverEdge(
+	FHexGridModel& Model,
+	const FHexSimpleRiverSettings& Settings,
+	const FHexSimpleRiverEdge& Edge
+) const
+{
+	FHexVertexKey RiverA;
+	FHexVertexKey RiverB;
+	if (!GetEdgeVertexKeys(Model, Edge.Tile.X, Edge.Tile.Y, Edge.EdgeIndex, RiverA, RiverB))
+	{
+		return;
+	}
+
+	for (int32 R = Edge.Tile.Y - 2; R <= Edge.Tile.Y + 2; ++R)
+	{
+		for (int32 Q = Edge.Tile.X - 2; Q <= Edge.Tile.X + 2; ++Q)
 		{
-			if (FHexTileData* NeighbourTile = Model.GetTileMutable(NQ, NR))
+			if (!Model.IsValidTile(Q, R))
 			{
-				NeighbourTile->bHasRiver = true;
-				NeighbourTile->bHasFreshWater = true;
+				continue;
+			}
+
+			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+			{
+				FHexVertexKey TileA;
+				FHexVertexKey TileB;
+				if (!GetEdgeVertexKeys(Model, Q, R, EdgeIndex, TileA, TileB))
+				{
+					continue;
+				}
+
+				const bool bMatchesRiverEdge =
+					(TileA == RiverA && TileB == RiverB) ||
+					(TileA == RiverB && TileB == RiverA);
+				if (!bMatchesRiverEdge)
+				{
+					continue;
+				}
+
+				if (FHexTileData* Tile = Model.GetTileMutable(Q, R))
+				{
+					if (Settings.AvoidTileTypes.Contains(Tile->TileType))
+					{
+						break;
+					}
+
+					Tile->bHasRiver = true;
+					Tile->bHasFreshWater = true;
+				}
+				break;
 			}
 		}
 	}

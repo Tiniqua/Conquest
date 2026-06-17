@@ -54,6 +54,15 @@ struct FConquestGameSetupSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	FHexTemperatureSettings TemperatureSettings;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	FHexMapShapeSettings MapShapeSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	bool bUseCustomMapShapeSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation", meta = (ClampMin = "0.0"))
+	float MountainWeightScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resources")
 	FHexResourceGenerationSettings ResourceGenerationSettings;
 

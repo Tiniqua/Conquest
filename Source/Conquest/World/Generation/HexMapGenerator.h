@@ -17,8 +17,13 @@ private:
 	void BuildLandWaterMask(FRandomStream& RandomStream, TArray<bool>& OutIsLand) const;
 	void SeedMajorLandmasses(FRandomStream& RandomStream, TArray<bool>& InOutIsLand, int32 TargetLandTiles) const;
 	void AddIslandChains(FRandomStream& RandomStream, TArray<bool>& InOutIsLand, int32 TargetLandTiles) const;
+	void RefineLandWaterMask(FRandomStream& RandomStream, TArray<bool>& InOutIsLand) const;
+	void ApplySoftOceanBorder(FRandomStream& RandomStream, TArray<bool>& InOutIsLand) const;
+	void RestoreLandBudget(FRandomStream& RandomStream, TArray<bool>& InOutIsLand, int32 TargetLandTiles) const;
+	void FillEnclosedWaterRegions(TArray<bool>& InOutIsLand) const;
 	void ApplyInlandSea(TArray<bool>& InOutIsLand) const;
 	void ApplyCoastsFromLandMask(TArray<FHexTileData>& Tiles, const TArray<bool>& IsLand) const;
+	void ApplyLakes(FRandomStream& RandomStream, TArray<FHexTileData>& Tiles, const TArray<bool>& IsLand) const;
 
 	void GenerateLandTerrain(FRandomStream& RandomStream, const TArray<bool>& IsLand);
 	void BuildDesiredTileCounts(FRandomStream& RandomStream, TMap<EHexTileType, int32>& OutDesiredCounts, int32 AvailableTileCount) const;
@@ -38,4 +43,12 @@ private:
 	int32 PickBestFrontierIndex(const FHexTileGenerationRule& Rule, const TArray<FIntPoint>& Frontier, FRandomStream& RandomStream, const TArray<bool>& Assigned) const;
 
 	EHexTileType PickWeightedLandTileType(FRandomStream& RandomStream, int32 Q, int32 R) const;
+	bool IsMapEdge(int32 Q, int32 R) const;
+	bool IsReservedWaterTile(int32 Q, int32 R) const;
+	float GetCenterBiasScore(int32 Q, int32 R) const;
+	int32 CountLandNeighbours(int32 Q, int32 R, const TArray<bool>& IsLand) const;
+	int32 CountWaterNeighbours(int32 Q, int32 R, const TArray<bool>& IsLand) const;
+	bool IsNearLandOutsideSet(int32 Q, int32 R, const TArray<bool>& IsLand, const TSet<int32>& AllowedLandIndices, int32 Radius) const;
+	bool IsNearTileType(int32 Q, int32 R, const TArray<FHexTileData>& Tiles, EHexTileType TileType, int32 Radius) const;
+	int32 CountLandTiles(const TArray<bool>& IsLand) const;
 };

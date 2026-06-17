@@ -189,6 +189,12 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 
 	GenerationSettings.RandomSeed = SetupSettings.RandomSeed;
 	GenerationSettings.TemperatureSettings = SetupSettings.TemperatureSettings;
+	if (SetupSettings.bUseCustomMapShapeSettings)
+	{
+		GenerationSettings.MapShapeSettings = SetupSettings.MapShapeSettings;
+	}
+	GenerationSettings.bUseCustomMapShapeSettings = SetupSettings.bUseCustomMapShapeSettings;
+	GenerationSettings.MountainWeightScale = SetupSettings.MountainWeightScale;
 
 	ResourceGenerationSettings = SetupSettings.ResourceGenerationSettings;
 
@@ -231,15 +237,27 @@ void AModularHexGridActor::RebuildGrid()
 	FHexMapTypePreset Preset;
 	if (FHexMapTypePresets::GetPreset(EffectiveGenerationSettings.MapTypePreset, Preset))
 	{
-		EffectiveGenerationSettings.MapShapeSettings = Preset.Shape;
-		EffectiveGenerationSettings.TemperatureSettings.TemperatureBiasStrength = Preset.Shape.TemperatureBiasStrength;
-		EffectiveGenerationSettings.TemperatureSettings.PolarFalloffPower = Preset.Shape.PolarFalloffPower;
+		if (!EffectiveGenerationSettings.bUseCustomMapShapeSettings)
+		{
+			EffectiveGenerationSettings.MapShapeSettings = Preset.Shape;
+		}
+
+		if (!EffectiveGenerationSettings.bUseCustomMapShapeSettings)
+		{
+			EffectiveGenerationSettings.TemperatureSettings.TemperatureBiasStrength = Preset.Shape.TemperatureBiasStrength;
+			EffectiveGenerationSettings.TemperatureSettings.PolarFalloffPower = Preset.Shape.PolarFalloffPower;
+		}
 
 		for (FHexTileGenerationRule& Rule : EffectiveGenerationSettings.GenerationRules)
 		{
 			if (const float* OverrideWeight = Preset.TerrainWeights.Find(Rule.TileType))
 			{
 				Rule.Weight = *OverrideWeight;
+			}
+
+			if (Rule.TileType == EHexTileType::Mountain)
+			{
+				Rule.Weight *= FMath::Max(0.0f, EffectiveGenerationSettings.MountainWeightScale);
 			}
 		}
 	}

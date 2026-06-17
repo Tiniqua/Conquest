@@ -47,6 +47,11 @@ FHexMapTypePreset FHexMapTypePresets::MakePangaea()
 	Preset.Shape.LandmassFragmentation = 0.12f;
 	Preset.Shape.IslandChainChance = 0.08f;
 	Preset.Shape.LakeFrequency = 0.06f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 4;
+	Preset.Shape.LakeSpacing = 4;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 0;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,4.0f},{EHexTileType::Coast,4.0f},{EHexTileType::Grassland,30.0f},{EHexTileType::Plains,24.0f},{EHexTileType::Desert,9.0f},{EHexTileType::Tundra,13.0f},{EHexTileType::Snow,8.0f},{EHexTileType::Lake,2.0f},{EHexTileType::Mountain,3.5f}};
 	return Preset;
 }
@@ -55,11 +60,16 @@ FHexMapTypePreset FHexMapTypePresets::MakeContinents()
 {
 	FHexMapTypePreset Preset = MakeBase(EHexMapTypePreset::Continents, TEXT("Continents"), NSLOCTEXT("HexMapPresets", "ContinentsName", "Continents"), NSLOCTEXT("HexMapPresets", "ContinentsDesc", "Several large landmasses separated by oceans. Good default Civ-style map."), EHexLandmassStyle::FewContinents);
 	Preset.Shape.TargetLandRatio = 0.58f;
-	Preset.Shape.MajorLandmassCount = 3;
-	Preset.Shape.CoastlineNoise = 0.38f;
-	Preset.Shape.LandmassFragmentation = 0.25f;
-	Preset.Shape.IslandChainChance = 0.16f;
+	Preset.Shape.MajorLandmassCount = 5;
+	Preset.Shape.CoastlineNoise = 0.34f;
+	Preset.Shape.LandmassFragmentation = 0.18f;
+	Preset.Shape.IslandChainChance = 0.10f;
 	Preset.Shape.LakeFrequency = 0.08f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 5;
+	Preset.Shape.LakeSpacing = 4;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 4;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,8.0f},{EHexTileType::Coast,5.0f},{EHexTileType::Grassland,28.0f},{EHexTileType::Plains,22.0f},{EHexTileType::Desert,9.0f},{EHexTileType::Tundra,13.0f},{EHexTileType::Snow,8.0f},{EHexTileType::Lake,3.0f},{EHexTileType::Mountain,3.5f}};
 	return Preset;
 }
@@ -73,6 +83,11 @@ FHexMapTypePreset FHexMapTypePresets::MakeArchipelago()
 	Preset.Shape.LandmassFragmentation = 0.72f;
 	Preset.Shape.IslandChainChance = 0.55f;
 	Preset.Shape.LakeFrequency = 0.03f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 2;
+	Preset.Shape.LakeSpacing = 5;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 3;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,16.0f},{EHexTileType::Coast,10.0f},{EHexTileType::Grassland,22.0f},{EHexTileType::Plains,18.0f},{EHexTileType::Desert,6.0f},{EHexTileType::Tundra,9.0f},{EHexTileType::Snow,5.0f},{EHexTileType::Lake,1.0f},{EHexTileType::Mountain,2.5f}};
 	return Preset;
 }
@@ -80,12 +95,17 @@ FHexMapTypePreset FHexMapTypePresets::MakeArchipelago()
 FHexMapTypePreset FHexMapTypePresets::MakeFractal()
 {
 	FHexMapTypePreset Preset = MakeBase(EHexMapTypePreset::Fractal, TEXT("Fractal"), NSLOCTEXT("HexMapPresets", "FractalName", "Fractal"), NSLOCTEXT("HexMapPresets", "FractalDesc", "Unpredictable mixed landmasses, varied coastlines, and inconsistent continent sizes."), EHexLandmassStyle::FractalMixed);
-	Preset.Shape.TargetLandRatio = 0.54f;
-	Preset.Shape.MajorLandmassCount = 4;
-	Preset.Shape.CoastlineNoise = 0.72f;
-	Preset.Shape.LandmassFragmentation = 0.58f;
-	Preset.Shape.IslandChainChance = 0.28f;
-	Preset.Shape.LakeFrequency = 0.09f;
+	Preset.Shape.TargetLandRatio = 0.64f;
+	Preset.Shape.MajorLandmassCount = 1;
+	Preset.Shape.CoastlineNoise = 0.52f;
+	Preset.Shape.LandmassFragmentation = 0.28f;
+	Preset.Shape.IslandChainChance = 0.14f;
+	Preset.Shape.LakeFrequency = 0.08f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 5;
+	Preset.Shape.LakeSpacing = 3;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 0;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,9.0f},{EHexTileType::Coast,6.0f},{EHexTileType::Grassland,27.0f},{EHexTileType::Plains,22.0f},{EHexTileType::Desert,10.0f},{EHexTileType::Tundra,12.0f},{EHexTileType::Snow,7.0f},{EHexTileType::Lake,4.0f},{EHexTileType::Mountain,4.0f}};
 	return Preset;
 }
@@ -99,6 +119,11 @@ FHexMapTypePreset FHexMapTypePresets::MakeArctic()
 	Preset.Shape.LandmassFragmentation = 0.28f;
 	Preset.Shape.IslandChainChance = 0.12f;
 	Preset.Shape.LakeFrequency = 0.12f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 5;
+	Preset.Shape.LakeSpacing = 4;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 5;
 	Preset.Shape.TemperatureBiasStrength = 3.0f;
 	Preset.Shape.PolarFalloffPower = 0.75f;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,8.0f},{EHexTileType::Coast,5.0f},{EHexTileType::Grassland,20.0f},{EHexTileType::Plains,18.0f},{EHexTileType::Desert,3.0f},{EHexTileType::Tundra,22.0f},{EHexTileType::Snow,15.0f},{EHexTileType::Lake,4.0f},{EHexTileType::Mountain,4.0f}};
@@ -108,14 +133,19 @@ FHexMapTypePreset FHexMapTypePresets::MakeArctic()
 FHexMapTypePreset FHexMapTypePresets::MakeInlandSea()
 {
 	FHexMapTypePreset Preset = MakeBase(EHexMapTypePreset::InlandSea, TEXT("InlandSea"), NSLOCTEXT("HexMapPresets", "InlandSeaName", "Inland Sea"), NSLOCTEXT("HexMapPresets", "InlandSeaDesc", "Mostly connected land surrounding a large central body of water."), EHexLandmassStyle::InlandOcean);
-	Preset.Shape.TargetLandRatio = 0.70f;
+	Preset.Shape.TargetLandRatio = 0.76f;
 	Preset.Shape.MajorLandmassCount = 1;
 	Preset.Shape.CoastlineNoise = 0.34f;
 	Preset.Shape.LandmassFragmentation = 0.18f;
 	Preset.Shape.IslandChainChance = 0.04f;
 	Preset.Shape.LakeFrequency = 0.06f;
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 4;
+	Preset.Shape.LakeSpacing = 4;
+	Preset.Shape.OceanBorderWidth = 1;
+	Preset.Shape.LandmassSeparation = 0;
 	Preset.Shape.bUseInlandSea = true;
-	Preset.Shape.InlandSeaRadiusRatio = 0.30f;
+	Preset.Shape.InlandSeaRadiusRatio = 0.26f;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,5.0f},{EHexTileType::Coast,7.0f},{EHexTileType::Grassland,29.0f},{EHexTileType::Plains,23.0f},{EHexTileType::Desert,10.0f},{EHexTileType::Tundra,12.0f},{EHexTileType::Snow,7.0f},{EHexTileType::Lake,2.0f},{EHexTileType::Mountain,3.5f}};
 	return Preset;
 }
@@ -123,25 +153,35 @@ FHexMapTypePreset FHexMapTypePresets::MakeInlandSea()
 FHexMapTypePreset FHexMapTypePresets::MakeSmallIslands()
 {
 	FHexMapTypePreset Preset = MakeBase(EHexMapTypePreset::SmallIslands, TEXT("SmallIslands"), NSLOCTEXT("HexMapPresets", "SmallIslandsName", "Small Islands"), NSLOCTEXT("HexMapPresets", "SmallIslandsDesc", "Extreme island generation with scattered small land clusters and lots of coast."), EHexLandmassStyle::ManyIslands);
-	Preset.Shape.TargetLandRatio = 0.28f;
-	Preset.Shape.MajorLandmassCount = 14;
-	Preset.Shape.CoastlineNoise = 0.75f;
-	Preset.Shape.LandmassFragmentation = 0.85f;
-	Preset.Shape.IslandChainChance = 0.72f;
+	Preset.Shape.TargetLandRatio = 0.34f;
+	Preset.Shape.MajorLandmassCount = 12;
+	Preset.Shape.CoastlineNoise = 0.54f;
+	Preset.Shape.LandmassFragmentation = 0.42f;
+	Preset.Shape.IslandChainChance = 1.0f;
 	Preset.Shape.LakeFrequency = 0.01f;
-	Preset.TerrainWeights = {{EHexTileType::Ocean,22.0f},{EHexTileType::Coast,14.0f},{EHexTileType::Grassland,20.0f},{EHexTileType::Plains,16.0f},{EHexTileType::Desert,5.0f},{EHexTileType::Tundra,7.0f},{EHexTileType::Snow,4.0f},{EHexTileType::Lake,0.5f},{EHexTileType::Mountain,2.0f}};
+	Preset.Shape.LakeMinSize = 1;
+	Preset.Shape.LakeMaxSize = 1;
+	Preset.Shape.LakeSpacing = 6;
+	Preset.Shape.OceanBorderWidth = 2;
+	Preset.Shape.LandmassSeparation = 2;
+	Preset.TerrainWeights = {{EHexTileType::Ocean,22.0f},{EHexTileType::Coast,14.0f},{EHexTileType::Grassland,22.0f},{EHexTileType::Plains,17.0f},{EHexTileType::Desert,5.0f},{EHexTileType::Tundra,7.0f},{EHexTileType::Snow,4.0f},{EHexTileType::Lake,0.5f},{EHexTileType::Mountain,1.0f}};
 	return Preset;
 }
 
 FHexMapTypePreset FHexMapTypePresets::MakeLakes()
 {
 	FHexMapTypePreset Preset = MakeBase(EHexMapTypePreset::Lakes, TEXT("Lakes"), NSLOCTEXT("HexMapPresets", "LakesName", "Lakes"), NSLOCTEXT("HexMapPresets", "LakesDesc", "Mostly land-based map with frequent inland lakes and less ocean."), EHexLandmassStyle::LakeHeavy);
-	Preset.Shape.TargetLandRatio = 0.78f;
+	Preset.Shape.TargetLandRatio = 0.84f;
 	Preset.Shape.MajorLandmassCount = 1;
 	Preset.Shape.CoastlineNoise = 0.22f;
 	Preset.Shape.LandmassFragmentation = 0.16f;
-	Preset.Shape.IslandChainChance = 0.03f;
-	Preset.Shape.LakeFrequency = 0.24f;
+	Preset.Shape.IslandChainChance = 0.0f;
+	Preset.Shape.LakeFrequency = 0.12f;
+	Preset.Shape.LakeMinSize = 4;
+	Preset.Shape.LakeMaxSize = 11;
+	Preset.Shape.LakeSpacing = 5;
+	Preset.Shape.OceanBorderWidth = 1;
+	Preset.Shape.LandmassSeparation = 0;
 	Preset.TerrainWeights = {{EHexTileType::Ocean,3.0f},{EHexTileType::Coast,3.0f},{EHexTileType::Grassland,31.0f},{EHexTileType::Plains,24.0f},{EHexTileType::Desert,9.0f},{EHexTileType::Tundra,13.0f},{EHexTileType::Snow,8.0f},{EHexTileType::Lake,10.0f},{EHexTileType::Mountain,3.5f}};
 	return Preset;
 }

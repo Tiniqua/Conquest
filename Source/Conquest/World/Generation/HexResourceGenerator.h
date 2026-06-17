@@ -18,4 +18,5 @@ private:
 	int32 ResolveTargetCount(EHexResourceCategory Category) const;
 	const FHexResourceDefinition* PickWeightedResourceForTile(const TArray<const FHexResourceDefinition*>& Resources, const FHexTileData& Tile, FRandomStream& RandomStream) const;
 	int32 RollQuantity(const FHexResourceDefinition& Resource, FRandomStream& RandomStream) const;
+	bool IsTooCloseToExistingResource(int32 TileIndex) const;
 };

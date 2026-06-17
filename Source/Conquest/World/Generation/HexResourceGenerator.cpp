@@ -60,6 +60,11 @@ void FHexResourceGenerator::PlaceCategory(EHexResourceCategory Category, int32 T
 		}
 
 		FHexTileData& Tile = Model->GetMutableTiles()[TileIndex];
+		if (IsTooCloseToExistingResource(TileIndex))
+		{
+			continue;
+		}
+
 		const FHexResourceDefinition* Resource = PickWeightedResourceForTile(Resources, Tile, RandomStream);
 		if (!Resource)
 		{
@@ -137,4 +142,38 @@ int32 FHexResourceGenerator::RollQuantity(const FHexResourceDefinition& Resource
 	const int32 MinQuantity = FMath::Max(0, Resource.MinStrategicQuantity);
 	const int32 MaxQuantity = FMath::Max(MinQuantity, Resource.MaxStrategicQuantity);
 	return RandomStream.RandRange(MinQuantity, MaxQuantity);
+}
+
+bool FHexResourceGenerator::IsTooCloseToExistingResource(int32 TileIndex) const
+{
+	const int32 Spacing = FMath::Max(0, Settings.ResourceMinSpacing);
+	if (!Model || Spacing <= 0)
+	{
+		return false;
+	}
+
+	int32 Q = 0;
+	int32 R = 0;
+	if (!Model->GetCoordFromIndex(TileIndex, Q, R))
+	{
+		return false;
+	}
+
+	const TArray<FIntPoint> NearbyCoords = Model->GetCoordsInRange(FIntPoint(Q, R), Spacing);
+	const TArray<FHexTileData>& Tiles = Model->GetTiles();
+	for (const FIntPoint& Coord : NearbyCoords)
+	{
+		const int32 NearbyIndex = Model->GetTileIndex(Coord.X, Coord.Y);
+		if (NearbyIndex == TileIndex)
+		{
+			continue;
+		}
+
+		if (Tiles.IsValidIndex(NearbyIndex) && Tiles[NearbyIndex].Resource.HasResource())
+		{
+			return true;
+		}
+	}
+
+	return false;
 }

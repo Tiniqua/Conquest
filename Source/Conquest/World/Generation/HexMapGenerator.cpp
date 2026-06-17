@@ -35,6 +35,7 @@ void FHexMapGenerator::Generate(FHexGridModel& InModel, const FHexGenerationSett
 	ApplyCoastsFromLandMask(Tiles, IsLand);
 	GenerateLandTerrain(RandomStream, IsLand);
 	ApplyCoastsFromLandMask(Tiles, IsLand);
+	ApplyLakes(RandomStream, Tiles, IsLand);
 }
 
 void FHexMapGenerator::BuildLandWaterMask(FRandomStream& RandomStream, TArray<bool>& OutIsLand) const
@@ -50,18 +51,38 @@ void FHexMapGenerator::BuildLandWaterMask(FRandomStream& RandomStream, TArray<bo
 	const FHexMapShapeSettings& Shape = Settings.MapShapeSettings;
 	const int32 TargetLandTiles = FMath::RoundToInt(static_cast<float>(TotalTiles) * FMath::Clamp(Shape.TargetLandRatio, 0.0f, 1.0f));
 	const float IslandBudgetRatio = FMath::Clamp(Shape.IslandChainChance * 0.5f, 0.0f, 0.5f);
-	const int32 MajorLandTarget = FMath::Clamp(FMath::RoundToInt(static_cast<float>(TargetLandTiles) * (1.0f - IslandBudgetRatio)), 0, TargetLandTiles);
+	const bool bUseOnlyDistributedIslands = Settings.MapTypePreset == EHexMapTypePreset::SmallIslands;
+	const int32 MajorLandTarget = bUseOnlyDistributedIslands
+		? 0
+		: FMath::Clamp(FMath::RoundToInt(static_cast<float>(TargetLandTiles) * (1.0f - IslandBudgetRatio)), 0, TargetLandTiles);
 
-	SeedMajorLandmasses(RandomStream, OutIsLand, MajorLandTarget);
+	if (MajorLandTarget > 0)
+	{
+		SeedMajorLandmasses(RandomStream, OutIsLand, MajorLandTarget);
+	}
 
-	if (Shape.IslandChainChance > 0.0f)
+	if (Shape.IslandChainChance > 0.0f || bUseOnlyDistributedIslands)
 	{
 		AddIslandChains(RandomStream, OutIsLand, TargetLandTiles);
 	}
 
+	RefineLandWaterMask(RandomStream, OutIsLand);
+
 	if (Shape.bUseInlandSea)
 	{
 		ApplyInlandSea(OutIsLand);
+	}
+
+	ApplySoftOceanBorder(RandomStream, OutIsLand);
+	RestoreLandBudget(RandomStream, OutIsLand, TargetLandTiles);
+	RefineLandWaterMask(RandomStream, OutIsLand);
+	ApplySoftOceanBorder(RandomStream, OutIsLand);
+	RestoreLandBudget(RandomStream, OutIsLand, TargetLandTiles);
+	ApplySoftOceanBorder(RandomStream, OutIsLand);
+
+	if (Settings.MapTypePreset == EHexMapTypePreset::Pangaea)
+	{
+		FillEnclosedWaterRegions(OutIsLand);
 	}
 }
 
@@ -78,107 +99,134 @@ void FHexMapGenerator::SeedMajorLandmasses(FRandomStream& RandomStream, TArray<b
 
 	const FHexMapShapeSettings& Shape = Settings.MapShapeSettings;
 	const int32 LandmassCount = FMath::Max(1, Shape.MajorLandmassCount);
-	TArray<FIntPoint> Frontier;
+	const int32 SafeSeparation = LandmassCount > 1 ? FMath::Max(0, Shape.LandmassSeparation) : 0;
+	const int32 MinQ = FMath::Clamp(Shape.OceanBorderWidth, 0, FMath::Max(0, Width - 1));
+	const int32 MaxQ = FMath::Clamp(Width - Shape.OceanBorderWidth - 1, MinQ, FMath::Max(0, Width - 1));
+	const int32 MinR = FMath::Clamp(Shape.OceanBorderWidth, 0, FMath::Max(0, Height - 1));
+	const int32 MaxR = FMath::Clamp(Height - Shape.OceanBorderWidth - 1, MinR, FMath::Max(0, Height - 1));
 
-	auto AddRandomSeed = [&]()
-	{
-		const int32 MinQ = FMath::Clamp(Width / 8, 0, FMath::Max(0, Width - 1));
-		const int32 MaxQ = FMath::Clamp(Width - Width / 8 - 1, MinQ, FMath::Max(0, Width - 1));
-		const int32 MinR = FMath::Clamp(Height / 8, 0, FMath::Max(0, Height - 1));
-		const int32 MaxR = FMath::Clamp(Height - Height / 8 - 1, MinR, FMath::Max(0, Height - 1));
-
-		const int32 SeedQ = RandomStream.RandRange(MinQ, MaxQ);
-		const int32 SeedR = RandomStream.RandRange(MinR, MaxR);
-		const int32 SeedIndex = Model->GetTileIndex(SeedQ, SeedR);
-
-		if (InOutIsLand.IsValidIndex(SeedIndex) && !InOutIsLand[SeedIndex])
-		{
-			InOutIsLand[SeedIndex] = true;
-			Frontier.Add(FIntPoint(SeedQ, SeedR));
-			return true;
-		}
-
-		return false;
-	};
-
+	TArray<float> LandmassWeights;
+	LandmassWeights.SetNum(LandmassCount);
+	float WeightTotal = 0.0f;
 	for (int32 LandmassIndex = 0; LandmassIndex < LandmassCount; ++LandmassIndex)
 	{
-		AddRandomSeed();
-	}
-
-	int32 CurrentLandTiles = 0;
-	for (const bool bIsLand : InOutIsLand)
-	{
-		if (bIsLand)
+		const float Variance = Settings.MapTypePreset == EHexMapTypePreset::Fractal ? 0.85f : 0.35f;
+		float Weight = RandomStream.FRandRange(1.0f - Variance, 1.0f + Variance);
+		if (Settings.MapTypePreset == EHexMapTypePreset::Continents && LandmassIndex >= 3)
 		{
-			++CurrentLandTiles;
+			Weight *= 0.38f;
 		}
+
+		LandmassWeights[LandmassIndex] = FMath::Max(0.1f, Weight);
+		WeightTotal += LandmassWeights[LandmassIndex];
 	}
 
-	int32 Safety = 0;
-	const int32 MaxSafety = FMath::Max(1000, TargetLandTiles * 50);
-
-	while (CurrentLandTiles < TargetLandTiles && Safety < MaxSafety)
+	int32 AssignedTarget = 0;
+	for (int32 LandmassIndex = 0; LandmassIndex < LandmassCount; ++LandmassIndex)
 	{
-		++Safety;
-
-		if (Frontier.Num() <= 0)
+		const int32 RemainingLand = TargetLandTiles - AssignedTarget;
+		if (RemainingLand <= 0)
 		{
-			if (AddRandomSeed())
+			break;
+		}
+
+		const bool bLastLandmass = LandmassIndex == LandmassCount - 1;
+		int32 LandmassTarget = bLastLandmass
+			? RemainingLand
+			: FMath::RoundToInt(static_cast<float>(TargetLandTiles) * (LandmassWeights[LandmassIndex] / FMath::Max(KINDA_SMALL_NUMBER, WeightTotal)));
+		LandmassTarget = FMath::Clamp(LandmassTarget, 1, RemainingLand);
+		AssignedTarget += LandmassTarget;
+
+		FIntPoint Seed(INDEX_NONE, INDEX_NONE);
+		float BestSeedScore = -FLT_MAX;
+		for (int32 Attempt = 0; Attempt < 128; ++Attempt)
+		{
+			const int32 SeedQ = RandomStream.RandRange(MinQ, MaxQ);
+			const int32 SeedR = RandomStream.RandRange(MinR, MaxR);
+			const int32 SeedIndex = Model->GetTileIndex(SeedQ, SeedR);
+
+			if (InOutIsLand.IsValidIndex(SeedIndex) &&
+				!InOutIsLand[SeedIndex] &&
+				!IsReservedWaterTile(SeedQ, SeedR) &&
+				!IsNearLandOutsideSet(SeedQ, SeedR, InOutIsLand, TSet<int32>(), SafeSeparation))
 			{
-				++CurrentLandTiles;
+				const float SeedScore = GetCenterBiasScore(SeedQ, SeedR) + RandomStream.FRandRange(0.0f, 0.35f);
+				if (SeedScore > BestSeedScore)
+				{
+					BestSeedScore = SeedScore;
+					Seed = FIntPoint(SeedQ, SeedR);
+				}
 			}
+		}
+
+		if (Seed.X == INDEX_NONE)
+		{
 			continue;
 		}
 
-		const int32 FrontierIndex = RandomStream.RandRange(0, Frontier.Num() - 1);
-		const FIntPoint Coord = Frontier[FrontierIndex];
+		TArray<FIntPoint> Frontier;
+		TSet<int32> CurrentLandmassIndices;
+		const int32 SeedIndex = Model->GetTileIndex(Seed.X, Seed.Y);
+		InOutIsLand[SeedIndex] = true;
+		CurrentLandmassIndices.Add(SeedIndex);
+		Frontier.Add(Seed);
 
-		if (RandomStream.FRand() < Shape.LandmassFragmentation)
+		int32 PlacedForLandmass = 1;
+		int32 Safety = 0;
+		const int32 MaxSafety = FMath::Max(1000, LandmassTarget * 80);
+
+		while (PlacedForLandmass < LandmassTarget && Frontier.Num() > 0 && Safety < MaxSafety)
 		{
-			Frontier.RemoveAtSwap(FrontierIndex);
-			continue;
-		}
+			++Safety;
+			const int32 FrontierIndex = RandomStream.RandRange(0, Frontier.Num() - 1);
+			const FIntPoint Coord = Frontier[FrontierIndex];
 
-		TArray<FIntPoint> Candidates;
-		for (int32 Direction = 0; Direction < 6; ++Direction)
-		{
-			int32 NQ = 0;
-			int32 NR = 0;
-
-			if (!Model->GetNeighbourCoord(Coord.X, Coord.Y, Direction, NQ, NR))
+			if (RandomStream.FRand() < Shape.LandmassFragmentation * 0.35f)
 			{
+				Frontier.RemoveAtSwap(FrontierIndex);
 				continue;
 			}
 
-			const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
-			if (!InOutIsLand.IsValidIndex(NeighbourIndex) || InOutIsLand[NeighbourIndex])
+			TArray<FIntPoint> Candidates;
+			for (int32 Direction = 0; Direction < 6; ++Direction)
 			{
+				int32 NQ = 0;
+				int32 NR = 0;
+
+				if (!Model->GetNeighbourCoord(Coord.X, Coord.Y, Direction, NQ, NR) || IsReservedWaterTile(NQ, NR))
+				{
+					continue;
+				}
+
+				const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+				if (!InOutIsLand.IsValidIndex(NeighbourIndex) ||
+					InOutIsLand[NeighbourIndex] ||
+					IsNearLandOutsideSet(NQ, NR, InOutIsLand, CurrentLandmassIndices, SafeSeparation))
+				{
+					continue;
+				}
+
+				Candidates.Add(FIntPoint(NQ, NR));
+			}
+
+			if (Candidates.Num() <= 0)
+			{
+				Frontier.RemoveAtSwap(FrontierIndex);
 				continue;
 			}
 
-			Candidates.Add(FIntPoint(NQ, NR));
-		}
+			const FIntPoint Chosen = Candidates[RandomStream.RandRange(0, Candidates.Num() - 1)];
+			const int32 ChosenIndex = Model->GetTileIndex(Chosen.X, Chosen.Y);
 
-		if (Candidates.Num() <= 0)
-		{
-			Frontier.RemoveAtSwap(FrontierIndex);
-			continue;
-		}
-
-		const FIntPoint Chosen = Candidates[RandomStream.RandRange(0, Candidates.Num() - 1)];
-		const int32 ChosenIndex = Model->GetTileIndex(Chosen.X, Chosen.Y);
-
-		if (InOutIsLand.IsValidIndex(ChosenIndex) && !InOutIsLand[ChosenIndex])
-		{
 			InOutIsLand[ChosenIndex] = true;
+			CurrentLandmassIndices.Add(ChosenIndex);
 			Frontier.Add(Chosen);
-			++CurrentLandTiles;
-		}
+			++PlacedForLandmass;
 
-		if (RandomStream.FRand() > Shape.CoastlineNoise)
-		{
-			Frontier.RemoveAtSwap(FrontierIndex);
+			if (RandomStream.FRand() > Shape.CoastlineNoise)
+			{
+				Frontier.RemoveAtSwap(FrontierIndex);
+			}
 		}
 	}
 }
@@ -209,34 +257,387 @@ void FHexMapGenerator::AddIslandChains(FRandomStream& RandomStream, TArray<bool>
 	while (Placed < IslandBudget && Attempts < MaxAttempts)
 	{
 		++Attempts;
-		int32 Q = RandomStream.RandRange(0, Width - 1);
-		int32 R = RandomStream.RandRange(0, Height - 1);
-		const int32 ChainLength = RandomStream.RandRange(2, 8);
-
-		for (int32 Step = 0; Step < ChainLength && Placed < IslandBudget; ++Step)
+		const int32 SeedQ = RandomStream.RandRange(0, Width - 1);
+		const int32 SeedR = RandomStream.RandRange(0, Height - 1);
+		if (!Model->IsValidCoord(SeedQ, SeedR) || IsReservedWaterTile(SeedQ, SeedR))
 		{
-			if (!Model->IsValidCoord(Q, R))
-			{
-				break;
-			}
+			continue;
+		}
 
-			const int32 Index = Model->GetTileIndex(Q, R);
-			if (InOutIsLand.IsValidIndex(Index) && !InOutIsLand[Index])
-			{
-				InOutIsLand[Index] = true;
-				++Placed;
-			}
+		const int32 SeedIndex = Model->GetTileIndex(SeedQ, SeedR);
+		if (!InOutIsLand.IsValidIndex(SeedIndex) || InOutIsLand[SeedIndex])
+		{
+			continue;
+		}
 
-			const int32 Direction = RandomStream.RandRange(0, 5);
+		const int32 MaxIslandSize = Settings.MapTypePreset == EHexMapTypePreset::SmallIslands ? 72 : 18;
+		const int32 MinIslandSize = Settings.MapTypePreset == EHexMapTypePreset::SmallIslands ? 24 : 4;
+		const int32 IslandTargetSize = FMath::Min(IslandBudget - Placed, RandomStream.RandRange(MinIslandSize, MaxIslandSize));
+		TArray<FIntPoint> Frontier;
+		TSet<int32> IslandIndices;
+
+		InOutIsLand[SeedIndex] = true;
+		IslandIndices.Add(SeedIndex);
+		++Placed;
+
+		for (int32 Direction = 0; Direction < 6; ++Direction)
+		{
 			int32 NQ = 0;
 			int32 NR = 0;
-			if (!Model->GetNeighbourCoord(Q, R, Direction, NQ, NR))
+			if (!Model->GetNeighbourCoord(SeedQ, SeedR, Direction, NQ, NR) || IsReservedWaterTile(NQ, NR))
+			{
+				continue;
+			}
+
+			const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+			if (InOutIsLand.IsValidIndex(NeighbourIndex) && !InOutIsLand[NeighbourIndex])
+			{
+				Frontier.AddUnique(FIntPoint(NQ, NR));
+			}
+		}
+
+		while (Frontier.Num() > 0 && IslandIndices.Num() < IslandTargetSize && Placed < IslandBudget)
+		{
+			float BestScore = -1.0f;
+			int32 BestFrontierIndex = INDEX_NONE;
+			FIntPoint BestCoord(INDEX_NONE, INDEX_NONE);
+
+			for (int32 FrontierIndex = 0; FrontierIndex < Frontier.Num(); ++FrontierIndex)
+			{
+				const FIntPoint Coord = Frontier[FrontierIndex];
+				const int32 LandNeighbours = CountLandNeighbours(Coord.X, Coord.Y, InOutIsLand);
+				const int32 WaterNeighbours = CountWaterNeighbours(Coord.X, Coord.Y, InOutIsLand);
+				const float Score =
+					static_cast<float>(LandNeighbours) * 2.2f -
+					static_cast<float>(FMath::Max(0, WaterNeighbours - 3)) * 1.4f +
+					RandomStream.FRandRange(0.0f, 1.0f);
+
+				if (Score > BestScore)
+				{
+					BestScore = Score;
+					BestFrontierIndex = FrontierIndex;
+					BestCoord = Coord;
+				}
+			}
+
+			if (BestFrontierIndex == INDEX_NONE)
 			{
 				break;
 			}
 
-			Q = NQ;
-			R = NR;
+			Frontier.RemoveAtSwap(BestFrontierIndex);
+
+			if (!Model->IsValidCoord(BestCoord.X, BestCoord.Y) || IsReservedWaterTile(BestCoord.X, BestCoord.Y))
+			{
+				continue;
+			}
+
+			const int32 BestIndex = Model->GetTileIndex(BestCoord.X, BestCoord.Y);
+			if (!InOutIsLand.IsValidIndex(BestIndex) || InOutIsLand[BestIndex])
+			{
+				continue;
+			}
+
+			InOutIsLand[BestIndex] = true;
+			IslandIndices.Add(BestIndex);
+			++Placed;
+
+			for (int32 Direction = 0; Direction < 6; ++Direction)
+			{
+				int32 NQ = 0;
+				int32 NR = 0;
+				if (!Model->GetNeighbourCoord(BestCoord.X, BestCoord.Y, Direction, NQ, NR) || IsReservedWaterTile(NQ, NR))
+				{
+					continue;
+				}
+
+				const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+				if (InOutIsLand.IsValidIndex(NeighbourIndex) && !InOutIsLand[NeighbourIndex])
+				{
+					Frontier.AddUnique(FIntPoint(NQ, NR));
+				}
+			}
+		}
+	}
+}
+
+void FHexMapGenerator::RefineLandWaterMask(FRandomStream& RandomStream, TArray<bool>& InOutIsLand) const
+{
+	constexpr int32 RefinementPasses = 3;
+
+	for (int32 Pass = 0; Pass < RefinementPasses; ++Pass)
+	{
+		TArray<bool> NextMask = InOutIsLand;
+
+		for (int32 R = 0; R < Model->GetGridHeight(); ++R)
+		{
+			for (int32 Q = 0; Q < Model->GetGridWidth(); ++Q)
+			{
+				const int32 Index = Model->GetTileIndex(Q, R);
+				if (!InOutIsLand.IsValidIndex(Index))
+				{
+					continue;
+				}
+
+				if (IsMapEdge(Q, R))
+				{
+					NextMask[Index] = false;
+					continue;
+				}
+
+				const int32 LandNeighbours = CountLandNeighbours(Q, R, InOutIsLand);
+				const int32 WaterNeighbours = CountWaterNeighbours(Q, R, InOutIsLand);
+
+				if (InOutIsLand[Index])
+				{
+					if (WaterNeighbours >= 5 || (WaterNeighbours == 4 && RandomStream.FRand() < 0.82f))
+					{
+						NextMask[Index] = false;
+					}
+					else if (WaterNeighbours == 3 && LandNeighbours <= 2 && RandomStream.FRand() < 0.25f)
+					{
+						NextMask[Index] = false;
+					}
+				}
+				else
+				{
+					if (LandNeighbours >= 5 || (LandNeighbours == 4 && RandomStream.FRand() < 0.72f))
+					{
+						NextMask[Index] = true;
+					}
+				}
+			}
+		}
+
+		InOutIsLand = NextMask;
+	}
+}
+
+void FHexMapGenerator::ApplySoftOceanBorder(FRandomStream& RandomStream, TArray<bool>& InOutIsLand) const
+{
+	const int32 BorderWidth = FMath::Max(0, Settings.MapShapeSettings.OceanBorderWidth);
+	if (BorderWidth <= 0)
+	{
+		return;
+	}
+
+	const int32 Width = Model->GetGridWidth();
+	const int32 Height = Model->GetGridHeight();
+
+	for (int32 R = 0; R < Height; ++R)
+	{
+		for (int32 Q = 0; Q < Width; ++Q)
+		{
+			const int32 Index = Model->GetTileIndex(Q, R);
+			if (!InOutIsLand.IsValidIndex(Index))
+			{
+				continue;
+			}
+
+			const int32 DistanceToEdge = FMath::Min(FMath::Min(Q, Width - 1 - Q), FMath::Min(R, Height - 1 - R));
+			if (DistanceToEdge <= 0)
+			{
+				InOutIsLand[Index] = false;
+				continue;
+			}
+
+			if (!InOutIsLand[Index] || DistanceToEdge >= BorderWidth)
+			{
+				continue;
+			}
+
+			const float BorderAlpha = 1.0f - (static_cast<float>(DistanceToEdge) / static_cast<float>(FMath::Max(1, BorderWidth)));
+			float ErodeChance = FMath::Lerp(0.18f, 0.72f, BorderAlpha);
+			if (CountWaterNeighbours(Q, R, InOutIsLand) >= 3)
+			{
+				ErodeChance += 0.18f;
+			}
+
+			if (RandomStream.FRand() < FMath::Clamp(ErodeChance, 0.0f, 0.95f))
+			{
+				InOutIsLand[Index] = false;
+			}
+		}
+	}
+}
+
+void FHexMapGenerator::RestoreLandBudget(FRandomStream& RandomStream, TArray<bool>& InOutIsLand, int32 TargetLandTiles) const
+{
+	int32 CurrentLandTiles = CountLandTiles(InOutIsLand);
+	if (CurrentLandTiles <= 0)
+	{
+		float BestSeedScore = -FLT_MAX;
+		int32 BestSeedIndex = INDEX_NONE;
+		for (int32 R = 0; R < Model->GetGridHeight(); ++R)
+		{
+			for (int32 Q = 0; Q < Model->GetGridWidth(); ++Q)
+			{
+				if (IsReservedWaterTile(Q, R))
+				{
+					continue;
+				}
+
+				const int32 Index = Model->GetTileIndex(Q, R);
+				if (!InOutIsLand.IsValidIndex(Index))
+				{
+					continue;
+				}
+
+				const float Score = GetCenterBiasScore(Q, R) + RandomStream.FRandRange(0.0f, 0.5f);
+				if (Score > BestSeedScore)
+				{
+					BestSeedScore = Score;
+					BestSeedIndex = Index;
+				}
+			}
+		}
+
+		if (BestSeedIndex != INDEX_NONE)
+		{
+			InOutIsLand[BestSeedIndex] = true;
+			CurrentLandTiles = 1;
+		}
+	}
+
+	if (CurrentLandTiles >= TargetLandTiles)
+	{
+		return;
+	}
+
+	int32 Safety = 0;
+	const int32 MaxSafety = FMath::Max(500, (TargetLandTiles - CurrentLandTiles) * 60);
+	while (CurrentLandTiles < TargetLandTiles && Safety < MaxSafety)
+	{
+		++Safety;
+
+		float BestScore = -FLT_MAX;
+		int32 BestIndex = INDEX_NONE;
+
+		for (int32 R = 0; R < Model->GetGridHeight(); ++R)
+		{
+			for (int32 Q = 0; Q < Model->GetGridWidth(); ++Q)
+			{
+				if (IsReservedWaterTile(Q, R))
+				{
+					continue;
+				}
+
+				const int32 Index = Model->GetTileIndex(Q, R);
+				if (!InOutIsLand.IsValidIndex(Index) || InOutIsLand[Index])
+				{
+					continue;
+				}
+
+				const int32 LandNeighbours = CountLandNeighbours(Q, R, InOutIsLand);
+				if (LandNeighbours <= 0)
+				{
+					continue;
+				}
+
+				const int32 WaterNeighbours = CountWaterNeighbours(Q, R, InOutIsLand);
+				const float BiasScore = Settings.MapTypePreset == EHexMapTypePreset::SmallIslands
+					? 0.0f
+					: GetCenterBiasScore(Q, R);
+				const float Score =
+					static_cast<float>(LandNeighbours) * 2.5f -
+					static_cast<float>(FMath::Max(0, WaterNeighbours - 3)) +
+					BiasScore +
+					RandomStream.FRandRange(0.0f, 0.75f);
+
+				if (Score > BestScore)
+				{
+					BestScore = Score;
+					BestIndex = Index;
+				}
+			}
+		}
+
+		if (BestIndex == INDEX_NONE)
+		{
+			break;
+		}
+
+		InOutIsLand[BestIndex] = true;
+		++CurrentLandTiles;
+	}
+}
+
+void FHexMapGenerator::FillEnclosedWaterRegions(TArray<bool>& InOutIsLand) const
+{
+	TArray<bool> Visited;
+	Visited.Init(false, InOutIsLand.Num());
+
+	for (int32 StartIndex = 0; StartIndex < InOutIsLand.Num(); ++StartIndex)
+	{
+		if (Visited[StartIndex] || InOutIsLand[StartIndex])
+		{
+			continue;
+		}
+
+		int32 StartQ = 0;
+		int32 StartR = 0;
+		if (!Model->GetCoordFromIndex(StartIndex, StartQ, StartR))
+		{
+			continue;
+		}
+
+		bool bTouchesEdgeOcean = false;
+		TArray<int32> Region;
+		TArray<int32> Stack;
+		Stack.Add(StartIndex);
+		Visited[StartIndex] = true;
+
+		while (Stack.Num() > 0)
+		{
+			const int32 CurrentIndex = Stack.Pop(EAllowShrinking::No);
+			Region.Add(CurrentIndex);
+
+			int32 Q = 0;
+			int32 R = 0;
+			if (!Model->GetCoordFromIndex(CurrentIndex, Q, R))
+			{
+				continue;
+			}
+
+			if (IsMapEdge(Q, R))
+			{
+				bTouchesEdgeOcean = true;
+			}
+
+			for (int32 Direction = 0; Direction < 6; ++Direction)
+			{
+				int32 NQ = 0;
+				int32 NR = 0;
+				if (!Model->GetNeighbourCoord(Q, R, Direction, NQ, NR))
+				{
+					bTouchesEdgeOcean = true;
+					continue;
+				}
+
+				const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+				if (!InOutIsLand.IsValidIndex(NeighbourIndex) ||
+					Visited[NeighbourIndex] ||
+					InOutIsLand[NeighbourIndex])
+				{
+					continue;
+				}
+
+				Visited[NeighbourIndex] = true;
+				Stack.Add(NeighbourIndex);
+			}
+		}
+
+		if (bTouchesEdgeOcean)
+		{
+			continue;
+		}
+
+		for (const int32 RegionIndex : Region)
+		{
+			if (InOutIsLand.IsValidIndex(RegionIndex))
+			{
+				InOutIsLand[RegionIndex] = true;
+			}
 		}
 	}
 }
@@ -311,6 +712,177 @@ void FHexMapGenerator::ApplyCoastsFromLandMask(TArray<FHexTileData>& Tiles, cons
 			}
 
 			Tiles[Index].TileType = bAdjacentToLand ? EHexTileType::Coast : EHexTileType::Ocean;
+		}
+	}
+}
+
+void FHexMapGenerator::ApplyLakes(FRandomStream& RandomStream, TArray<FHexTileData>& Tiles, const TArray<bool>& IsLand) const
+{
+	const FHexMapShapeSettings& Shape = Settings.MapShapeSettings;
+	const int32 LandTileCount = CountLandTiles(IsLand);
+	const int32 TargetLakeTiles = Shape.LakeCount > 0
+		? Shape.LakeCount
+		: FMath::RoundToInt(static_cast<float>(LandTileCount) * FMath::Clamp(Shape.LakeFrequency, 0.0f, 1.0f));
+
+	if (TargetLakeTiles <= 0)
+	{
+		return;
+	}
+
+	const int32 SafeMinSize = FMath::Max(1, Shape.LakeMinSize);
+	const int32 SafeMaxSize = FMath::Max(SafeMinSize, Shape.LakeMaxSize);
+	const int32 SafeSpacing = FMath::Max(0, Shape.LakeSpacing);
+
+	int32 PlacedLakeTiles = 0;
+	int32 Attempts = 0;
+	const int32 MaxAttempts = FMath::Max(200, TargetLakeTiles * 40);
+
+	while (PlacedLakeTiles < TargetLakeTiles && Attempts < MaxAttempts)
+	{
+		++Attempts;
+
+		const int32 SeedIndex = RandomStream.RandRange(0, Tiles.Num() - 1);
+		if (!Tiles.IsValidIndex(SeedIndex) || !IsLand.IsValidIndex(SeedIndex) || !IsLand[SeedIndex])
+		{
+			continue;
+		}
+
+		const int32 SeedQ = SeedIndex % Model->GetGridWidth();
+		const int32 SeedR = SeedIndex / Model->GetGridWidth();
+		if (IsMapEdge(SeedQ, SeedR) ||
+			Tiles[SeedIndex].TileType == EHexTileType::Mountain ||
+			Model->IsWaterTileType(Tiles[SeedIndex].TileType) ||
+			IsNearTileType(SeedQ, SeedR, Tiles, EHexTileType::Ocean, 1) ||
+			IsNearTileType(SeedQ, SeedR, Tiles, EHexTileType::Coast, 1) ||
+			IsNearTileType(SeedQ, SeedR, Tiles, EHexTileType::Lake, SafeSpacing))
+		{
+			continue;
+		}
+
+		const int32 LakeTargetSize = FMath::Min(TargetLakeTiles - PlacedLakeTiles, RandomStream.RandRange(SafeMinSize, SafeMaxSize));
+		TArray<FIntPoint> Frontier;
+		TSet<int32> LakeIndices;
+		LakeIndices.Add(SeedIndex);
+
+		for (int32 Direction = 0; Direction < 6; ++Direction)
+		{
+			int32 NQ = 0;
+			int32 NR = 0;
+			if (Model->GetNeighbourCoord(SeedQ, SeedR, Direction, NQ, NR))
+			{
+				Frontier.AddUnique(FIntPoint(NQ, NR));
+			}
+		}
+
+		while (Frontier.Num() > 0 && LakeIndices.Num() < LakeTargetSize)
+		{
+			float BestScore = -FLT_MAX;
+			int32 BestFrontierIndex = INDEX_NONE;
+			FIntPoint Coord(INDEX_NONE, INDEX_NONE);
+
+			for (int32 FrontierIndex = 0; FrontierIndex < Frontier.Num(); ++FrontierIndex)
+			{
+				const FIntPoint Candidate = Frontier[FrontierIndex];
+				if (!Model->IsValidTile(Candidate.X, Candidate.Y) || IsMapEdge(Candidate.X, Candidate.Y))
+				{
+					continue;
+				}
+
+				const int32 CandidateIndex = Model->GetTileIndex(Candidate.X, Candidate.Y);
+				if (!Tiles.IsValidIndex(CandidateIndex) ||
+					!IsLand.IsValidIndex(CandidateIndex) ||
+					!IsLand[CandidateIndex] ||
+					LakeIndices.Contains(CandidateIndex) ||
+					Tiles[CandidateIndex].TileType == EHexTileType::Mountain ||
+					Model->IsWaterTileType(Tiles[CandidateIndex].TileType) ||
+					IsNearTileType(Candidate.X, Candidate.Y, Tiles, EHexTileType::Ocean, 1) ||
+					IsNearTileType(Candidate.X, Candidate.Y, Tiles, EHexTileType::Coast, 1))
+				{
+					continue;
+				}
+
+				int32 LakeNeighbours = 0;
+				for (int32 Direction = 0; Direction < 6; ++Direction)
+				{
+					int32 NQ = 0;
+					int32 NR = 0;
+					if (!Model->GetNeighbourCoord(Candidate.X, Candidate.Y, Direction, NQ, NR))
+					{
+						continue;
+					}
+
+					const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+					if (LakeIndices.Contains(NeighbourIndex))
+					{
+						++LakeNeighbours;
+					}
+				}
+
+				const float Score =
+					static_cast<float>(LakeNeighbours) * 3.0f +
+					RandomStream.FRandRange(0.0f, 1.0f);
+
+				if (Score > BestScore)
+				{
+					BestScore = Score;
+					BestFrontierIndex = FrontierIndex;
+					Coord = Candidate;
+				}
+			}
+
+			if (BestFrontierIndex == INDEX_NONE)
+			{
+				break;
+			}
+
+			Frontier.RemoveAtSwap(BestFrontierIndex);
+
+			if (!Model->IsValidTile(Coord.X, Coord.Y) || IsMapEdge(Coord.X, Coord.Y))
+			{
+				continue;
+			}
+
+			const int32 TileIndex = Model->GetTileIndex(Coord.X, Coord.Y);
+			if (!Tiles.IsValidIndex(TileIndex) ||
+				!IsLand.IsValidIndex(TileIndex) ||
+				!IsLand[TileIndex] ||
+				LakeIndices.Contains(TileIndex) ||
+				Tiles[TileIndex].TileType == EHexTileType::Mountain ||
+				Model->IsWaterTileType(Tiles[TileIndex].TileType) ||
+				IsNearTileType(Coord.X, Coord.Y, Tiles, EHexTileType::Ocean, 1) ||
+				IsNearTileType(Coord.X, Coord.Y, Tiles, EHexTileType::Coast, 1))
+			{
+				continue;
+			}
+
+			LakeIndices.Add(TileIndex);
+
+			for (int32 Direction = 0; Direction < 6; ++Direction)
+			{
+				int32 NQ = 0;
+				int32 NR = 0;
+				if (Model->GetNeighbourCoord(Coord.X, Coord.Y, Direction, NQ, NR))
+				{
+					Frontier.AddUnique(FIntPoint(NQ, NR));
+				}
+			}
+		}
+
+		if (LakeIndices.Num() <= 0)
+		{
+			continue;
+		}
+
+		for (const int32 LakeIndex : LakeIndices)
+		{
+			if (!Tiles.IsValidIndex(LakeIndex))
+			{
+				continue;
+			}
+
+			Tiles[LakeIndex].TileType = EHexTileType::Lake;
+			Tiles[LakeIndex].bHasFreshWater = true;
+			++PlacedLakeTiles;
 		}
 	}
 }
@@ -1191,4 +1763,168 @@ EHexTileType FHexMapGenerator::PickWeightedLandTileType(FRandomStream& RandomStr
 	}
 
 	return EHexTileType::Grassland;
+}
+
+bool FHexMapGenerator::IsMapEdge(int32 Q, int32 R) const
+{
+	return Q <= 0 ||
+		R <= 0 ||
+		Q >= Model->GetGridWidth() - 1 ||
+		R >= Model->GetGridHeight() - 1;
+}
+
+bool FHexMapGenerator::IsReservedWaterTile(int32 Q, int32 R) const
+{
+	if (IsMapEdge(Q, R))
+	{
+		return true;
+	}
+
+	const FHexMapShapeSettings& Shape = Settings.MapShapeSettings;
+	if (!Shape.bUseInlandSea)
+	{
+		return false;
+	}
+
+	const FVector2D Center(
+		static_cast<float>(Model->GetGridWidth() - 1) * 0.5f,
+		static_cast<float>(Model->GetGridHeight() - 1) * 0.5f
+	);
+	const FVector2D Coord(static_cast<float>(Q), static_cast<float>(R));
+	const float InlandSeaRadius = FMath::Min(
+		static_cast<float>(Model->GetGridWidth()),
+		static_cast<float>(Model->GetGridHeight())
+	) * Shape.InlandSeaRadiusRatio;
+
+	return FVector2D::Distance(Coord, Center) <= InlandSeaRadius;
+}
+
+float FHexMapGenerator::GetCenterBiasScore(int32 Q, int32 R) const
+{
+	const float Width = static_cast<float>(FMath::Max(1, Model->GetGridWidth() - 1));
+	const float Height = static_cast<float>(FMath::Max(1, Model->GetGridHeight() - 1));
+	const float NormalizedQ = static_cast<float>(Q) / Width;
+	const float NormalizedR = static_cast<float>(R) / Height;
+
+	const float EdgeDistance = FMath::Min(
+		FMath::Min(NormalizedQ, 1.0f - NormalizedQ),
+		FMath::Min(NormalizedR, 1.0f - NormalizedR)
+	) * 2.0f;
+
+	const FVector2D Center(0.5f, 0.5f);
+	const float CenterDistance = FVector2D::Distance(FVector2D(NormalizedQ, NormalizedR), Center);
+	const float CenterScore = 1.0f - FMath::Clamp(CenterDistance / 0.7071f, 0.0f, 1.0f);
+
+	return EdgeDistance * 1.4f + CenterScore;
+}
+
+int32 FHexMapGenerator::CountLandNeighbours(int32 Q, int32 R, const TArray<bool>& IsLand) const
+{
+	int32 LandNeighbours = 0;
+	for (int32 Direction = 0; Direction < 6; ++Direction)
+	{
+		int32 NQ = 0;
+		int32 NR = 0;
+		if (!Model->GetNeighbourCoord(Q, R, Direction, NQ, NR))
+		{
+			continue;
+		}
+
+		const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+		if (IsLand.IsValidIndex(NeighbourIndex) && IsLand[NeighbourIndex])
+		{
+			++LandNeighbours;
+		}
+	}
+
+	return LandNeighbours;
+}
+
+int32 FHexMapGenerator::CountWaterNeighbours(int32 Q, int32 R, const TArray<bool>& IsLand) const
+{
+	int32 WaterNeighbours = 0;
+	for (int32 Direction = 0; Direction < 6; ++Direction)
+	{
+		int32 NQ = 0;
+		int32 NR = 0;
+		if (!Model->GetNeighbourCoord(Q, R, Direction, NQ, NR))
+		{
+			++WaterNeighbours;
+			continue;
+		}
+
+		const int32 NeighbourIndex = Model->GetTileIndex(NQ, NR);
+		if (!IsLand.IsValidIndex(NeighbourIndex) || !IsLand[NeighbourIndex])
+		{
+			++WaterNeighbours;
+		}
+	}
+
+	return WaterNeighbours;
+}
+
+bool FHexMapGenerator::IsNearLandOutsideSet(
+	int32 Q,
+	int32 R,
+	const TArray<bool>& IsLand,
+	const TSet<int32>& AllowedLandIndices,
+	int32 Radius
+) const
+{
+	if (Radius <= 0)
+	{
+		return false;
+	}
+
+	const TArray<FIntPoint> NearbyCoords = Model->GetCoordsInRange(FIntPoint(Q, R), Radius);
+	for (const FIntPoint& Coord : NearbyCoords)
+	{
+		const int32 TileIndex = Model->GetTileIndex(Coord.X, Coord.Y);
+		if (IsLand.IsValidIndex(TileIndex) && IsLand[TileIndex] && !AllowedLandIndices.Contains(TileIndex))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool FHexMapGenerator::IsNearTileType(
+	int32 Q,
+	int32 R,
+	const TArray<FHexTileData>& Tiles,
+	EHexTileType TileType,
+	int32 Radius
+) const
+{
+	if (Radius <= 0)
+	{
+		return false;
+	}
+
+	const TArray<FIntPoint> NearbyCoords = Model->GetCoordsInRange(FIntPoint(Q, R), Radius);
+	for (const FIntPoint& Coord : NearbyCoords)
+	{
+		const int32 TileIndex = Model->GetTileIndex(Coord.X, Coord.Y);
+		if (Tiles.IsValidIndex(TileIndex) && Tiles[TileIndex].TileType == TileType)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+int32 FHexMapGenerator::CountLandTiles(const TArray<bool>& IsLand) const
+{
+	int32 LandTileCount = 0;
+	for (const bool bIsLand : IsLand)
+	{
+		if (bIsLand)
+		{
+			++LandTileCount;
+		}
+	}
+
+	return LandTileCount;
 }

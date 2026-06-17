@@ -96,6 +96,9 @@ struct FHexGenerationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Map Type")
 	FHexMapShapeSettings MapShapeSettings;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Map Type")
+	bool bUseCustomMapShapeSettings = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float CountRandomness = 0.15f;
 
@@ -113,6 +116,9 @@ struct FHexGenerationSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "1"))
 	int32 SeedSelectionAttempts = 48;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Generation", meta = (ClampMin = "0.0"))
+	float MountainWeightScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Temperature")
 	FHexTemperatureSettings TemperatureSettings;
@@ -147,6 +153,9 @@ struct FHexResourceGenerationSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AutoStrategicDensity = 0.04f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0"))
+	int32 ResourceMinSpacing = 2;
 };
 
 USTRUCT(BlueprintType)

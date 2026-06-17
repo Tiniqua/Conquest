@@ -58,6 +58,54 @@ protected:
 	TObjectPtr<USpinBox> StrategicResourceDensitySpinBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> BonusResourceCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LuxuryResourceCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> StrategicResourceCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> ResourceSpacingSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> GenerateRiversCheckBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RiverDensitySpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MaxRiverCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MinRiverLengthSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MaxRiverLengthSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> RiverSpacingSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LakeFrequencySpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LakeCountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LakeSpacingSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LakeMinSizeSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> LakeMaxSizeSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USpinBox> MountainAmountSpinBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCheckBox> UseTemperatureBiasCheckBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))

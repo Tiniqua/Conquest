@@ -185,6 +185,93 @@ void UConquestGameSetupWidget::ApplyDefaultAdvancedValues()
 		StrategicResourceDensitySpinBox->SetValue(0.04f);
 	}
 
+	if (BonusResourceCountSpinBox)
+	{
+		BonusResourceCountSpinBox->SetValue(0.0f);
+	}
+
+	if (LuxuryResourceCountSpinBox)
+	{
+		LuxuryResourceCountSpinBox->SetValue(0.0f);
+	}
+
+	if (StrategicResourceCountSpinBox)
+	{
+		StrategicResourceCountSpinBox->SetValue(0.0f);
+	}
+
+	if (ResourceSpacingSpinBox)
+	{
+		ResourceSpacingSpinBox->SetValue(2.0f);
+	}
+
+	if (GenerateRiversCheckBox)
+	{
+		GenerateRiversCheckBox->SetIsChecked(true);
+	}
+
+	if (RiverDensitySpinBox)
+	{
+		RiverDensitySpinBox->SetValue(0.12f);
+	}
+
+	if (MaxRiverCountSpinBox)
+	{
+		MaxRiverCountSpinBox->SetValue(40.0f);
+	}
+
+	if (MinRiverLengthSpinBox)
+	{
+		MinRiverLengthSpinBox->SetValue(4.0f);
+	}
+
+	if (MaxRiverLengthSpinBox)
+	{
+		MaxRiverLengthSpinBox->SetValue(12.0f);
+	}
+
+	if (RiverSpacingSpinBox)
+	{
+		RiverSpacingSpinBox->SetValue(3.0f);
+	}
+
+	FHexMapShapeSettings DefaultShape;
+	FHexMapTypePreset SelectedPresetDefinition;
+	if (FHexMapTypePresets::GetPreset(SelectedMapPreset, SelectedPresetDefinition))
+	{
+		DefaultShape = SelectedPresetDefinition.Shape;
+	}
+
+	if (LakeFrequencySpinBox)
+	{
+		LakeFrequencySpinBox->SetValue(DefaultShape.LakeFrequency);
+	}
+
+	if (LakeCountSpinBox)
+	{
+		LakeCountSpinBox->SetValue(static_cast<float>(DefaultShape.LakeCount));
+	}
+
+	if (LakeSpacingSpinBox)
+	{
+		LakeSpacingSpinBox->SetValue(static_cast<float>(DefaultShape.LakeSpacing));
+	}
+
+	if (LakeMinSizeSpinBox)
+	{
+		LakeMinSizeSpinBox->SetValue(static_cast<float>(DefaultShape.LakeMinSize));
+	}
+
+	if (LakeMaxSizeSpinBox)
+	{
+		LakeMaxSizeSpinBox->SetValue(static_cast<float>(DefaultShape.LakeMaxSize));
+	}
+
+	if (MountainAmountSpinBox)
+	{
+		MountainAmountSpinBox->SetValue(1.0f);
+	}
+
 	if (UseTemperatureBiasCheckBox)
 	{
 		UseTemperatureBiasCheckBox->SetIsChecked(true);
@@ -211,6 +298,31 @@ void UConquestGameSetupWidget::HandleMapPresetSelectionChanged(FString SelectedI
 	if (const EHexMapTypePreset* FoundPreset = OptionToPreset.Find(SelectedItem))
 	{
 		SelectedMapPreset = *FoundPreset;
+
+		FHexMapTypePreset Preset;
+		if (FHexMapTypePresets::GetPreset(SelectedMapPreset, Preset))
+		{
+			if (LakeFrequencySpinBox)
+			{
+				LakeFrequencySpinBox->SetValue(Preset.Shape.LakeFrequency);
+			}
+			if (LakeCountSpinBox)
+			{
+				LakeCountSpinBox->SetValue(static_cast<float>(Preset.Shape.LakeCount));
+			}
+			if (LakeSpacingSpinBox)
+			{
+				LakeSpacingSpinBox->SetValue(static_cast<float>(Preset.Shape.LakeSpacing));
+			}
+			if (LakeMinSizeSpinBox)
+			{
+				LakeMinSizeSpinBox->SetValue(static_cast<float>(Preset.Shape.LakeMinSize));
+			}
+			if (LakeMaxSizeSpinBox)
+			{
+				LakeMaxSizeSpinBox->SetValue(static_cast<float>(Preset.Shape.LakeMaxSize));
+			}
+		}
 	}
 }
 
@@ -259,6 +371,115 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 	Settings.SizeSettings.HexRadius = 100.0f;
 
 	Settings.RandomSeed = SelectedRandomSeed;
+
+	FHexMapTypePreset Preset;
+	if (FHexMapTypePresets::GetPreset(SelectedMapPreset, Preset))
+	{
+		Settings.MapShapeSettings = Preset.Shape;
+		Settings.bUseCustomMapShapeSettings = true;
+	}
+
+	if (GenerateResourcesCheckBox)
+	{
+		Settings.ResourceGenerationSettings.bGenerateResources = GenerateResourcesCheckBox->IsChecked();
+	}
+	if (BonusResourceDensitySpinBox)
+	{
+		Settings.ResourceGenerationSettings.AutoBonusDensity = BonusResourceDensitySpinBox->GetValue();
+	}
+	if (LuxuryResourceDensitySpinBox)
+	{
+		Settings.ResourceGenerationSettings.AutoLuxuryDensity = LuxuryResourceDensitySpinBox->GetValue();
+	}
+	if (StrategicResourceDensitySpinBox)
+	{
+		Settings.ResourceGenerationSettings.AutoStrategicDensity = StrategicResourceDensitySpinBox->GetValue();
+	}
+	if (BonusResourceCountSpinBox)
+	{
+		Settings.ResourceGenerationSettings.BonusResourceCount = FMath::Max(0, FMath::RoundToInt(BonusResourceCountSpinBox->GetValue()));
+	}
+	if (LuxuryResourceCountSpinBox)
+	{
+		Settings.ResourceGenerationSettings.LuxuryResourceCount = FMath::Max(0, FMath::RoundToInt(LuxuryResourceCountSpinBox->GetValue()));
+	}
+	if (StrategicResourceCountSpinBox)
+	{
+		Settings.ResourceGenerationSettings.StrategicResourceCount = FMath::Max(0, FMath::RoundToInt(StrategicResourceCountSpinBox->GetValue()));
+	}
+	if (ResourceSpacingSpinBox)
+	{
+		Settings.ResourceGenerationSettings.ResourceMinSpacing = FMath::Max(0, FMath::RoundToInt(ResourceSpacingSpinBox->GetValue()));
+	}
+
+	if (UseTemperatureBiasCheckBox)
+	{
+		Settings.TemperatureSettings.bUseTemperatureBias = UseTemperatureBiasCheckBox->IsChecked();
+	}
+	if (TemperatureBiasStrengthSpinBox)
+	{
+		Settings.TemperatureSettings.TemperatureBiasStrength = TemperatureBiasStrengthSpinBox->GetValue();
+		Settings.MapShapeSettings.TemperatureBiasStrength = TemperatureBiasStrengthSpinBox->GetValue();
+	}
+	if (PolarFalloffPowerSpinBox)
+	{
+		Settings.TemperatureSettings.PolarFalloffPower = FMath::Max(0.1f, PolarFalloffPowerSpinBox->GetValue());
+		Settings.MapShapeSettings.PolarFalloffPower = Settings.TemperatureSettings.PolarFalloffPower;
+	}
+	if (TemperatureNoiseStrengthSpinBox)
+	{
+		Settings.TemperatureSettings.TemperatureNoiseStrength = FMath::Max(0.0f, TemperatureNoiseStrengthSpinBox->GetValue());
+	}
+
+	if (GenerateRiversCheckBox)
+	{
+		Settings.RiverSettings.bGenerateRivers = GenerateRiversCheckBox->IsChecked();
+	}
+	if (RiverDensitySpinBox)
+	{
+		Settings.RiverSettings.RiverDensityPer100Tiles = FMath::Max(0.0f, RiverDensitySpinBox->GetValue());
+	}
+	if (MaxRiverCountSpinBox)
+	{
+		Settings.RiverSettings.MaxRiverCount = FMath::Max(0, FMath::RoundToInt(MaxRiverCountSpinBox->GetValue()));
+	}
+	if (MinRiverLengthSpinBox)
+	{
+		Settings.RiverSettings.MinRiverLength = FMath::Max(1, FMath::RoundToInt(MinRiverLengthSpinBox->GetValue()));
+	}
+	if (MaxRiverLengthSpinBox)
+	{
+		Settings.RiverSettings.MaxRiverLength = FMath::Max(Settings.RiverSettings.MinRiverLength, FMath::RoundToInt(MaxRiverLengthSpinBox->GetValue()));
+	}
+	if (RiverSpacingSpinBox)
+	{
+		Settings.RiverSettings.RiverAvoidanceRadius = FMath::Max(0, FMath::RoundToInt(RiverSpacingSpinBox->GetValue()));
+	}
+
+	if (LakeFrequencySpinBox)
+	{
+		Settings.MapShapeSettings.LakeFrequency = FMath::Clamp(LakeFrequencySpinBox->GetValue(), 0.0f, 1.0f);
+	}
+	if (LakeCountSpinBox)
+	{
+		Settings.MapShapeSettings.LakeCount = FMath::Max(0, FMath::RoundToInt(LakeCountSpinBox->GetValue()));
+	}
+	if (LakeSpacingSpinBox)
+	{
+		Settings.MapShapeSettings.LakeSpacing = FMath::Max(0, FMath::RoundToInt(LakeSpacingSpinBox->GetValue()));
+	}
+	if (LakeMinSizeSpinBox)
+	{
+		Settings.MapShapeSettings.LakeMinSize = FMath::Max(1, FMath::RoundToInt(LakeMinSizeSpinBox->GetValue()));
+	}
+	if (LakeMaxSizeSpinBox)
+	{
+		Settings.MapShapeSettings.LakeMaxSize = FMath::Max(Settings.MapShapeSettings.LakeMinSize, FMath::RoundToInt(LakeMaxSizeSpinBox->GetValue()));
+	}
+	if (MountainAmountSpinBox)
+	{
+		Settings.MountainWeightScale = FMath::Max(0.0f, MountainAmountSpinBox->GetValue());
+	}
 
 	return Settings;
 }

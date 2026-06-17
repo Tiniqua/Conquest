@@ -52,6 +52,24 @@ struct FHexMapShapeSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float LakeFrequency = 0.08f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "0"))
+	int32 LakeCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "1"))
+	int32 LakeMinSize = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "1"))
+	int32 LakeMaxSize = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "0"))
+	int32 LakeSpacing = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "0"))
+	int32 OceanBorderWidth = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape", meta = (ClampMin = "0"))
+	int32 LandmassSeparation = 4;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Shape")
 	bool bUseInlandSea = false;
 

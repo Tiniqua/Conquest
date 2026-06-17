@@ -8,6 +8,7 @@
 
 class UTextBlock;
 class UVerticalBox;
+class UWidget;
 
 USTRUCT(BlueprintType)
 struct FHoveredHexTileWidgetData
@@ -128,4 +129,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TurnText = nullptr;
+
+private:
+	static void SetText(UTextBlock* TextBlock, const FText& Text);
+	static void SetText(UTextBlock* TextBlock, const FString& Text);
+	static void ClearText(UTextBlock* TextBlock);
+	static void SetVisibility(UWidget* Widget, ESlateVisibility Visibility);
+
+	void SetYieldTexts(const FHexYield& Yield);
+	void ClearTileTexts();
 };

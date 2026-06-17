@@ -55,21 +55,7 @@ void UConquestCityPanelWidget::Refresh()
 
 	if (YieldText)
 	{
-		const FHexYield& Y = City->CachedYieldPerTurn;
-
-		YieldText->SetText(FText::Format(
-			NSLOCTEXT(
-				"Conquest",
-				"CityYieldFormat",
-				"Food {0} | Prod {1} | Gold {2} | Sci {3} | Cult {4} | Faith {5}"
-			),
-			FText::AsNumber(Y.Food),
-			FText::AsNumber(Y.Production),
-			FText::AsNumber(Y.Gold),
-			FText::AsNumber(Y.Science),
-			FText::AsNumber(Y.Culture),
-			FText::AsNumber(Y.Faith)
-		));
+		YieldText->SetText(FText::FromString(City->CachedYieldPerTurn.ToCompactString()));
 	}
 
 	if (CurrentProductionText)

@@ -223,21 +223,8 @@ void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
 		const FHexYield YieldA = GameStateRef->YieldManager->CalculateTileYield(*TileA);
 		const FHexYield YieldB = GameStateRef->YieldManager->CalculateTileYield(*TileB);
 
-		const int32 ScoreA =
-			YieldA.Food * 3 +
-			YieldA.Production * 3 +
-			YieldA.Gold +
-			YieldA.Science +
-			YieldA.Culture +
-			YieldA.Faith;
-
-		const int32 ScoreB =
-			YieldB.Food * 3 +
-			YieldB.Production * 3 +
-			YieldB.Gold +
-			YieldB.Science +
-			YieldB.Culture +
-			YieldB.Faith;
+		const float ScoreA = YieldA.GetWeightedScore(3.0f, 3.0f);
+		const float ScoreB = YieldB.GetWeightedScore(3.0f, 3.0f);
 
 		return ScoreA > ScoreB;
 	});
@@ -423,13 +410,7 @@ float UConquestCityManager::ScoreTileForExpansion(const FCityState& City, const 
 
 	const FHexYield TileYield = GameStateRef->YieldManager->CalculateTileYield(*Tile);
 
-	float Score = 0.0f;
-	Score += TileYield.Food * 3.0f;
-	Score += TileYield.Production * 3.0f;
-	Score += TileYield.Gold * 1.5f;
-	Score += TileYield.Science * 2.0f;
-	Score += TileYield.Culture * 2.0f;
-	Score += TileYield.Faith * 1.0f;
+	float Score = TileYield.GetWeightedScore(3.0f, 3.0f, 1.5f, 2.0f, 2.0f, 1.0f);
 
 	const int32 Distance =
 		FMath::Abs(City.CenterTile.X - Coord.X) +

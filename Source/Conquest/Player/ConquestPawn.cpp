@@ -36,6 +36,46 @@ static FString HexFeatureTypeToString(EHexFeatureType FeatureType)
 	return TEXT("Unknown");
 }
 
+static FString FormatTileFeatures(const FHexTileData& TileData)
+{
+	TArray<FString> FeatureNames;
+
+	for (const EHexFeatureType Feature : TileData.Features)
+	{
+		if (Feature != EHexFeatureType::None)
+		{
+			FeatureNames.Add(HexFeatureTypeToString(Feature));
+		}
+	}
+
+	return FeatureNames.Num() > 0
+		? FString::Join(FeatureNames, TEXT(", "))
+		: TEXT("None");
+}
+
+static FString FormatTileResource(const FHexTileData& TileData)
+{
+	if (!TileData.Resource.HasResource())
+	{
+		return TEXT("None");
+	}
+
+	return TileData.Resource.Quantity > 0
+		? FString::Printf(
+			TEXT("%s x%d"),
+			*TileData.Resource.ResourceId.ToString(),
+			TileData.Resource.Quantity
+		)
+		: TileData.Resource.ResourceId.ToString();
+}
+
+static FString FormatTileImprovement(const FHexTileData& TileData)
+{
+	return TileData.ImprovementId.IsNone()
+		? TEXT("None")
+		: TileData.ImprovementId.ToString();
+}
+
 AConquestPawn::AConquestPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -507,49 +547,13 @@ void AConquestPawn::UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTile
 		return;
 	}
 
-	FString FeatureString = TEXT("None");
-
-	if (TileData.Features.Num() > 0)
-	{
-		TArray<FString> FeatureNames;
-
-		for (const EHexFeatureType Feature : TileData.Features)
-		{
-			if (Feature == EHexFeatureType::None)
-			{
-				continue;
-			}
-
-			FeatureNames.Add(HexFeatureTypeToString(Feature));
-		}
-
-		if (FeatureNames.Num() > 0)
-		{
-			FeatureString = FString::Join(FeatureNames, TEXT(", "));
-		}
-	}
-
-	const FString ResourceString = TileData.Resource.HasResource()
-		? TileData.Resource.Quantity > 0
-			? FString::Printf(
-				TEXT("%s x%d"),
-				*TileData.Resource.ResourceId.ToString(),
-				TileData.Resource.Quantity
-			)
-			: TileData.Resource.ResourceId.ToString()
-		: TEXT("None");
-
-	const FString ImprovementString = TileData.ImprovementId.IsNone()
-		? TEXT("None")
-		: TileData.ImprovementId.ToString();
-
 	FHoveredHexTileWidgetData WidgetData;
 	WidgetData.Q = Q;
 	WidgetData.R = R;
 	WidgetData.TileType = HexTileTypeToString(TileData.TileType);
-	WidgetData.Features = FeatureString;
-	WidgetData.Resource = ResourceString;
-	WidgetData.Improvement = ImprovementString;
+	WidgetData.Features = FormatTileFeatures(TileData);
+	WidgetData.Resource = FormatTileResource(TileData);
+	WidgetData.Improvement = FormatTileImprovement(TileData);
 	WidgetData.FreshWater = TileData.bHasFreshWater ? TEXT("Yes") : TEXT("No");
 	WidgetData.River = TileData.bHasRiver ? TEXT("Yes") : TEXT("No");
 	WidgetData.Height = TileData.Height;

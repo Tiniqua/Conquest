@@ -5,6 +5,8 @@
 #include "HexMapTypePresets.h"
 #include "HexGridSettings.generated.h"
 
+class UMaterialInterface;
+
 USTRUCT(BlueprintType)
 struct FHexGridSizeSettings
 {
@@ -145,6 +147,97 @@ struct FHexResourceGenerationSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Resources", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AutoStrategicDensity = 0.04f;
+};
+
+USTRUCT(BlueprintType)
+struct FHexSimpleRiverEdge
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Simple Rivers")
+	FIntPoint Tile = FIntPoint::ZeroValue;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Simple Rivers")
+	int32 EdgeIndex = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FHexSimpleRiverPath
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Simple Rivers")
+	int32 RiverId = INDEX_NONE;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Simple Rivers")
+	TArray<FHexSimpleRiverEdge> Edges;
+};
+
+USTRUCT(BlueprintType)
+struct FHexSimpleRiverSettings
+{
+	GENERATED_BODY()
+
+	FHexSimpleRiverSettings()
+	{
+		AvoidTileTypes = {
+			EHexTileType::Coast,
+			EHexTileType::Ocean,
+			EHexTileType::Mountain
+		};
+	}
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	bool bGenerateRivers = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	bool bShowRiverLayer = true;
+
+	// Rivers generated per 100 tiles before MaxRiverCount is applied.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0.0"))
+	float RiverDensityPer100Tiles = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0"))
+	int32 MaxRiverCount = 40;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "1"))
+	int32 MinRiverLength = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "1"))
+	int32 MaxRiverLength = 12;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "1"))
+	int32 MaxStartAttemptsPerRiver = 24;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0"))
+	int32 RiverAvoidanceRadius = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ExistingRiverAvoidanceChance = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "1", ClampMax = "6"))
+	int32 MaxRiverEdgesPerTile = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	TArray<EHexTileType> AvoidTileTypes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0.0"))
+	float ForwardBias = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "0.0"))
+	float TurnBias = 0.65f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers", meta = (ClampMin = "1.0"))
+	float RiverWidth = 35.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	float RiverSurfaceOffset = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	int32 TranslucencySortPriority = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Simple Rivers")
+	TObjectPtr<UMaterialInterface> RiverMaterial = nullptr;
 };
 
 USTRUCT(BlueprintType)

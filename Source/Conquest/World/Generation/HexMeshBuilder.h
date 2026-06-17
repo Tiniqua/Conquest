@@ -36,6 +36,13 @@ public:
 		const FHexFogOfWarSettings& FogOfWarSettings
 	);
 
+	void BuildSimpleRiverMesh(
+		UProceduralMeshComponent* RiverMesh,
+		const FHexGridModel& Model,
+		const TArray<FHexSimpleRiverPath>& Rivers,
+		const FHexSimpleRiverSettings& RiverSettings
+	) const;
+
 	static int32 GetSectionIndexForTileType(EHexTileType TileType);
 	static int32 GetSectionCount();
 
@@ -104,6 +111,21 @@ private:
 		const FVector& A,
 		const FVector& B,
 		float Width
+	) const;
+
+	void AddSimpleRiverEdgeQuad(
+		const FHexGridModel& Model,
+		const FHexSimpleRiverSettings& RiverSettings,
+		const FHexSimpleRiverEdge& RiverEdge,
+		FHexMeshSection& Section,
+		TMap<FHexVertexKey, FVector>& OutJointPositions
+	) const;
+
+	void AddSimpleRiverJointDisc(
+		FHexMeshSection& Section,
+		const FVector& Center,
+		float Radius,
+		int32 SegmentCount
 	) const;
 
 };

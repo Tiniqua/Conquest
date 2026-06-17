@@ -300,6 +300,65 @@ void FHexMeshBuilder::BuildFogOfWarMesh(
 	FogOfWarMesh->TranslucencySortPriority = FogOfWarSettings.TranslucencySortPriority;
 }
 
+void FHexMeshBuilder::BuildSimpleRiverMesh(
+	UProceduralMeshComponent* RiverMesh,
+	const FHexGridModel& Model,
+	const TArray<FHexSimpleRiverPath>& Rivers,
+	const FHexSimpleRiverSettings& RiverSettings
+) const
+{
+	if (!RiverMesh)
+	{
+		return;
+	}
+
+	RiverMesh->ClearAllMeshSections();
+	RiverMesh->SetVisibility(RiverSettings.bShowRiverLayer);
+	RiverMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RiverMesh->SetCastShadow(false);
+	RiverMesh->bCastDynamicShadow = false;
+	RiverMesh->bCastStaticShadow = false;
+	RiverMesh->CastShadow = false;
+	RiverMesh->TranslucencySortPriority = RiverSettings.TranslucencySortPriority;
+
+	if (!RiverSettings.bGenerateRivers || !RiverSettings.bShowRiverLayer || Rivers.Num() <= 0)
+	{
+		return;
+	}
+
+	FHexMeshSection Section;
+	TMap<FHexVertexKey, FVector> JointPositions;
+
+	for (const FHexSimpleRiverPath& River : Rivers)
+	{
+		for (const FHexSimpleRiverEdge& RiverEdge : River.Edges)
+		{
+			AddSimpleRiverEdgeQuad(Model, RiverSettings, RiverEdge, Section, JointPositions);
+		}
+	}
+
+	for (const TPair<FHexVertexKey, FVector>& Pair : JointPositions)
+	{
+		AddSimpleRiverJointDisc(Section, Pair.Value, RiverSettings.RiverWidth * 0.6f, 12);
+	}
+
+	RiverMesh->CreateMeshSection(
+		0,
+		Section.Vertices,
+		Section.Triangles,
+		Section.Normals,
+		Section.UVs,
+		Section.VertexColors,
+		Section.Tangents,
+		false
+	);
+
+	if (RiverSettings.RiverMaterial)
+	{
+		RiverMesh->SetMaterial(0, RiverSettings.RiverMaterial);
+	}
+}
+
 bool FHexMeshBuilder::IsWaterLayerTargetTile(
 	const FHexGridModel& Model,
 	const FHexWaterSettings& WaterSettings,
@@ -617,6 +676,133 @@ void FHexMeshBuilder::AddGridEdgeQuad(
 		FVector2D(1.0f, 1.0f),
 		FVector2D(0.0f, 1.0f)
 	});
+}
+
+void FHexMeshBuilder::AddSimpleRiverEdgeQuad(
+	const FHexGridModel& Model,
+	const FHexSimpleRiverSettings& RiverSettings,
+	const FHexSimpleRiverEdge& RiverEdge,
+	FHexMeshSection& Section,
+	TMap<FHexVertexKey, FVector>& OutJointPositions
+) const
+{
+	if (!Model.IsValidTile(RiverEdge.Tile.X, RiverEdge.Tile.Y) || RiverEdge.EdgeIndex < 0 || RiverEdge.EdgeIndex >= 6)
+	{
+		return;
+	}
+
+	const FHexTileData* Tile = Model.GetTile(RiverEdge.Tile);
+	if (!Tile)
+	{
+		return;
+	}
+
+	const FVector FlatCenter = Model.GetHexCenter(RiverEdge.Tile.X, RiverEdge.Tile.Y);
+	const FVector FlatA = FlatCenter + Model.GetHexCornerOffset(RiverEdge.EdgeIndex);
+	const FVector FlatB = FlatCenter + Model.GetHexCornerOffset((RiverEdge.EdgeIndex + 1) % 6);
+
+	float HeightA = Tile->Height;
+	float HeightB = Tile->Height;
+
+	if (Model.UsesHeightOffsets())
+	{
+		HeightA = Model.GetResolvedCornerHeight(FlatA) + Model.GetResolvedCornerHeightVarianceOffset(FlatA);
+		HeightB = Model.GetResolvedCornerHeight(FlatB) + Model.GetResolvedCornerHeightVarianceOffset(FlatB);
+	}
+
+	const FVector A(FlatA.X, FlatA.Y, HeightA + RiverSettings.RiverSurfaceOffset);
+	const FVector B(FlatB.X, FlatB.Y, HeightB + RiverSettings.RiverSurfaceOffset);
+	const FVector EdgeDirection = FVector(B.X - A.X, B.Y - A.Y, 0.0f).GetSafeNormal();
+	if (EdgeDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector Perpendicular(-EdgeDirection.Y, EdgeDirection.X, 0.0f);
+	const FVector HalfWidthOffset = Perpendicular * (FMath::Max(1.0f, RiverSettings.RiverWidth) * 0.5f);
+
+	const int32 StartIndex = Section.Vertices.Num();
+
+	Section.Vertices.Add(A + HalfWidthOffset);
+	Section.Vertices.Add(B + HalfWidthOffset);
+	Section.Vertices.Add(B - HalfWidthOffset);
+	Section.Vertices.Add(A - HalfWidthOffset);
+
+	Section.Triangles.Append({
+		StartIndex + 0,
+		StartIndex + 1,
+		StartIndex + 2,
+		StartIndex + 0,
+		StartIndex + 2,
+		StartIndex + 3
+	});
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		Section.Normals.Add(FVector::UpVector);
+		Section.VertexColors.Add(FColor::White);
+		Section.Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	}
+
+	Section.UVs.Append({
+		FVector2D(0.0f, 0.0f),
+		FVector2D(1.0f, 0.0f),
+		FVector2D(1.0f, 1.0f),
+		FVector2D(0.0f, 1.0f)
+	});
+
+	OutJointPositions.FindOrAdd(Model.MakeVertexKey(FlatA)) = A + FVector(0.0f, 0.0f, 0.5f);
+	OutJointPositions.FindOrAdd(Model.MakeVertexKey(FlatB)) = B + FVector(0.0f, 0.0f, 0.5f);
+}
+
+void FHexMeshBuilder::AddSimpleRiverJointDisc(
+	FHexMeshSection& Section,
+	const FVector& Center,
+	float Radius,
+	int32 SegmentCount
+) const
+{
+	if (Radius <= 0.0f)
+	{
+		return;
+	}
+
+	const int32 SafeSegmentCount = FMath::Max(8, SegmentCount);
+	const int32 CenterIndex = Section.Vertices.Num();
+
+	Section.Vertices.Add(Center);
+	Section.Normals.Add(FVector::UpVector);
+	Section.UVs.Add(FVector2D(0.5f, 0.5f));
+	Section.VertexColors.Add(FColor::White);
+	Section.Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+	TArray<int32> RingIndices;
+	RingIndices.Reserve(SafeSegmentCount);
+
+	for (int32 i = 0; i < SafeSegmentCount; ++i)
+	{
+		const float Angle = (2.0f * PI * static_cast<float>(i)) / static_cast<float>(SafeSegmentCount);
+		const int32 Index = Section.Vertices.Num();
+		RingIndices.Add(Index);
+
+		Section.Vertices.Add(FVector(
+			Center.X + FMath::Cos(Angle) * Radius,
+			Center.Y + FMath::Sin(Angle) * Radius,
+			Center.Z
+		));
+		Section.Normals.Add(FVector::UpVector);
+		Section.UVs.Add(FVector2D(0.5f, 0.5f));
+		Section.VertexColors.Add(FColor::White);
+		Section.Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+	}
+
+	for (int32 i = 0; i < SafeSegmentCount; ++i)
+	{
+		const int32 Next = (i + 1) % SafeSegmentCount;
+		Section.Triangles.Add(CenterIndex);
+		Section.Triangles.Add(RingIndices[Next]);
+		Section.Triangles.Add(RingIndices[i]);
+	}
 }
 
 int32 FHexMeshBuilder::GetSectionIndexForTileType(EHexTileType TileType)

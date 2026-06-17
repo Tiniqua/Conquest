@@ -9,6 +9,7 @@
 #include "HexMapGenerator.h"
 #include "HexResourceGenerator.h"
 #include "HexMeshBuilder.h"
+#include "HexSimpleRiverGenerator.h"
 #include "HexTileResourceMeshBuilder.h"
 #include "ModularHexGridActor.generated.h"
 
@@ -70,6 +71,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Water")
 	void SetWaterLayerVisible(bool bVisible);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Rivers")
+	void SetRiverLayerVisible(bool bVisible);
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid")
 	const TArray<FHexTileData>& GetTiles() const { return GridModel.GetTiles(); }
@@ -156,6 +160,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Resources")
 	FHexResourceGenerationSettings ResourceGenerationSettings;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Rivers")
+	FHexSimpleRiverSettings RiverSettings;
+
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Features")
 	FHexFeatureGenerationSettings FeatureGenerationSettings;
 	
@@ -192,13 +199,20 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Water")
 	TObjectPtr<UProceduralMeshComponent> WaterMesh = nullptr;
 
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Rivers")
+	TObjectPtr<UProceduralMeshComponent> RiverMesh = nullptr;
+
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Overlay")
 	TObjectPtr<UProceduralMeshComponent> HexGridOverlayMesh = nullptr;
 
 	FHexGridModel GridModel;
 	FHexMapGenerator Generator;
+	FHexSimpleRiverGenerator RiverGenerator;
 	FHexResourceGenerator ResourceGenerator;
 	FHexMeshBuilder MeshBuilder;
+
+	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Rivers")
+	TArray<FHexSimpleRiverPath> GeneratedRivers;
 	
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ResourceMeshComponents;

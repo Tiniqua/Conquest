@@ -22,6 +22,10 @@ AModularHexGridActor::AModularHexGridActor()
 	WaterMesh->SetupAttachment(SceneRoot);
 	WaterMesh->bUseAsyncCooking = true;
 
+	RiverMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("RiverMesh"));
+	RiverMesh->SetupAttachment(SceneRoot);
+	RiverMesh->bUseAsyncCooking = true;
+
 	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
@@ -187,6 +191,18 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 	GenerationSettings.TemperatureSettings = SetupSettings.TemperatureSettings;
 
 	ResourceGenerationSettings = SetupSettings.ResourceGenerationSettings;
+
+	const FHexSimpleRiverSettings ExistingRiverSettings = RiverSettings;
+	RiverSettings = SetupSettings.RiverSettings;
+
+	if (!RiverSettings.RiverMaterial)
+	{
+		RiverSettings.RiverMaterial = ExistingRiverSettings.RiverMaterial;
+	}
+
+	RiverSettings.RiverWidth = ExistingRiverSettings.RiverWidth;
+	RiverSettings.RiverSurfaceOffset = ExistingRiverSettings.RiverSurfaceOffset;
+	RiverSettings.TranslucencySortPriority = ExistingRiverSettings.TranslucencySortPriority;
 }
 
 void AModularHexGridActor::BeginPlay()
@@ -233,6 +249,13 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed
 	);
 
+	RiverGenerator.Generate(
+		GridModel,
+		RiverSettings,
+		EffectiveGenerationSettings.RandomSeed,
+		GeneratedRivers
+	);
+
 	FeatureGenerator.Generate(
 		GridModel,
 		TileResourceData,
@@ -251,6 +274,7 @@ void AModularHexGridActor::RebuildGrid()
 
 	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
 	MeshBuilder.BuildWaterMesh(WaterMesh, GridModel, WaterSettings, TileResourceData);
+	MeshBuilder.BuildSimpleRiverMesh(RiverMesh, GridModel, GeneratedRivers, RiverSettings);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
 
 
@@ -490,6 +514,15 @@ void AModularHexGridActor::SetWaterLayerVisible(bool bVisible)
 	}
 }
 
+void AModularHexGridActor::SetRiverLayerVisible(bool bVisible)
+{
+	RiverSettings.bShowRiverLayer = bVisible;
+	if (RiverMesh)
+	{
+		RiverMesh->SetVisibility(RiverSettings.bShowRiverLayer);
+	}
+}
+
 void AModularHexGridActor::GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const
 {
 	GridModel.GetPossibleImprovementIdsForTile(Q, R, OutImprovementIds);
@@ -586,6 +619,17 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		WaterMesh->bCastStaticShadow = false;
 		WaterMesh->CastShadow = false;
 		WaterMesh->TranslucencySortPriority = 1;
+	}
+
+	if (RiverMesh)
+	{
+		RiverMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RiverMesh->SetVisibility(RiverSettings.bShowRiverLayer);
+		RiverMesh->SetCastShadow(false);
+		RiverMesh->bCastDynamicShadow = false;
+		RiverMesh->bCastStaticShadow = false;
+		RiverMesh->CastShadow = false;
+		RiverMesh->TranslucencySortPriority = RiverSettings.TranslucencySortPriority;
 	}
 
 	if (HexGridOverlayMesh)

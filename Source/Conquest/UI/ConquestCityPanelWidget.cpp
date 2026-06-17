@@ -1,5 +1,6 @@
 ﻿#include "Conquest/UI/ConquestCityPanelWidget.h"
 
+#include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 
@@ -8,10 +9,17 @@
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
+#include "Conquest/UI/ConquestHUD.h"
 
 void UConquestCityPanelWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (CloseButton)
+	{
+		CloseButton->OnClicked.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCloseClicked);
+		CloseButton->OnClicked.AddDynamic(this, &UConquestCityPanelWidget::HandleCloseClicked);
+	}
 
 	Refresh();
 }
@@ -101,6 +109,28 @@ void UConquestCityPanelWidget::Refresh()
 	}
 
 	BuildBuildingButtons();
+}
+
+void UConquestCityPanelWidget::ClosePanel()
+{
+	CityId = INDEX_NONE;
+	SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UConquestCityPanelWidget::HandleCloseClicked()
+{
+	APlayerController* PlayerController = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PlayerController
+		? Cast<AConquestHUD>(PlayerController->GetHUD())
+		: nullptr;
+
+	if (ConquestHUD)
+	{
+		ConquestHUD->HideCityPanel();
+		return;
+	}
+
+	ClosePanel();
 }
 
 void UConquestCityPanelWidget::BuildBuildingButtons()

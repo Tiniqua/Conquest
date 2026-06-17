@@ -25,7 +25,7 @@ public:
 	FOnTurnPhaseChanged OnTurnPhaseChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	int32 CurrentTurn = 0;
+	int32 CurrentTurn = 1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	EConquestTurnPhase CurrentPhase = EConquestTurnPhase::None;

@@ -7,6 +7,7 @@
 
 class UTextBlock;
 class UVerticalBox;
+class UButton;
 class UConquestChoiceButtonWidget;
 
 UCLASS()
@@ -23,6 +24,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void Refresh();
 
+	UFUNCTION(BlueprintCallable)
+	void ClosePanel();
+
 protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> CityNameText;
@@ -35,6 +39,9 @@ protected:
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> CurrentProductionText;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UButton> CloseButton = nullptr;
 
 	// This can later be renamed to ProductionChoiceBox.
 	// Keep this name for now if your Widget Blueprint already uses BuildingButtonBox.
@@ -49,6 +56,9 @@ private:
 	int32 CityId = INDEX_NONE;
 
 	void BuildBuildingButtons();
+
+	UFUNCTION()
+	void HandleCloseClicked();
 
 	UFUNCTION()
 	void HandleProductionChoiceClicked(const FConquestChoiceButtonData& ChoiceData);

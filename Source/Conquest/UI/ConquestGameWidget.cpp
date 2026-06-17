@@ -68,16 +68,40 @@ void UConquestGameWidget::NativeConstruct()
 
 	if (EndTurnButton)
 	{
+		EndTurnButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleEndTurnClicked);
 		EndTurnButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleEndTurnClicked);
 	}
 
 	if (ResearchButton)
 	{
+		ResearchButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleResearchClicked);
 		ResearchButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleResearchClicked);
+	}
+
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->TurnManager)
+		{
+			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
+			ConquestGS->TurnManager->OnTurnChanged.AddDynamic(this, &UConquestGameWidget::HandleTurnChanged);
+		}
 	}
 	
 	ClearHoveredTileInfo();
 	RefreshTurnInfo();
+}
+
+void UConquestGameWidget::NativeDestruct()
+{
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->TurnManager)
+		{
+			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
+		}
+	}
+
+	Super::NativeDestruct();
 }
 
 void UConquestGameWidget::HandleEndTurnClicked()
@@ -102,6 +126,12 @@ void UConquestGameWidget::HandleResearchClicked()
 	{
 		ConquestHUD->ShowResearchPanel();
 	}
+}
+
+void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
+{
+	(void)NewTurn;
+	RefreshTurnInfo();
 }
 
 void UConquestGameWidget::RefreshTurnInfo()

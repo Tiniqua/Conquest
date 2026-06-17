@@ -98,7 +98,7 @@ void AConquestHUD::HideCityPanel()
 {
 	if (CityPanelWidget)
 	{
-		CityPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		CityPanelWidget->ClosePanel();
 	}
 }
 

@@ -64,11 +64,15 @@ public:
 	UFUNCTION()
 	void HandleResearchClicked();
 
+	UFUNCTION()
+	void HandleTurnChanged(int32 NewTurn);
+
 	UFUNCTION(BlueprintCallable)
 	void RefreshTurnInfo();
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> HoveredTileInfoPanel = nullptr;

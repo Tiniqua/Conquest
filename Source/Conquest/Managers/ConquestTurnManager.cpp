@@ -12,7 +12,8 @@ void UConquestTurnManager::Initialize(AConquestGameState* InGameState)
 
 void UConquestTurnManager::BeginGameSetup()
 {
-	CurrentTurn = 0;
+	CurrentTurn = 1;
+	OnTurnChanged.Broadcast(CurrentTurn);
 	SetPhase(EConquestTurnPhase::GameSetup);
 }
 

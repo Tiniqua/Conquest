@@ -21,6 +21,13 @@ public:
 	FHexYield CalculateTileYield(const FHexTileData& Tile) const;
 	FHexYield CalculateCityBuildingYields(const FCityState& City) const;
 	FHexYield CalculateCityTotalYields(const FCityState& City) const;
+	FHexYield CalculateEmpireYieldPerTurn(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintCallable)
+	FHexYield RecalculateEmpireYieldPerTurn(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintCallable)
+	void CollectGlobalYieldIncome(int32 PlayerId) const;
 
 private:
 	UPROPERTY()

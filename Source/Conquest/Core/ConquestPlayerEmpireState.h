@@ -19,6 +19,9 @@ struct FConquestPlayerEmpireState
 	FHexYield StoredYields;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FHexYield CachedYieldPerTurn;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ResearchedTechIds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

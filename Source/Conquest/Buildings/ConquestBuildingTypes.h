@@ -36,6 +36,12 @@ struct FConquestBuildingRow : public FTableRowBase
 	FHexYield FlatCityYieldBonus;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bGrantedOnCityFounding = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bHideFromProductionChoices = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsWorldWonder = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)

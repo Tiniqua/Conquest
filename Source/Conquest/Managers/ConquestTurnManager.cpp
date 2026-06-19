@@ -3,6 +3,7 @@
 #include "ConquestCityManager.h"
 #include "ConquestTechManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestYieldManager.h"
 
 
 void UConquestTurnManager::Initialize(AConquestGameState* InGameState)
@@ -62,6 +63,11 @@ void UConquestTurnManager::StartTurnProcessing()
 	if (GameStateRef->CityManager)
 	{
 		GameStateRef->CityManager->ProcessCitiesAtStartOfTurn(0);
+	}
+
+	if (GameStateRef->YieldManager)
+	{
+		GameStateRef->YieldManager->CollectGlobalYieldIncome(0);
 	}
 
 	if (GameStateRef->TechManager)

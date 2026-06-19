@@ -4,6 +4,7 @@
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 
 void UConquestTechManager::Initialize(AConquestGameState* InGameState)
@@ -157,22 +158,23 @@ const FConquestTechRow* UConquestTechManager::GetCurrentResearchRow(int32 Player
 
 int32 UConquestTechManager::CalculateEmpireSciencePerTurn(int32 PlayerId) const
 {
-	if (!GameStateRef || !GameStateRef->CityManager)
+	if (!GameStateRef)
 	{
 		return 0;
 	}
 
-	int32 Science = 0;
-
-	for (const FCityState& City : GameStateRef->CityManager->Cities)
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	if (Player.PlayerId != PlayerId)
 	{
-		if (City.OwnerPlayerId == PlayerId)
-		{
-			Science += City.CachedYieldPerTurn.Science;
-		}
+		return 0;
 	}
 
-	return Science;
+	if (GameStateRef->YieldManager)
+	{
+		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
+	}
+
+	return GameStateRef->GetHumanPlayer().CachedYieldPerTurn.Science;
 }
 
 bool UConquestTechManager::CanResearchTech(int32 PlayerId, FName TechId) const

@@ -147,6 +147,28 @@ void UConquestContentManager::GetAllBaseBuildings(TArray<const FConquestBuilding
 	}
 }
 
+void UConquestContentManager::GetStartingBuildingIdsForPlayer(int32 PlayerId, TArray<FName>& OutBuildingIds) const
+{
+	OutBuildingIds.Reset();
+
+	TArray<const FConquestBuildingRow*> BaseBuildings;
+	GetAllBaseBuildings(BaseBuildings);
+
+	for (const FConquestBuildingRow* BaseRow : BaseBuildings)
+	{
+		if (!BaseRow || !BaseRow->bGrantedOnCityFounding)
+		{
+			continue;
+		}
+
+		const FName ResolvedBuildingId = ResolveBuildingIdForPlayer(PlayerId, BaseRow->BuildingId);
+		if (!ResolvedBuildingId.IsNone())
+		{
+			OutBuildingIds.AddUnique(ResolvedBuildingId);
+		}
+	}
+}
+
 void UConquestContentManager::GetAllTechs(TArray<const FConquestTechRow*>& OutRows) const
 {
 	OutRows.Reset();

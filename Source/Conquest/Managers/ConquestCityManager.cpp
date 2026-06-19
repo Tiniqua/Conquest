@@ -1,5 +1,6 @@
 ﻿#include "Conquest/Managers/ConquestCityManager.h"
 
+#include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
@@ -29,8 +30,8 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	NewCity.FoodStored = 0.0f;
 	NewCity.bNeedsProductionChoice = true;
 
+	GrantStartingBuildings(NewCity);
 	ClaimTileForCity(NewCity, TileCoord);
-	ClaimInitialTiles(NewCity);
 	AutoAssignWorkedTiles(NewCity);
 	RecalculateCityYields(NewCity);
 
@@ -49,6 +50,8 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 
 	OnCityFounded.Broadcast(NewCity.CityId, TileCoord);
 	OnCityChanged.Broadcast(NewCity.CityId);
+	RecalculateEmpireYields(PlayerId);
+	UpdateOwnedTileVisuals(PlayerId);
 	GameStateRef->BroadcastStateChanged();
 
 	return true;
@@ -65,6 +68,31 @@ int32 UConquestCityManager::FindCityAtTile(const FIntPoint& Coord) const
 	}
 
 	return INDEX_NONE;
+}
+
+void UConquestCityManager::GrantStartingBuildings(FCityState& City)
+{
+	if (GameStateRef && GameStateRef->ContentManager)
+	{
+		TArray<FName> StartingBuildingIds;
+		GameStateRef->ContentManager->GetStartingBuildingIdsForPlayer(
+			City.OwnerPlayerId,
+			StartingBuildingIds
+		);
+
+		for (const FName BuildingId : StartingBuildingIds)
+		{
+			if (!BuildingId.IsNone())
+			{
+				City.ConstructedBuildingIds.AddUnique(BuildingId);
+			}
+		}
+	}
+
+	if (City.ConstructedBuildingIds.Num() <= 0 && !DefaultCityCentreBuildingId.IsNone())
+	{
+		City.ConstructedBuildingIds.AddUnique(DefaultCityCentreBuildingId);
+	}
 }
 
 bool UConquestCityManager::IsValidFoundCityTile(const FIntPoint& TileCoord) const
@@ -115,61 +143,78 @@ bool UConquestCityManager::IsValidFoundCityTile(const FIntPoint& TileCoord) cons
 	return true;
 }
 
-void UConquestCityManager::ClaimInitialTiles(FCityState& City)
+bool UConquestCityManager::ClaimTileForCity(FCityState& City, const FIntPoint& Coord)
 {
 	if (!GameStateRef)
 	{
-		return;
+		return false;
 	}
 
 	FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable();
 	if (!GridModel)
 	{
-		return;
-	}
-
-	constexpr int32 InitialRadius = 1;
-	const TArray<FIntPoint> NearbyTiles = GridModel->GetCoordsInRange(City.CenterTile, InitialRadius);
-
-	for (const FIntPoint& Coord : NearbyTiles)
-	{
-		ClaimTileForCity(City, Coord);
-	}
-}
-
-void UConquestCityManager::ClaimTileForCity(FCityState& City, const FIntPoint& Coord)
-{
-	if (!GameStateRef)
-	{
-		return;
-	}
-
-	FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable();
-	if (!GridModel)
-	{
-		return;
+		return false;
 	}
 
 	FHexTileData* Tile = GridModel->GetTileMutable(Coord);
 	if (!Tile)
 	{
-		return;
+		return false;
 	}
 
 	if (Tile->Gameplay.OwnerPlayerId != INDEX_NONE)
 	{
-		return;
+		return false;
 	}
 
 	Tile->Gameplay.OwnerPlayerId = City.OwnerPlayerId;
 	Tile->Gameplay.OwningCityId = City.CityId;
 
 	City.OwnedTiles.AddUnique(Coord);
+	return true;
+}
+
+bool UConquestCityManager::IsValidExpansionTileForCity(const FCityState& City, const FIntPoint& Coord) const
+{
+	if (!GameStateRef)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	if (!GridModel)
+	{
+		return false;
+	}
+
+	const FHexTileData* Tile = GridModel->GetTile(Coord);
+	if (!Tile || Tile->Gameplay.OwnerPlayerId != INDEX_NONE)
+	{
+		return false;
+	}
+
+	for (const FIntPoint& OwnedCoord : City.OwnedTiles)
+	{
+		for (int32 Direction = 0; Direction < 6; ++Direction)
+		{
+			int32 NeighborQ = INDEX_NONE;
+			int32 NeighborR = INDEX_NONE;
+			if (
+				GridModel->GetNeighbourCoord(OwnedCoord.X, OwnedCoord.Y, Direction, NeighborQ, NeighborR) &&
+				FIntPoint(NeighborQ, NeighborR) == Coord
+			)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
 {
-	if (!GameStateRef || !GameStateRef->YieldManager)
+	if (!GameStateRef)
 	{
 		return;
 	}
@@ -190,49 +235,7 @@ void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
 	}
 
 	City.WorkedTiles.Reset();
-
-	// City center is always worked.
-	City.WorkedTiles.Add(City.CenterTile);
-
-	const int32 AdditionalWorkedTiles = FMath::Max(0, City.Population - 1);
-
-	TArray<FIntPoint> CandidateTiles = City.OwnedTiles;
-	CandidateTiles.Remove(City.CenterTile);
-
-	CandidateTiles.Sort([this](const FIntPoint& A, const FIntPoint& B)
-	{
-		if (!GameStateRef || !GameStateRef->YieldManager)
-		{
-			return false;
-		}
-
-		const FHexGridModel* GridModelInner = GameStateRef->GetHexGridModel();
-		if (!GridModelInner)
-		{
-			return false;
-		}
-
-		const FHexTileData* TileA = GridModelInner->GetTile(A);
-		const FHexTileData* TileB = GridModelInner->GetTile(B);
-
-		if (!TileA || !TileB)
-		{
-			return false;
-		}
-
-		const FHexYield YieldA = GameStateRef->YieldManager->CalculateTileYield(*TileA);
-		const FHexYield YieldB = GameStateRef->YieldManager->CalculateTileYield(*TileB);
-
-		const float ScoreA = YieldA.GetWeightedScore(3.0f, 3.0f);
-		const float ScoreB = YieldB.GetWeightedScore(3.0f, 3.0f);
-
-		return ScoreA > ScoreB;
-	});
-
-	for (int32 i = 0; i < AdditionalWorkedTiles && CandidateTiles.IsValidIndex(i); ++i)
-	{
-		City.WorkedTiles.Add(CandidateTiles[i]);
-	}
+	City.WorkedTiles = City.OwnedTiles;
 
 	for (const FIntPoint& Coord : City.WorkedTiles)
 	{
@@ -252,6 +255,30 @@ void UConquestCityManager::RecalculateCityYields(FCityState& City)
 	}
 
 	City.CachedYieldPerTurn = GameStateRef->YieldManager->CalculateCityTotalYields(City);
+}
+
+void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
+{
+	if (GameStateRef && GameStateRef->YieldManager)
+	{
+		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
+	}
+}
+
+void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
+{
+	if (!GameStateRef || !GameStateRef->ActiveGridActor)
+	{
+		return;
+	}
+
+	UMaterialInterface* BorderMaterial = nullptr;
+	if (GameStateRef->HumanPlayer.PlayerId == PlayerId && GameStateRef->HumanCivilisation)
+	{
+		BorderMaterial = GameStateRef->HumanCivilisation->BorderMaterial;
+	}
+
+	GameStateRef->ActiveGridActor->RebuildCivilisationBorders(PlayerId, BorderMaterial);
 }
 
 void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
@@ -274,6 +301,7 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 
 	if (GameStateRef)
 	{
+		RecalculateEmpireYields(PlayerId);
 		GameStateRef->BroadcastStateChanged();
 	}
 }
@@ -296,8 +324,8 @@ void UConquestCityManager::ProcessCityGrowth(FCityState& City)
 	{
 		City.FoodStored -= GrowthCost;
 		City.Population += 1;
-
-		ExpandCityBorders(City, 1);
+		City.PendingBorderExpansions += 1;
+		OnCityNeedsBorderExpansion.Broadcast(City.CityId);
 		AutoAssignWorkedTiles(City);
 	}
 }
@@ -332,61 +360,98 @@ void UConquestCityManager::ProcessCityProduction(FCityState& City)
 	City.bNeedsProductionChoice = true;
 }
 
-void UConquestCityManager::ExpandCityBorders(FCityState& City, int32 NumTiles)
+TArray<FIntPoint> UConquestCityManager::GetExpansionCandidateTiles(int32 CityId) const
 {
-	for (int32 i = 0; i < NumTiles; ++i)
-	{
-		const FIntPoint BestTile = ChooseBestExpansionTile(City);
-		if (BestTile == FIntPoint(INT32_MIN, INT32_MIN))
-		{
-			return;
-		}
+	TArray<FIntPoint> Result;
 
-		ClaimTileForCity(City, BestTile);
-	}
-}
-
-FIntPoint UConquestCityManager::ChooseBestExpansionTile(const FCityState& City) const
-{
-	if (!GameStateRef)
+	const FCityState* City = GetCity(CityId);
+	if (!City || !GameStateRef)
 	{
-		return FIntPoint(INT32_MIN, INT32_MIN);
+		return Result;
 	}
 
 	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
 	if (!GridModel)
 	{
-		return FIntPoint(INT32_MIN, INT32_MIN);
+		return Result;
 	}
 
-	constexpr int32 MaxExpansionRange = 3;
-	const TArray<FIntPoint> Candidates = GridModel->GetCoordsInRange(City.CenterTile, MaxExpansionRange);
-
-	float BestScore = -FLT_MAX;
-	FIntPoint BestCoord(INT32_MIN, INT32_MIN);
-
-	for (const FIntPoint& Coord : Candidates)
+	for (const FIntPoint& OwnedCoord : City->OwnedTiles)
 	{
-		const FHexTileData* Tile = GridModel->GetTile(Coord);
-		if (!Tile)
+		for (int32 Direction = 0; Direction < 6; ++Direction)
 		{
-			continue;
-		}
+			int32 NeighborQ = INDEX_NONE;
+			int32 NeighborR = INDEX_NONE;
+			if (!GridModel->GetNeighbourCoord(OwnedCoord.X, OwnedCoord.Y, Direction, NeighborQ, NeighborR))
+			{
+				continue;
+			}
 
-		if (Tile->Gameplay.OwnerPlayerId != INDEX_NONE)
-		{
-			continue;
-		}
-
-		const float Score = ScoreTileForExpansion(City, Coord);
-		if (Score > BestScore)
-		{
-			BestScore = Score;
-			BestCoord = Coord;
+			const FIntPoint Candidate(NeighborQ, NeighborR);
+			if (IsValidExpansionTileForCity(*City, Candidate))
+			{
+				Result.AddUnique(Candidate);
+			}
 		}
 	}
 
-	return BestCoord;
+	Result.Sort([this, City](const FIntPoint& A, const FIntPoint& B)
+	{
+		return ScoreTileForExpansion(*City, A) > ScoreTileForExpansion(*City, B);
+	});
+
+	return Result;
+}
+
+bool UConquestCityManager::ClaimExpansionTileForCity(int32 CityId, const FIntPoint& Coord)
+{
+	FCityState* City = GetCityMutable(CityId);
+	if (!City || City->PendingBorderExpansions <= 0 || !IsValidExpansionTileForCity(*City, Coord))
+	{
+		return false;
+	}
+
+	if (!ClaimTileForCity(*City, Coord))
+	{
+		return false;
+	}
+
+	City->PendingBorderExpansions = FMath::Max(0, City->PendingBorderExpansions - 1);
+	AutoAssignWorkedTiles(*City);
+	RecalculateCityYields(*City);
+	RecalculateEmpireYields(City->OwnerPlayerId);
+	UpdateOwnedTileVisuals(City->OwnerPlayerId);
+
+	OnCityChanged.Broadcast(City->CityId);
+
+	if (GameStateRef)
+	{
+		GameStateRef->BroadcastStateChanged();
+	}
+
+	return true;
+}
+
+bool UConquestCityManager::RefreshCityYields(int32 CityId)
+{
+	FCityState* City = GetCityMutable(CityId);
+	if (!City)
+	{
+		return false;
+	}
+
+	AutoAssignWorkedTiles(*City);
+	RecalculateCityYields(*City);
+	RecalculateEmpireYields(City->OwnerPlayerId);
+
+	OnCityChanged.Broadcast(City->CityId);
+
+	if (GameStateRef)
+	{
+		GameStateRef->BroadcastStateChanged();
+	}
+
+	return true;
 }
 
 float UConquestCityManager::ScoreTileForExpansion(const FCityState& City, const FIntPoint& Coord) const
@@ -443,6 +508,11 @@ bool UConquestCityManager::SetCityProductionBuildingById(int32 CityId, FName Bui
 		GameStateRef->ContentManager->FindBuilding(BuildingId);
 
 	if (!BuildingRow)
+	{
+		return false;
+	}
+
+	if (BuildingRow->bHideFromProductionChoices || BuildingRow->bGrantedOnCityFounding)
 	{
 		return false;
 	}
@@ -507,6 +577,11 @@ TArray<FName> UConquestCityManager::GetAvailableProductionBuildingIdsForCity(int
 		}
 
 		const FName BaseBuildingId = BaseRow->BuildingId;
+
+		if (BaseRow->bHideFromProductionChoices || BaseRow->bGrantedOnCityFounding)
+		{
+			continue;
+		}
 
 		if (CityHasBuildingOrReplacement(*City, BaseBuildingId))
 		{

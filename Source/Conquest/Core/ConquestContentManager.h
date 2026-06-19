@@ -32,6 +32,7 @@ public:
 	const FConquestUnitRow* ResolveUnitForPlayer(int32 PlayerId, FName BaseUnitId) const;
 
 	void GetAllBaseBuildings(TArray<const FConquestBuildingRow*>& OutRows) const;
+	void GetStartingBuildingIdsForPlayer(int32 PlayerId, TArray<FName>& OutBuildingIds) const;
 	void GetAllTechs(TArray<const FConquestTechRow*>& OutRows) const;
 
 private:

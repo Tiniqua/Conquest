@@ -1,6 +1,8 @@
 #include "ModularHexGridActor.h"
 
 #include "ConquestGameSetupTypes.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestCityManager.h"
 #include "HexMapTypePresets.h"
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
@@ -43,6 +45,16 @@ AModularHexGridActor::AModularHexGridActor()
 	HoverHighlightMesh->bCastStaticShadow = false;
 	HoverHighlightMesh->CastShadow = false;
 	HoverHighlightMesh->TranslucencySortPriority = 5;
+
+	CivilisationBorderMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("CivilisationBorderMesh"));
+	CivilisationBorderMesh->SetupAttachment(SceneRoot);
+	CivilisationBorderMesh->bUseAsyncCooking = true;
+	CivilisationBorderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CivilisationBorderMesh->SetCastShadow(false);
+	CivilisationBorderMesh->bCastDynamicShadow = false;
+	CivilisationBorderMesh->bCastStaticShadow = false;
+	CivilisationBorderMesh->CastShadow = false;
+	CivilisationBorderMesh->TranslucencySortPriority = 4;
 	
 	if (HoverHighlightMesh)
 	{
@@ -179,6 +191,149 @@ void AModularHexGridActor::ClearCityPlaceholders()
 		CityPlaceholderMeshComponent->ClearInstances();
 		CityPlaceholderMeshComponent->MarkRenderStateDirty();
 	}
+}
+
+void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial)
+{
+	if (!CivilisationBorderMesh)
+	{
+		return;
+	}
+
+	CivilisationBorderMesh->ClearAllMeshSections();
+
+	if (OwnerPlayerId == INDEX_NONE)
+	{
+		CivilisationBorderMesh->SetVisibility(false);
+		return;
+	}
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	auto AddQuad = [&](
+		const FVector& A,
+		const FVector& B,
+		const FVector& C,
+		const FVector& D
+	)
+	{
+		const int32 StartIndex = Vertices.Num();
+
+		Vertices.Add(A);
+		Vertices.Add(B);
+		Vertices.Add(C);
+		Vertices.Add(D);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 1);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 3);
+		Triangles.Add(StartIndex + 2);
+
+		for (int32 i = 0; i < 4; ++i)
+		{
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(FColor::White);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+	};
+
+	for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+	{
+		for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+		{
+			const FHexTileData* Tile = GridModel.GetTile(Q, R);
+			if (!Tile || Tile->Gameplay.OwnerPlayerId != OwnerPlayerId)
+			{
+				continue;
+			}
+
+			const FVector Center = GridModel.GetHexCenter(Q, R);
+
+			TArray<FVector> Corners;
+			Corners.SetNum(6);
+
+			for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+			{
+				const FVector FlatCorner = Center + GridModel.GetHexCornerOffset(CornerIndex);
+
+				float CornerZ = 0.0f;
+				if (GridModel.UsesHeightOffsets())
+				{
+					CornerZ = GridModel.GetResolvedCornerHeight(FlatCorner);
+					CornerZ += GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
+				}
+
+				Corners[CornerIndex] = FVector(
+					FlatCorner.X,
+					FlatCorner.Y,
+					CornerZ + CivilisationBorderSurfaceOffset
+				);
+			}
+
+			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+			{
+				int32 NeighborQ = INDEX_NONE;
+				int32 NeighborR = INDEX_NONE;
+				const bool bHasNeighbor = GridModel.GetNeighbourCoord(Q, R, EdgeIndex, NeighborQ, NeighborR);
+				const FHexTileData* NeighborTile = bHasNeighbor ? GridModel.GetTile(NeighborQ, NeighborR) : nullptr;
+
+				if (NeighborTile && NeighborTile->Gameplay.OwnerPlayerId == OwnerPlayerId)
+				{
+					continue;
+				}
+
+				const FVector A = Corners[EdgeIndex];
+				const FVector B = Corners[(EdgeIndex + 1) % 6];
+
+				FVector ToCenter = Center - ((A + B) * 0.5f);
+				ToCenter.Z = 0.0f;
+				ToCenter.Normalize();
+
+				const FVector HalfWidth = ToCenter * CivilisationBorderEdgeWidth * 0.5f;
+
+				AddQuad(
+					A - HalfWidth,
+					B - HalfWidth,
+					B + HalfWidth,
+					A + HalfWidth
+				);
+			}
+		}
+	}
+
+	if (Vertices.Num() <= 0)
+	{
+		CivilisationBorderMesh->SetVisibility(false);
+		return;
+	}
+
+	CivilisationBorderMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	UMaterialInterface* EffectiveMaterial = BorderMaterial ? BorderMaterial : DefaultCivilisationBorderMaterial.Get();
+	if (EffectiveMaterial)
+	{
+		CivilisationBorderMesh->SetMaterial(0, EffectiveMaterial);
+	}
+
+	CivilisationBorderMesh->SetVisibility(true);
 }
 
 void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
@@ -335,6 +490,11 @@ void AModularHexGridActor::RebuildGrid()
 	}
 
 	ClearCityPlaceholders();
+	if (CivilisationBorderMesh)
+	{
+		CivilisationBorderMesh->ClearAllMeshSections();
+		CivilisationBorderMesh->SetVisibility(false);
+	}
 }
 
 void AModularHexGridActor::RegenerateGridWithNewRandomSeed()
@@ -558,6 +718,22 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 	{
 		// Terrain shape does not change yet, but this makes material/yield-driven visual changes easy later.
 		MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
+
+		if (const FHexTileData* Tile = GridModel.GetTile(Q, R))
+		{
+			AConquestGameState* ConquestGameState = GetWorld()
+				? GetWorld()->GetGameState<AConquestGameState>()
+				: nullptr;
+
+			if (
+				ConquestGameState &&
+				ConquestGameState->CityManager &&
+				Tile->Gameplay.OwningCityId != INDEX_NONE
+			)
+			{
+				ConquestGameState->CityManager->RefreshCityYields(Tile->Gameplay.OwningCityId);
+			}
+		}
 	}
 	return bChanged;
 }
@@ -664,6 +840,17 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		HexGridOverlayMesh->bCastStaticShadow = false;
 		HexGridOverlayMesh->CastShadow = false;
 		HexGridOverlayMesh->TranslucencySortPriority = 2;
+	}
+
+	if (CivilisationBorderMesh)
+	{
+		CivilisationBorderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CivilisationBorderMesh->SetCastShadow(false);
+		CivilisationBorderMesh->bCastDynamicShadow = false;
+		CivilisationBorderMesh->bCastStaticShadow = false;
+		CivilisationBorderMesh->CastShadow = false;
+		CivilisationBorderMesh->TranslucencySortPriority = 4;
+		CivilisationBorderMesh->SetVisibility(false);
 	}
 
 	if (FogOfWarMesh)

@@ -15,6 +15,7 @@
 
 class USceneComponent;
 class UProceduralMeshComponent;
+class UMaterialInterface;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UHexImprovementSetData;
@@ -30,6 +31,7 @@ public:
 	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord) const;
 	void AddCityPlaceholder(int32 CityId, const FIntPoint& Coord);
 	void ClearCityPlaceholders();
+	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial);
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	// -----------------------------------------------------------------------------
@@ -128,6 +130,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Hover")
 	float HoverSurfaceOffset = 8.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Borders")
+	TObjectPtr<UProceduralMeshComponent> CivilisationBorderMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	TObjectPtr<UMaterialInterface> DefaultCivilisationBorderMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	float CivilisationBorderEdgeWidth = 14.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	float CivilisationBorderSurfaceOffset = 10.0f;
 	
 protected:
 	virtual void BeginPlay() override;

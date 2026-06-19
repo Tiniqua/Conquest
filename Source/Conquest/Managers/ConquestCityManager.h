@@ -9,6 +9,7 @@ class AConquestGameState;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCityChanged, int32, CityId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCityFounded, int32, CityId, FIntPoint, Coord);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCityNeedsBorderExpansion, int32, CityId);
 
 UCLASS(BlueprintType)
 class CONQUEST_API UConquestCityManager : public UObject
@@ -24,8 +25,14 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnCityFounded OnCityFounded;
 
+	UPROPERTY(BlueprintAssignable)
+	FOnCityNeedsBorderExpansion OnCityNeedsBorderExpansion;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<FCityState> Cities;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Cities")
+	FName DefaultCityCentreBuildingId = FName(TEXT("CityCentre"));
 
 	UFUNCTION(BlueprintCallable)
 	bool FoundCity(int32 PlayerId, const FIntPoint& TileCoord, FName CityName);
@@ -41,6 +48,15 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FName> GetAvailableProductionBuildingIdsForCity(int32 CityId) const;
+
+	UFUNCTION(BlueprintCallable)
+	TArray<FIntPoint> GetExpansionCandidateTiles(int32 CityId) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool ClaimExpansionTileForCity(int32 CityId, const FIntPoint& Coord);
+
+	UFUNCTION(BlueprintCallable)
+	bool RefreshCityYields(int32 CityId);
 	
 	UFUNCTION(BlueprintCallable)
 	int32 EstimateTurnsToBuildById(int32 CityId, FName BuildingId) const;
@@ -59,13 +75,14 @@ private:
 	int32 NextCityId = 1;
 
 	bool IsValidFoundCityTile(const FIntPoint& TileCoord) const;
-	void ClaimInitialTiles(FCityState& City);
-	void ClaimTileForCity(FCityState& City, const FIntPoint& Coord);
+	void GrantStartingBuildings(FCityState& City);
+	bool ClaimTileForCity(FCityState& City, const FIntPoint& Coord);
+	bool IsValidExpansionTileForCity(const FCityState& City, const FIntPoint& Coord) const;
 	void AutoAssignWorkedTiles(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
+	void RecalculateEmpireYields(int32 PlayerId);
+	void UpdateOwnedTileVisuals(int32 PlayerId);
 	void ProcessCityGrowth(FCityState& City);
 	void ProcessCityProduction(FCityState& City);
-	void ExpandCityBorders(FCityState& City, int32 NumTiles);
-	FIntPoint ChooseBestExpansionTile(const FCityState& City) const;
 	float ScoreTileForExpansion(const FCityState& City, const FIntPoint& Coord) const;
 };

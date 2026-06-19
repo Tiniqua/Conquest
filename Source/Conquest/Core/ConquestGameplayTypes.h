@@ -168,6 +168,9 @@ struct FCityState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bNeedsProductionChoice = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PendingBorderExpansions = 0;
 };
 
 USTRUCT(BlueprintType)

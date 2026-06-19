@@ -4,6 +4,8 @@
 #include "Engine/DataAsset.h"
 #include "ConquestCivilisationTypes.generated.h"
 
+class UMaterialInterface;
+
 USTRUCT(BlueprintType)
 struct FConquestContentOverride
 {
@@ -34,6 +36,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FText LeaderName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
+	TObjectPtr<UMaterialInterface> BorderMaterial = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FConquestContentOverride> BuildingOverrides;

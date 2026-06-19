@@ -48,6 +48,15 @@ struct FConquestTileExpansionChoiceData
 	FHexYield Yield;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	bool bAssigningToOwnedTile = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	int32 CurrentAssignedCitizens = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	int32 ResultAssignedCitizens = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
 	bool bIsValid = false;
 };
 

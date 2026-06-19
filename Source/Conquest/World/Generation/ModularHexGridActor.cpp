@@ -352,6 +352,18 @@ void AModularHexGridActor::UpdateCityWorldLabel(
 	}
 }
 
+void AModularHexGridActor::SetCityWorldLabelVisible(int32 CityId, bool bVisible)
+{
+	TObjectPtr<UWidgetComponent>* ExistingComponent = CityWorldLabelComponents.Find(CityId);
+	UWidgetComponent* LabelComponent = ExistingComponent ? ExistingComponent->Get() : nullptr;
+	if (!LabelComponent)
+	{
+		return;
+	}
+
+	LabelComponent->SetVisibility(bVisible);
+}
+
 void AModularHexGridActor::ClearCityPlaceholders()
 {
 	CityIdToPlaceholderInstanceIndex.Reset();

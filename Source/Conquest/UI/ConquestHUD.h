@@ -124,7 +124,10 @@ protected:
 	int32 ExpansionSelectionCityId = INDEX_NONE;
 	FIntPoint PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 	FIntPoint PendingImprovementTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+	int32 HiddenCityWorldLabelId = INDEX_NONE;
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();
+	void SetCityWorldLabelHiddenForPanel(int32 CityId);
+	void RestoreHiddenCityWorldLabel();
 };

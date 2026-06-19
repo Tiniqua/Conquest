@@ -392,16 +392,27 @@ void UConquestGameWidget::ShowTileExpansionConfirmation(const FConquestTileExpan
 
 	SetText(
 		TileExpansionTitleText,
-		FString::Printf(TEXT("Claim Tile [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
+		ChoiceData.bAssigningToOwnedTile
+			? FString::Printf(TEXT("Assign Citizen [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
+			: FString::Printf(TEXT("Claim Tile [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
 	);
 	SetText(
 		TileExpansionDetailText,
-		FString::Printf(
-			TEXT("%s | Resource: %s | Features: %s"),
-			*ChoiceData.TileType,
-			*ChoiceData.Resource,
-			*ChoiceData.Features
-		)
+		ChoiceData.bAssigningToOwnedTile
+			? FString::Printf(
+				TEXT("%s | Resource: %s | Features: %s | Citizens: %d -> %d"),
+				*ChoiceData.TileType,
+				*ChoiceData.Resource,
+				*ChoiceData.Features,
+				ChoiceData.CurrentAssignedCitizens,
+				ChoiceData.ResultAssignedCitizens
+			)
+			: FString::Printf(
+				TEXT("%s | Resource: %s | Features: %s"),
+				*ChoiceData.TileType,
+				*ChoiceData.Resource,
+				*ChoiceData.Features
+			)
 	);
 	SetText(TileExpansionYieldText, ChoiceData.Yield.ToCompactString());
 }

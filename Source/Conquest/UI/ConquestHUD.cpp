@@ -150,6 +150,7 @@ void AConquestHUD::ShowCityPanel(int32 CityId)
 	ClearTileImprovementChoices();
 	CityPanelWidget->SetCity(CityId);
 	CityPanelWidget->SetVisibility(ESlateVisibility::Visible);
+	SetCityWorldLabelHiddenForPanel(CityId);
 
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
@@ -166,6 +167,8 @@ void AConquestHUD::HideCityPanel()
 		CityPanelWidget->ClosePanel();
 	}
 
+	RestoreHiddenCityWorldLabel();
+
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
 		ActiveGameWidget->ClearSelectedCityYieldContext();
@@ -173,6 +176,47 @@ void AConquestHUD::HideCityPanel()
 
 	ClearCityTileExpansionSelection();
 	ClearTileImprovementChoices();
+}
+
+void AConquestHUD::SetCityWorldLabelHiddenForPanel(int32 CityId)
+{
+	if (HiddenCityWorldLabelId == CityId)
+	{
+		return;
+	}
+
+	RestoreHiddenCityWorldLabel();
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ActiveGridActor || CityId == INDEX_NONE)
+	{
+		return;
+	}
+
+	ConquestGS->ActiveGridActor->SetCityWorldLabelVisible(CityId, false);
+	HiddenCityWorldLabelId = CityId;
+}
+
+void AConquestHUD::RestoreHiddenCityWorldLabel()
+{
+	if (HiddenCityWorldLabelId == INDEX_NONE)
+	{
+		return;
+	}
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (ConquestGS && ConquestGS->ActiveGridActor)
+	{
+		ConquestGS->ActiveGridActor->SetCityWorldLabelVisible(HiddenCityWorldLabelId, true);
+	}
+
+	HiddenCityWorldLabelId = INDEX_NONE;
 }
 
 void AConquestHUD::BeginCityTileExpansionSelection(int32 CityId)
@@ -239,6 +283,21 @@ bool AConquestHUD::SelectExpansionCandidateTile(int32 Q, int32 R)
 
 	PendingExpansionTileCoord = Coord;
 
+	int32 CurrentAssignedCitizens = 0;
+	bool bAssigningToOwnedTile = false;
+	if (const FCityState* City = ConquestGS->CityManager->GetCity(ExpansionSelectionCityId))
+	{
+		bAssigningToOwnedTile = City->OwnedTiles.Contains(Coord);
+		for (const FCityWorkedTileAssignment& Assignment : City->WorkedTileAssignments)
+		{
+			if (Assignment.Coord == Coord)
+			{
+				CurrentAssignedCitizens = Assignment.Citizens;
+				break;
+			}
+		}
+	}
+
 	FConquestTileExpansionChoiceData ChoiceData;
 	ChoiceData.CityId = ExpansionSelectionCityId;
 	ChoiceData.Coord = Coord;
@@ -246,6 +305,11 @@ bool AConquestHUD::SelectExpansionCandidateTile(int32 Q, int32 R)
 	ChoiceData.Resource = ConquestHUDFormatTileResource(*Tile);
 	ChoiceData.Features = ConquestHUDFormatTileFeatures(*Tile);
 	ChoiceData.Yield = Tile->FinalYield;
+	ChoiceData.bAssigningToOwnedTile = bAssigningToOwnedTile;
+	ChoiceData.CurrentAssignedCitizens = CurrentAssignedCitizens;
+	ChoiceData.ResultAssignedCitizens = bAssigningToOwnedTile
+		? FMath::Clamp(CurrentAssignedCitizens + 1, 1, 3)
+		: 1;
 	ChoiceData.bIsValid = true;
 
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())

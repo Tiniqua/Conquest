@@ -36,6 +36,10 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 
 	GrantStartingBuildings(NewCity);
 	ClaimTileForCity(NewCity, TileCoord);
+	FCityWorkedTileAssignment CenterAssignment;
+	CenterAssignment.Coord = TileCoord;
+	CenterAssignment.Citizens = 1;
+	NewCity.WorkedTileAssignments.Add(CenterAssignment);
 	AutoAssignWorkedTiles(NewCity);
 	RecalculateCityYields(NewCity);
 
@@ -252,7 +256,47 @@ bool UConquestCityManager::IsValidExpansionTileForCity(const FCityState& City, c
 	return false;
 }
 
+bool UConquestCityManager::IsValidPopulationAssignmentTile(const FCityState& City, const FIntPoint& Coord) const
+{
+	if (!GameStateRef)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	if (!GridModel)
+	{
+		return false;
+	}
+
+	const FHexTileData* Tile = GridModel->GetTile(Coord);
+	if (!Tile)
+	{
+		return false;
+	}
+
+	if (City.OwnedTiles.Contains(Coord))
+	{
+		return Coord != City.CenterTile && GetAssignedCitizensForTile(City, Coord) < 3;
+	}
+
+	return IsValidExpansionTileForCity(City, Coord);
+}
+
 void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
+{
+	if (City.WorkedTileAssignments.Num() <= 0)
+	{
+		FCityWorkedTileAssignment CenterAssignment;
+		CenterAssignment.Coord = City.CenterTile;
+		CenterAssignment.Citizens = 1;
+		City.WorkedTileAssignments.Add(CenterAssignment);
+	}
+
+	SyncWorkedTilesFromAssignments(City);
+}
+
+void UConquestCityManager::SyncWorkedTilesFromAssignments(FCityState& City)
 {
 	if (!GameStateRef)
 	{
@@ -275,7 +319,29 @@ void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
 	}
 
 	City.WorkedTiles.Reset();
-	City.WorkedTiles = City.OwnedTiles;
+
+	for (int32 AssignmentIndex = City.WorkedTileAssignments.Num() - 1; AssignmentIndex >= 0; --AssignmentIndex)
+	{
+		FCityWorkedTileAssignment& Assignment = City.WorkedTileAssignments[AssignmentIndex];
+		Assignment.Citizens = FMath::Clamp(Assignment.Citizens, 1, 3);
+
+		if (!City.OwnedTiles.Contains(Assignment.Coord))
+		{
+			City.WorkedTileAssignments.RemoveAt(AssignmentIndex);
+			continue;
+		}
+
+		City.WorkedTiles.AddUnique(Assignment.Coord);
+	}
+
+	if (!City.WorkedTiles.Contains(City.CenterTile) && City.OwnedTiles.Contains(City.CenterTile))
+	{
+		FCityWorkedTileAssignment CenterAssignment;
+		CenterAssignment.Coord = City.CenterTile;
+		CenterAssignment.Citizens = 1;
+		City.WorkedTileAssignments.Add(CenterAssignment);
+		City.WorkedTiles.AddUnique(City.CenterTile);
+	}
 
 	for (const FIntPoint& Coord : City.WorkedTiles)
 	{
@@ -285,6 +351,49 @@ void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
 			WorkedTile->Gameplay.WorkedByCityId = City.CityId;
 		}
 	}
+}
+
+int32 UConquestCityManager::GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const
+{
+	for (const FCityWorkedTileAssignment& Assignment : City.WorkedTileAssignments)
+	{
+		if (Assignment.Coord == Coord)
+		{
+			return Assignment.Citizens;
+		}
+	}
+
+	return 0;
+}
+
+bool UConquestCityManager::AssignCitizenToTile(FCityState& City, const FIntPoint& Coord)
+{
+	for (FCityWorkedTileAssignment& Assignment : City.WorkedTileAssignments)
+	{
+		if (Assignment.Coord == Coord)
+		{
+			if (Coord == City.CenterTile || Assignment.Citizens >= 3)
+			{
+				return false;
+			}
+
+			Assignment.Citizens += 1;
+			SyncWorkedTilesFromAssignments(City);
+			return true;
+		}
+	}
+
+	if (!City.OwnedTiles.Contains(Coord))
+	{
+		return false;
+	}
+
+	FCityWorkedTileAssignment NewAssignment;
+	NewAssignment.Coord = Coord;
+	NewAssignment.Citizens = 1;
+	City.WorkedTileAssignments.Add(NewAssignment);
+	SyncWorkedTilesFromAssignments(City);
+	return true;
 }
 
 void UConquestCityManager::RecalculateCityYields(FCityState& City)
@@ -768,6 +877,11 @@ TArray<FIntPoint> UConquestCityManager::GetExpansionCandidateTiles(int32 CityId)
 
 	for (const FIntPoint& OwnedCoord : City->OwnedTiles)
 	{
+		if (IsValidPopulationAssignmentTile(*City, OwnedCoord))
+		{
+			Result.AddUnique(OwnedCoord);
+		}
+
 		for (int32 Direction = 0; Direction < 6; ++Direction)
 		{
 			int32 NeighborQ = INDEX_NONE;
@@ -796,21 +910,30 @@ TArray<FIntPoint> UConquestCityManager::GetExpansionCandidateTiles(int32 CityId)
 bool UConquestCityManager::ClaimExpansionTileForCity(int32 CityId, const FIntPoint& Coord)
 {
 	FCityState* City = GetCityMutable(CityId);
-	if (!City || City->PendingBorderExpansions <= 0 || !IsValidExpansionTileForCity(*City, Coord))
+	if (!City || City->PendingBorderExpansions <= 0 || !IsValidPopulationAssignmentTile(*City, Coord))
 	{
 		return false;
 	}
 
-	if (!ClaimTileForCity(*City, Coord))
+	const bool bWasAlreadyOwned = City->OwnedTiles.Contains(Coord);
+	if (!bWasAlreadyOwned && !ClaimTileForCity(*City, Coord))
+	{
+		return false;
+	}
+
+	if (!AssignCitizenToTile(*City, Coord))
 	{
 		return false;
 	}
 
 	City->PendingBorderExpansions = FMath::Max(0, City->PendingBorderExpansions - 1);
-	AutoAssignWorkedTiles(*City);
 	RecalculateCityYields(*City);
 	RecalculateEmpireYields(City->OwnerPlayerId);
-	UpdateOwnedTileVisuals(City->OwnerPlayerId);
+
+	if (!bWasAlreadyOwned)
+	{
+		UpdateOwnedTileVisuals(City->OwnerPlayerId);
+	}
 
 	OnCityChanged.Broadcast(City->CityId);
 
@@ -966,6 +1089,11 @@ float UConquestCityManager::ScoreTileForExpansion(const FCityState& City, const 
 	const FHexYield TileYield = GameStateRef->YieldManager->CalculateTileYield(*Tile);
 
 	float Score = TileYield.GetWeightedScore(3.0f, 3.0f, 1.5f, 2.0f, 2.0f, 1.0f);
+	if (City.OwnedTiles.Contains(Coord))
+	{
+		const int32 AssignedCitizens = GetAssignedCitizensForTile(City, Coord);
+		Score *= AssignedCitizens <= 0 ? 1.0f : 0.5f;
+	}
 
 	const int32 Distance =
 		FMath::Abs(City.CenterTile.X - Coord.X) +

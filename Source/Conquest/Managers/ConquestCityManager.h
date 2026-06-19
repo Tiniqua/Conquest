@@ -102,7 +102,11 @@ private:
 	void GrantStartingBuildings(FCityState& City);
 	bool ClaimTileForCity(FCityState& City, const FIntPoint& Coord);
 	bool IsValidExpansionTileForCity(const FCityState& City, const FIntPoint& Coord) const;
+	bool IsValidPopulationAssignmentTile(const FCityState& City, const FIntPoint& Coord) const;
 	void AutoAssignWorkedTiles(FCityState& City);
+	void SyncWorkedTilesFromAssignments(FCityState& City);
+	int32 GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const;
+	bool AssignCitizenToTile(FCityState& City, const FIntPoint& Coord);
 	void RecalculateCityYields(FCityState& City);
 	void RecalculateEmpireYields(int32 PlayerId);
 	void RecalculateStrategicResourceEconomy(int32 PlayerId);

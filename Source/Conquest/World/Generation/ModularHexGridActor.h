@@ -58,6 +58,7 @@ public:
 		UMaterialInterface* CivilisationThemeMaterial = nullptr,
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);
+	void SetCityWorldLabelVisible(int32 CityId, bool bVisible);
 	void ClearCityPlaceholders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
 	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);

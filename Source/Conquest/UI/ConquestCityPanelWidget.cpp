@@ -1,11 +1,13 @@
 ﻿#include "Conquest/UI/ConquestCityPanelWidget.h"
 
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GameFramework/PlayerController.h"
 
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
+#include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
@@ -23,6 +25,18 @@ void UConquestCityPanelWidget::NativeConstruct()
 	{
 		CloseButton->OnClicked.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCloseClicked);
 		CloseButton->OnClicked.AddDynamic(this, &UConquestCityPanelWidget::HandleCloseClicked);
+	}
+
+	if (UnitsButton)
+	{
+		UnitsButton->OnClicked.RemoveDynamic(this, &UConquestCityPanelWidget::HandleUnitsButtonClicked);
+		UnitsButton->OnClicked.AddDynamic(this, &UConquestCityPanelWidget::HandleUnitsButtonClicked);
+	}
+
+	if (BuildingsButton)
+	{
+		BuildingsButton->OnClicked.RemoveDynamic(this, &UConquestCityPanelWidget::HandleBuildingsButtonClicked);
+		BuildingsButton->OnClicked.AddDynamic(this, &UConquestCityPanelWidget::HandleBuildingsButtonClicked);
 	}
 
 	Refresh();
@@ -62,6 +76,8 @@ void UConquestCityPanelWidget::Refresh()
 	{
 		CityNameText->SetText(FText::FromName(City->CityName));
 	}
+
+	ApplyCivilisationTheme(*City, *GS);
 
 	if (PopulationText)
 	{
@@ -152,10 +168,50 @@ void UConquestCityPanelWidget::Refresh()
 	BuildBuildingButtons();
 }
 
+void UConquestCityPanelWidget::ApplyCivilisationTheme(const FCityState& City, const AConquestGameState& GS)
+{
+	UMaterialInterface* CivilisationThemeMaterial = nullptr;
+	FLinearColor CivilisationThemeColor = FLinearColor::White;
+
+	if (GS.HumanPlayer.PlayerId == City.OwnerPlayerId && GS.HumanCivilisation)
+	{
+		CivilisationThemeMaterial = GS.HumanCivilisation->CityLabelMaterial
+			? GS.HumanCivilisation->CityLabelMaterial
+			: GS.HumanCivilisation->BorderMaterial;
+		CivilisationThemeColor = GS.HumanCivilisation->ThemeColor;
+	}
+
+	auto ApplyThemeToImage = [CivilisationThemeMaterial, CivilisationThemeColor](UImage* Image)
+	{
+		if (!Image)
+		{
+			return;
+		}
+
+		if (CivilisationThemeMaterial)
+		{
+			Image->SetBrushFromMaterial(CivilisationThemeMaterial);
+		}
+
+		Image->SetColorAndOpacity(CivilisationThemeColor);
+	};
+
+	ApplyThemeToImage(CityNameThemeMaterialImage);
+	ApplyThemeToImage(ThemeMaterialImage);
+
+	OnCivilisationThemeChanged(CivilisationThemeMaterial, CivilisationThemeColor);
+}
+
 void UConquestCityPanelWidget::ClosePanel()
 {
 	CityId = INDEX_NONE;
 	SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UConquestCityPanelWidget::SetProductionPanelTab(EConquestCityProductionPanelTab NewTab)
+{
+	ActiveProductionPanelTab = NewTab;
+	BuildBuildingButtons();
 }
 
 void UConquestCityPanelWidget::BindToGameState()
@@ -245,6 +301,16 @@ void UConquestCityPanelWidget::HandleCloseClicked()
 	ClosePanel();
 }
 
+void UConquestCityPanelWidget::HandleUnitsButtonClicked()
+{
+	SetProductionPanelTab(EConquestCityProductionPanelTab::Units);
+}
+
+void UConquestCityPanelWidget::HandleBuildingsButtonClicked()
+{
+	SetProductionPanelTab(EConquestCityProductionPanelTab::Buildings);
+}
+
 void UConquestCityPanelWidget::BuildBuildingButtons()
 {
 	if (!BuildingButtonBox)
@@ -274,8 +340,25 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 		return;
 	}
 
+	if (ActiveProductionPanelTab == EConquestCityProductionPanelTab::Buildings)
+	{
+		BuildBuildingChoices(*GS);
+	}
+	else
+	{
+		BuildUnitChoices(*GS);
+	}
+}
+
+void UConquestCityPanelWidget::BuildBuildingChoices(AConquestGameState& GS)
+{
+	if (!BuildingButtonBox || !GS.CityManager || !GS.ContentManager || !ChoiceButtonWidgetClass)
+	{
+		return;
+	}
+
 	const TArray<FName> AvailableBuildingIds =
-		GS->CityManager->GetAvailableProductionBuildingIdsForCity(CityId);
+		GS.CityManager->GetAvailableProductionBuildingIdsForCity(CityId);
 
 	for (const FName BuildingId : AvailableBuildingIds)
 	{
@@ -285,7 +368,7 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 		}
 
 		const FConquestBuildingRow* BuildingRow =
-			GS->ContentManager->FindBuilding(BuildingId);
+			GS.ContentManager->FindBuilding(BuildingId);
 
 		if (!BuildingRow)
 		{
@@ -304,7 +387,7 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 		}
 
 		const int32 Turns =
-			GS->CityManager->EstimateTurnsToBuildById(CityId, BuildingId);
+			GS.CityManager->EstimateTurnsToBuildById(CityId, BuildingId);
 
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::ProductionBuilding;
@@ -346,9 +429,17 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 
 		BuildingButtonBox->AddChild(ChoiceButton);
 	}
+}
+
+void UConquestCityPanelWidget::BuildUnitChoices(AConquestGameState& GS)
+{
+	if (!BuildingButtonBox || !GS.CityManager || !GS.ContentManager || !ChoiceButtonWidgetClass)
+	{
+		return;
+	}
 
 	const TArray<FName> AvailableUnitIds =
-		GS->CityManager->GetAvailableProductionUnitIdsForCity(CityId);
+		GS.CityManager->GetAvailableProductionUnitIdsForCity(CityId);
 
 	for (const FName UnitId : AvailableUnitIds)
 	{
@@ -357,7 +448,7 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 			continue;
 		}
 
-		const FConquestUnitRow* UnitRow = GS->ContentManager->FindUnit(UnitId);
+		const FConquestUnitRow* UnitRow = GS.ContentManager->FindUnit(UnitId);
 		if (!UnitRow)
 		{
 			continue;
@@ -375,7 +466,7 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 		}
 
 		const int32 Turns =
-			GS->CityManager->EstimateTurnsToTrainUnitById(CityId, UnitId);
+			GS.CityManager->EstimateTurnsToTrainUnitById(CityId, UnitId);
 
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::ProductionUnit;

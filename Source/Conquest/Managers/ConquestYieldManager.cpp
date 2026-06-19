@@ -21,6 +21,31 @@ namespace
 		Yield.Science = 2;
 		return Yield;
 	}
+
+	float GetTileCitizenYieldMultiplier(int32 Citizens)
+	{
+		switch (FMath::Clamp(Citizens, 1, 3))
+		{
+		case 1:
+			return 1.0f;
+		case 2:
+			return 1.5f;
+		default:
+			return 2.0f;
+		}
+	}
+
+	FHexYield ScaleYield(const FHexYield& Yield, float Multiplier)
+	{
+		FHexYield Result;
+		Result.Food = FMath::RoundToInt(static_cast<float>(Yield.Food) * Multiplier);
+		Result.Production = FMath::RoundToInt(static_cast<float>(Yield.Production) * Multiplier);
+		Result.Gold = FMath::RoundToInt(static_cast<float>(Yield.Gold) * Multiplier);
+		Result.Science = FMath::RoundToInt(static_cast<float>(Yield.Science) * Multiplier);
+		Result.Culture = FMath::RoundToInt(static_cast<float>(Yield.Culture) * Multiplier);
+		Result.Faith = FMath::RoundToInt(static_cast<float>(Yield.Faith) * Multiplier);
+		return Result;
+	}
 }
 
 void UConquestYieldManager::Initialize(AConquestGameState* InGameState)
@@ -77,15 +102,34 @@ FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City
 		return Result;
 	}
 
-	for (const FIntPoint& Coord : City.WorkedTiles)
+	if (City.WorkedTileAssignments.Num() > 0)
 	{
-		const FHexTileData* Tile = GridModel->GetTile(Coord);
-		if (!Tile)
+		for (const FCityWorkedTileAssignment& Assignment : City.WorkedTileAssignments)
 		{
-			continue;
-		}
+			const FHexTileData* Tile = GridModel->GetTile(Assignment.Coord);
+			if (!Tile)
+			{
+				continue;
+			}
 
-		Result += CalculateTileYield(*Tile);
+			Result += ScaleYield(
+				CalculateTileYield(*Tile),
+				GetTileCitizenYieldMultiplier(Assignment.Citizens)
+			);
+		}
+	}
+	else
+	{
+		for (const FIntPoint& Coord : City.WorkedTiles)
+		{
+			const FHexTileData* Tile = GridModel->GetTile(Coord);
+			if (!Tile)
+			{
+				continue;
+			}
+
+			Result += CalculateTileYield(*Tile);
+		}
 	}
 
 	Result += CalculateCityBuildingYields(City);

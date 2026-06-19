@@ -129,6 +129,18 @@ struct FCityProductionItem
 };
 
 USTRUCT(BlueprintType)
+struct FCityWorkedTileAssignment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FIntPoint Coord = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "1", ClampMax = "3"))
+	int32 Citizens = 1;
+};
+
+USTRUCT(BlueprintType)
 struct FCityState
 {
 	GENERATED_BODY()
@@ -159,6 +171,9 @@ struct FCityState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FIntPoint> WorkedTiles;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FCityWorkedTileAssignment> WorkedTileAssignments;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ConstructedBuildingIds;

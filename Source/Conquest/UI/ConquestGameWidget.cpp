@@ -6,7 +6,9 @@
 #include "Components/Widget.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
+#include "Conquest/Managers/ConquestYieldManager.h"
 
 void UConquestGameWidget::SetText(UTextBlock* TextBlock, const FText& Text)
 {
@@ -42,6 +44,68 @@ void UConquestGameWidget::SetYieldTexts(const FHexYield& Yield)
 	SetText(TileScienceText, FString::Printf(TEXT("Sci: %d"), Yield.Science));
 	SetText(TileCultureText, FString::Printf(TEXT("Culture: %d"), Yield.Culture));
 	SetText(TileFaithText, FString::Printf(TEXT("Faith: %d"), Yield.Faith));
+}
+
+FText UConquestGameWidget::FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn)
+{
+	return FText::Format(
+		NSLOCTEXT("Conquest", "TopBarStoredYieldFormat", "{0}: {1} (+{2})"),
+		Label,
+		FText::AsNumber(Stored),
+		FText::AsNumber(PerTurn)
+	);
+}
+
+FText UConquestGameWidget::FormatPerTurnYieldText(const FText& Label, int32 PerTurn)
+{
+	return FText::Format(
+		NSLOCTEXT("Conquest", "TopBarPerTurnYieldFormat", "{0}: +{1}"),
+		Label,
+		FText::AsNumber(PerTurn)
+	);
+}
+
+void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData)
+{
+	SetVisibility(TopBarYieldPanel, ESlateVisibility::Visible);
+	SetVisibility(
+		TopBarLocalYieldPanel,
+		YieldData.bShowSelectedCityLocalYields ? ESlateVisibility::Visible : ESlateVisibility::Collapsed
+	);
+
+	if (YieldData.bShowSelectedCityLocalYields)
+	{
+		SetText(
+			TopBarFoodText,
+			FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldFoodShort", "Food"), YieldData.SelectedCityYieldPerTurn.Food)
+		);
+		SetText(
+			TopBarProductionText,
+			FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldProductionShort", "Prod"), YieldData.SelectedCityYieldPerTurn.Production)
+		);
+	}
+	else
+	{
+		ClearText(TopBarFoodText);
+		ClearText(TopBarProductionText);
+	}
+
+	SetText(
+		TopBarGoldText,
+		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldGoldShort", "Gold"), YieldData.EmpireStoredYields.Gold, YieldData.EmpireYieldPerTurn.Gold)
+	);
+	SetText(
+		TopBarScienceText,
+		FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldScienceShort", "Sci"), YieldData.EmpireYieldPerTurn.Science)
+	);
+	SetText(
+		TopBarCultureText,
+		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldCultureShort", "Culture"), YieldData.EmpireStoredYields.Culture, YieldData.EmpireYieldPerTurn.Culture)
+	);
+	SetText(
+		TopBarFaithText,
+		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldFaithShort", "Faith"), YieldData.EmpireStoredYields.Faith, YieldData.EmpireYieldPerTurn.Faith)
+	);
 }
 
 void UConquestGameWidget::ClearTileTexts()
@@ -80,6 +144,9 @@ void UConquestGameWidget::NativeConstruct()
 
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
+		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
+		ConquestGS->OnConquestStateChanged.AddDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
+
 		if (ConquestGS->TurnManager)
 		{
 			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
@@ -89,12 +156,15 @@ void UConquestGameWidget::NativeConstruct()
 	
 	ClearHoveredTileInfo();
 	RefreshTurnInfo();
+	RefreshTopBarYieldInfo();
 }
 
 void UConquestGameWidget::NativeDestruct()
 {
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
+		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
+
 		if (ConquestGS->TurnManager)
 		{
 			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
@@ -132,6 +202,13 @@ void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 {
 	(void)NewTurn;
 	RefreshTurnInfo();
+	RefreshTopBarYieldInfo();
+}
+
+void UConquestGameWidget::HandleConquestStateChanged()
+{
+	RefreshTurnInfo();
+	RefreshTopBarYieldInfo();
 }
 
 void UConquestGameWidget::RefreshTurnInfo()
@@ -146,6 +223,62 @@ void UConquestGameWidget::RefreshTurnInfo()
 		NSLOCTEXT("Conquest", "TurnTextFormat", "Turn {0}"),
 		FText::AsNumber(ConquestGS->TurnManager->CurrentTurn)
 	));
+}
+
+FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
+{
+	FConquestTopBarYieldData Result;
+
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS)
+	{
+		return Result;
+	}
+
+	Result.EmpireStoredYields = ConquestGS->HumanPlayer.StoredYields;
+	Result.EmpireYieldPerTurn = ConquestGS->HumanPlayer.CachedYieldPerTurn;
+	Result.SelectedCityId = SelectedCityYieldContextId;
+	Result.bShowSelectedCityLocalYields = SelectedCityYieldContextId != INDEX_NONE;
+
+	if (Result.bShowSelectedCityLocalYields && ConquestGS->CityManager)
+	{
+		if (const FCityState* City = ConquestGS->CityManager->GetCity(SelectedCityYieldContextId))
+		{
+			Result.SelectedCityYieldPerTurn = City->CachedYieldPerTurn;
+		}
+		else
+		{
+			Result.SelectedCityId = INDEX_NONE;
+			Result.bShowSelectedCityLocalYields = false;
+		}
+	}
+
+	return Result;
+}
+
+void UConquestGameWidget::RefreshTopBarYieldInfo()
+{
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->YieldManager)
+		{
+			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(ConquestGS->HumanPlayer.PlayerId);
+		}
+	}
+
+	SetTopBarYieldTexts(GetTopBarYieldData());
+}
+
+void UConquestGameWidget::SetSelectedCityYieldContext(int32 CityId)
+{
+	SelectedCityYieldContextId = CityId;
+	RefreshTopBarYieldInfo();
+}
+
+void UConquestGameWidget::ClearSelectedCityYieldContext()
+{
+	SelectedCityYieldContextId = INDEX_NONE;
+	RefreshTopBarYieldInfo();
 }
 
 void UConquestGameWidget::UpdateHoveredTileInfo(const FHoveredHexTileWidgetData& HoveredTileData)

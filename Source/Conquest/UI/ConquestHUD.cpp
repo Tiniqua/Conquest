@@ -92,6 +92,11 @@ void AConquestHUD::ShowCityPanel(int32 CityId)
 
 	CityPanelWidget->SetCity(CityId);
 	CityPanelWidget->SetVisibility(ESlateVisibility::Visible);
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->SetSelectedCityYieldContext(CityId);
+	}
 }
 
 void AConquestHUD::HideCityPanel()
@@ -99,6 +104,11 @@ void AConquestHUD::HideCityPanel()
 	if (CityPanelWidget)
 	{
 		CityPanelWidget->ClosePanel();
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearSelectedCityYieldContext();
 	}
 }
 
@@ -138,6 +148,11 @@ void AConquestHUD::ShowGame()
 	if (HUDWidget)
 	{
 		HUDWidget->ShowGame();
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->RefreshTopBarYieldInfo();
 	}
 }
 

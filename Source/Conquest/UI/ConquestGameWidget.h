@@ -11,6 +11,27 @@ class UVerticalBox;
 class UWidget;
 
 USTRUCT(BlueprintType)
+struct FConquestTopBarYieldData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FHexYield EmpireStoredYields;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FHexYield EmpireYieldPerTurn;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FHexYield SelectedCityYieldPerTurn;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	int32 SelectedCityId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	bool bShowSelectedCityLocalYields = false;
+};
+
+USTRUCT(BlueprintType)
 struct FHoveredHexTileWidgetData
 {
 	GENERATED_BODY()
@@ -67,8 +88,26 @@ public:
 	UFUNCTION()
 	void HandleTurnChanged(int32 NewTurn);
 
+	UFUNCTION()
+	void HandleConquestStateChanged();
+
 	UFUNCTION(BlueprintCallable)
 	void RefreshTurnInfo();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
+	void RefreshTopBarYieldInfo();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
+	void SetSelectedCityYieldContext(int32 CityId);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
+	void ClearSelectedCityYieldContext();
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
+	FConquestTopBarYieldData GetTopBarYieldData() const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
+	bool ShouldShowSelectedCityLocalYields() const { return SelectedCityYieldContextId != INDEX_NONE; }
 
 protected:
 	virtual void NativeConstruct() override;
@@ -134,6 +173,30 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TurnText = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> TopBarYieldPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> TopBarLocalYieldPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarFoodText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarProductionText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarGoldText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarScienceText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarCultureText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarFaithText = nullptr;
+
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
@@ -141,5 +204,10 @@ private:
 	static void SetVisibility(UWidget* Widget, ESlateVisibility Visibility);
 
 	void SetYieldTexts(const FHexYield& Yield);
+	void SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData);
+	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn);
+	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn);
 	void ClearTileTexts();
+
+	int32 SelectedCityYieldContextId = INDEX_NONE;
 };

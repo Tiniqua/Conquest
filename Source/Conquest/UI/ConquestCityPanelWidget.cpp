@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "GameFramework/PlayerController.h"
 
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
@@ -350,10 +351,21 @@ void UConquestCityPanelWidget::HandleProductionChoiceClicked(
 		return;
 	}
 
-	GS->CityManager->SetCityProductionBuildingById(
+	const bool bSelectedProduction = GS->CityManager->SetCityProductionBuildingById(
 		CityId,
 		ChoiceData.ChoiceId
 	);
 
 	Refresh();
+
+	if (bSelectedProduction)
+	{
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PC->GetHUD()))
+			{
+				ConquestHUD->HideCityPanel();
+			}
+		}
+	}
 }

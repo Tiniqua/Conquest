@@ -449,7 +449,7 @@ void AConquestPawn::HandlePrimaryClick()
 	{
 		const bool bFounded = ConquestGM->FoundStartingCity(
 			ClickedCoord,
-			FName(TEXT("Capital"))
+			NAME_None
 		);
 
 		if (bFounded)

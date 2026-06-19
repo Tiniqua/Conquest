@@ -6,9 +6,12 @@
 #include "Components/Widget.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
+#include "Conquest/Tech/ConquestTechTypes.h"
 
 void UConquestGameWidget::SetText(UTextBlock* TextBlock, const FText& Text)
 {
@@ -176,12 +179,19 @@ void UConquestGameWidget::NativeConstruct()
 			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
 			ConquestGS->TurnManager->OnTurnChanged.AddDynamic(this, &UConquestGameWidget::HandleTurnChanged);
 		}
+
+		if (ConquestGS->TechManager)
+		{
+			ConquestGS->TechManager->OnResearchChanged.RemoveDynamic(this, &UConquestGameWidget::HandleResearchChanged);
+			ConquestGS->TechManager->OnResearchChanged.AddDynamic(this, &UConquestGameWidget::HandleResearchChanged);
+		}
 	}
 	
 	ClearHoveredTileInfo();
 	ClearTileExpansionConfirmation();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
+	RefreshResearchInfo();
 }
 
 void UConquestGameWidget::NativeDestruct()
@@ -193,6 +203,11 @@ void UConquestGameWidget::NativeDestruct()
 		if (ConquestGS->TurnManager)
 		{
 			ConquestGS->TurnManager->OnTurnChanged.RemoveDynamic(this, &UConquestGameWidget::HandleTurnChanged);
+		}
+
+		if (ConquestGS->TechManager)
+		{
+			ConquestGS->TechManager->OnResearchChanged.RemoveDynamic(this, &UConquestGameWidget::HandleResearchChanged);
 		}
 	}
 
@@ -228,12 +243,19 @@ void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 	(void)NewTurn;
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
+	RefreshResearchInfo();
 }
 
 void UConquestGameWidget::HandleConquestStateChanged()
 {
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
+	RefreshResearchInfo();
+}
+
+void UConquestGameWidget::HandleResearchChanged()
+{
+	RefreshResearchInfo();
 }
 
 void UConquestGameWidget::RefreshTurnInfo()
@@ -294,6 +316,45 @@ void UConquestGameWidget::RefreshTopBarYieldInfo()
 	}
 
 	SetTopBarYieldTexts(GetTopBarYieldData());
+}
+
+FText UConquestGameWidget::GetCurrentResearchStatusText() const
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->ContentManager)
+	{
+		return NSLOCTEXT("Conquest", "ResearchStatusUnavailable", "Choose Research");
+	}
+
+	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+	if (Player.CurrentResearchId.IsNone())
+	{
+		return NSLOCTEXT("Conquest", "ResearchStatusNone", "Choose Research");
+	}
+
+	const FConquestTechRow* CurrentTech = ConquestGS->ContentManager->FindTech(Player.CurrentResearchId);
+	if (!CurrentTech)
+	{
+		return FText::FromName(Player.CurrentResearchId);
+	}
+
+	const float Cost = FMath::Max(1.0f, static_cast<float>(CurrentTech->ScienceCost));
+	const int32 Percent = FMath::Clamp(
+		FMath::RoundToInt((Player.CurrentResearchProgress / Cost) * 100.0f),
+		0,
+		100
+	);
+
+	return FText::Format(
+		NSLOCTEXT("Conquest", "ResearchStatusPercentFormat", "{0} - {1}%"),
+		CurrentTech->DisplayName,
+		FText::AsNumber(Percent)
+	);
+}
+
+void UConquestGameWidget::RefreshResearchInfo()
+{
+	SetText(CurrentResearchText, GetCurrentResearchStatusText());
 }
 
 void UConquestGameWidget::SetSelectedCityYieldContext(int32 CityId)

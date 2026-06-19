@@ -7,6 +7,8 @@
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Conquest/UI/ConquestCityWorldLabelWidget.h"
 
 AModularHexGridActor::AModularHexGridActor()
 {
@@ -217,6 +219,16 @@ FTransform AModularHexGridActor::BuildCityPlaceholderTransform(
 	);
 }
 
+FTransform AModularHexGridActor::BuildCityWorldLabelTransform(const FIntPoint& Coord) const
+{
+	const FTransform SurfaceTransform = BuildCityPlaceholderTransform(Coord, true, FVector::OneVector);
+	return FTransform(
+		CityWorldLabelRotation,
+		SurfaceTransform.GetLocation() + CityWorldLabelOffset,
+		FVector(CityWorldLabelScale, CityWorldLabelScale, CityWorldLabelScale)
+	);
+}
+
 void AModularHexGridActor::AddCityPlaceholder(
 	int32 CityId,
 	const FIntPoint& Coord,
@@ -263,6 +275,83 @@ void AModularHexGridActor::AddCityPlaceholder(
 	CityMeshComponent->MarkRenderStateDirty();
 }
 
+void AModularHexGridActor::AddOrUpdateCityWorldLabel(
+	int32 CityId,
+	const FIntPoint& Coord,
+	FName CityName,
+	int32 Population,
+	UMaterialInterface* CivilisationThemeMaterial,
+	FLinearColor CivilisationThemeColor
+)
+{
+	if (CityId == INDEX_NONE || !CityWorldLabelWidgetClass)
+	{
+		return;
+	}
+
+	UWidgetComponent* LabelComponent = nullptr;
+	if (TObjectPtr<UWidgetComponent>* ExistingComponent = CityWorldLabelComponents.Find(CityId))
+	{
+		LabelComponent = ExistingComponent->Get();
+	}
+
+	if (!LabelComponent)
+	{
+		const FName ComponentName = MakeUniqueObjectName(
+			this,
+			UWidgetComponent::StaticClass(),
+			TEXT("CityWorldLabel")
+		);
+
+		LabelComponent = NewObject<UWidgetComponent>(this, ComponentName);
+		if (!LabelComponent)
+		{
+			return;
+		}
+
+		LabelComponent->SetupAttachment(SceneRoot);
+		LabelComponent->RegisterComponent();
+		LabelComponent->SetWidgetClass(CityWorldLabelWidgetClass);
+		LabelComponent->SetWidgetSpace(EWidgetSpace::World);
+		LabelComponent->SetDrawSize(CityWorldLabelDrawSize);
+		LabelComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		LabelComponent->SetGenerateOverlapEvents(false);
+		LabelComponent->SetCastShadow(false);
+		LabelComponent->bCastDynamicShadow = false;
+		LabelComponent->bCastStaticShadow = false;
+		LabelComponent->CastShadow = false;
+
+		AddInstanceComponent(LabelComponent);
+		CityWorldLabelComponents.Add(CityId, LabelComponent);
+	}
+
+	LabelComponent->SetRelativeTransform(BuildCityWorldLabelTransform(Coord));
+	LabelComponent->InitWidget();
+	LabelComponent->SetVisibility(true);
+	UpdateCityWorldLabel(CityId, CityName, Population, CivilisationThemeMaterial, CivilisationThemeColor);
+}
+
+void AModularHexGridActor::UpdateCityWorldLabel(
+	int32 CityId,
+	FName CityName,
+	int32 Population,
+	UMaterialInterface* CivilisationThemeMaterial,
+	FLinearColor CivilisationThemeColor
+)
+{
+	TObjectPtr<UWidgetComponent>* ExistingComponent = CityWorldLabelComponents.Find(CityId);
+	UWidgetComponent* LabelComponent = ExistingComponent ? ExistingComponent->Get() : nullptr;
+	if (!LabelComponent)
+	{
+		return;
+	}
+
+	if (UConquestCityWorldLabelWidget* LabelWidget = Cast<UConquestCityWorldLabelWidget>(LabelComponent->GetWidget()))
+	{
+		LabelWidget->SetCityLabel(CityName, Population, CivilisationThemeMaterial, CivilisationThemeColor);
+	}
+}
+
 void AModularHexGridActor::ClearCityPlaceholders()
 {
 	CityIdToPlaceholderInstanceIndex.Reset();
@@ -276,6 +365,16 @@ void AModularHexGridActor::ClearCityPlaceholders()
 			Pair.Value->MarkRenderStateDirty();
 		}
 	}
+
+	for (const TPair<int32, TObjectPtr<UWidgetComponent>>& Pair : CityWorldLabelComponents)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->DestroyComponent();
+		}
+	}
+
+	CityWorldLabelComponents.Reset();
 }
 
 void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)

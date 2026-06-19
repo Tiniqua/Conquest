@@ -90,6 +90,7 @@ private:
 	void RecalculateCityYields(FCityState& City);
 	void RecalculateEmpireYields(int32 PlayerId);
 	void UpdateOwnedTileVisuals(int32 PlayerId);
+	void UpdateCityWorldLabel(const FCityState& City);
 	FName ResolveCityName(int32 PlayerId, FName RequestedCityName) const;
 	void ProcessCityGrowth(FCityState& City);
 	void ProcessCityProduction(FCityState& City);

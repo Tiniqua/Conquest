@@ -2,6 +2,7 @@
 
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "GameFramework/PlayerController.h"
 
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
@@ -9,6 +10,7 @@
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
+#include "Conquest/UI/ConquestHUD.h"
 
 void UConquestResearchPanelWidget::NativeConstruct()
 {
@@ -194,6 +196,17 @@ void UConquestResearchPanelWidget::HandleTechClicked(FName TechId)
 		return;
 	}
 
-	GS->TechManager->SetCurrentResearchById(0, TechId);
+	const bool bSelectedResearch = GS->TechManager->SetCurrentResearchById(0, TechId);
 	RefreshResearchOptions();
+
+	if (bSelectedResearch)
+	{
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PC->GetHUD()))
+			{
+				ConquestHUD->HideResearchPanel();
+			}
+		}
+	}
 }

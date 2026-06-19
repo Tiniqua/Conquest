@@ -18,6 +18,8 @@ class UProceduralMeshComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UStaticMesh;
+class UWidgetComponent;
+class UConquestCityWorldLabelWidget;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UHexImprovementSetData;
@@ -31,6 +33,7 @@ public:
 	AModularHexGridActor();
 	UInstancedStaticMeshComponent* EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh = nullptr, UMaterialInterface* OverrideMaterial = nullptr);
 	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord, bool bOverrideScale = false, const FVector& OverrideScale = FVector::OneVector) const;
+	FTransform BuildCityWorldLabelTransform(const FIntPoint& Coord) const;
 	void AddCityPlaceholder(
 		int32 CityId,
 		const FIntPoint& Coord,
@@ -38,6 +41,21 @@ public:
 		UMaterialInterface* OverrideMaterial = nullptr,
 		bool bOverrideScale = false,
 		const FVector& OverrideScale = FVector::OneVector
+	);
+	void AddOrUpdateCityWorldLabel(
+		int32 CityId,
+		const FIntPoint& Coord,
+		FName CityName,
+		int32 Population,
+		UMaterialInterface* CivilisationThemeMaterial = nullptr,
+		FLinearColor CivilisationThemeColor = FLinearColor::White
+	);
+	void UpdateCityWorldLabel(
+		int32 CityId,
+		FName CityName,
+		int32 Population,
+		UMaterialInterface* CivilisationThemeMaterial = nullptr,
+		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);
 	void ClearCityPlaceholders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
@@ -68,6 +86,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
 	float CityPlaceholderGroundTraceHeight = 10000.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
+	TSubclassOf<UConquestCityWorldLabelWidget> CityWorldLabelWidgetClass;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
+	FVector CityWorldLabelOffset = FVector(0.0f, 0.0f, 120.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
+	FRotator CityWorldLabelRotation = FRotator(60.0f, 0.0f, 90.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
+	FVector2D CityWorldLabelDrawSize = FVector2D(240.0f, 80.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
+	float CityWorldLabelScale = 1.0f;
+
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> CityPlaceholderMeshComponent = nullptr;
 
@@ -79,6 +112,9 @@ public:
 
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UInstancedStaticMeshComponent>> CityPlaceholderMeshComponentsByVisualKey;
+
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UWidgetComponent>> CityWorldLabelComponents;
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();

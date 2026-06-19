@@ -130,6 +130,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void RefreshTopBarYieldInfo();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Research")
+	void RefreshResearchInfo();
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Research")
+	FText GetCurrentResearchStatusText() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void SetSelectedCityYieldContext(int32 CityId);
 
@@ -243,6 +249,9 @@ protected:
 	TObjectPtr<UTextBlock> TopBarHappinessText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CurrentResearchText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> TileExpansionConfirmPanel = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -280,4 +289,7 @@ private:
 
 	UFUNCTION()
 	void HandleTileExpansionCancelClicked();
+
+	UFUNCTION()
+	void HandleResearchChanged();
 };

@@ -44,6 +44,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
 	TObjectPtr<UMaterialInterface> BorderFillMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
+	TObjectPtr<UMaterialInterface> CityLabelMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
+	FLinearColor ThemeColor = FLinearColor::White;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities")
 	TArray<FName> CityNames;
 

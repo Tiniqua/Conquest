@@ -15,6 +15,7 @@
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 
 void UConquestGameWidget::SetText(UTextBlock* TextBlock, const FText& Text)
 {
@@ -262,6 +263,7 @@ void UConquestGameWidget::HandleConquestStateChanged()
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
+	RefreshSelectedUnitInfoFromGameState();
 }
 
 void UConquestGameWidget::HandleResearchChanged()
@@ -281,6 +283,28 @@ void UConquestGameWidget::RefreshTurnInfo()
 		NSLOCTEXT("Conquest", "TurnTextFormat", "Turn {0}"),
 		FText::AsNumber(ConquestGS->TurnManager->CurrentTurn)
 	));
+}
+
+FText UConquestGameWidget::GetEndTurnButtonText() const
+{
+	const AConquestGameMode* ConquestGM = GetWorld()
+		? GetWorld()->GetAuthGameMode<AConquestGameMode>()
+		: nullptr;
+
+	if (!ConquestGM)
+	{
+		return NSLOCTEXT("Conquest", "EndTurnButtonDefault", "Next Turn");
+	}
+
+	FText BlockReason;
+	if (ConquestGM->CanEndCurrentTurn(BlockReason))
+	{
+		return NSLOCTEXT("Conquest", "EndTurnButtonReady", "Next Turn");
+	}
+
+	return BlockReason.IsEmpty()
+		? NSLOCTEXT("Conquest", "EndTurnButtonNeedsActions", "Actions Required")
+		: BlockReason;
 }
 
 FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
@@ -368,6 +392,46 @@ void UConquestGameWidget::RefreshResearchInfo()
 	SetText(CurrentResearchText, GetCurrentResearchStatusText());
 }
 
+void UConquestGameWidget::RefreshSelectedUnitInfoFromGameState()
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->ContentManager || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return;
+	}
+
+	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+	const FConquestUnitState* SelectedUnit = Player.Units.FindByPredicate([ConquestGS](const FConquestUnitState& Unit)
+	{
+		return Unit.UnitInstanceId == ConquestGS->SelectedUnitInstanceId;
+	});
+
+	if (!SelectedUnit)
+	{
+		ClearSelectedUnitInfo();
+		return;
+	}
+
+	FConquestSelectedUnitWidgetData UnitWidgetData;
+	UnitWidgetData.UnitInstanceId = SelectedUnit->UnitInstanceId;
+	UnitWidgetData.bIsValid = true;
+
+	const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(SelectedUnit->UnitId);
+	UnitWidgetData.UnitName = UnitRow && !UnitRow->DisplayName.IsEmpty()
+		? UnitRow->DisplayName
+		: FText::FromName(SelectedUnit->UnitId);
+	UnitWidgetData.bCanFoundCity = UnitRow && UnitRow->bCanFoundCity;
+	UnitWidgetData.HealthText = FText::Format(
+		NSLOCTEXT("Conquest", "SelectedUnitHealthMovementFormat", "{0}/{1} HP | {2}/{3} Move"),
+		FText::AsNumber(SelectedUnit->CurrentHealth),
+		FText::AsNumber(SelectedUnit->CachedMaxHealth),
+		FText::AsNumber(SelectedUnit->CurrentMovementPoints),
+		FText::AsNumber(SelectedUnit->CachedMovementPoints)
+	);
+
+	ShowSelectedUnitInfo(UnitWidgetData);
+}
+
 void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidgetData& UnitData)
 {
 	if (!UnitData.bIsValid)
@@ -392,15 +456,48 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 
 		if (UnitActionButtonWidgetClass)
 		{
-			UConquestUnitActionButtonWidget* MoveButton =
-				CreateWidget<UConquestUnitActionButtonWidget>(GetOwningPlayer(), UnitActionButtonWidgetClass);
-			if (MoveButton)
+			struct FUnitActionButtonDefinition
 			{
-				MoveButton->SetupUnitActionButton(
-					FName(TEXT("Move")),
-					NSLOCTEXT("Conquest", "UnitActionMove", "Move")
+				FName ActionId;
+				FText Title;
+			};
+
+			TArray<FUnitActionButtonDefinition> ActionDefinitions =
+			{
+				{ FName(TEXT("Move")), NSLOCTEXT("Conquest", "UnitActionMove", "Move") },
+				{ FName(TEXT("Fortify")), NSLOCTEXT("Conquest", "UnitActionFortify", "Fortify") },
+				{ FName(TEXT("DoNothing")), NSLOCTEXT("Conquest", "UnitActionDoNothing", "Do Nothing") },
+				{ FName(TEXT("Sleep")), NSLOCTEXT("Conquest", "UnitActionSleep", "Sleep") },
+				{ FName(TEXT("Disband")), NSLOCTEXT("Conquest", "UnitActionDisband", "Disband") }
+			};
+
+			if (UnitData.bCanFoundCity)
+			{
+				FUnitActionButtonDefinition SettleAction;
+				SettleAction.ActionId = FName(TEXT("Settle"));
+				SettleAction.Title = NSLOCTEXT("Conquest", "UnitActionSettle", "Settle");
+				ActionDefinitions.Insert(SettleAction, 1);
+			}
+
+			for (const FUnitActionButtonDefinition& ActionDefinition : ActionDefinitions)
+			{
+				UConquestUnitActionButtonWidget* ActionButton =
+					CreateWidget<UConquestUnitActionButtonWidget>(GetOwningPlayer(), UnitActionButtonWidgetClass);
+				if (!ActionButton)
+				{
+					continue;
+				}
+
+				ActionButton->SetupUnitActionButton(ActionDefinition.ActionId, ActionDefinition.Title);
+				ActionButton->OnUnitActionClicked.RemoveDynamic(
+					this,
+					&UConquestGameWidget::HandleUnitActionClicked
 				);
-				UnitActionButtonBox->AddChild(MoveButton);
+				ActionButton->OnUnitActionClicked.AddDynamic(
+					this,
+					&UConquestGameWidget::HandleUnitActionClicked
+				);
+				UnitActionButtonBox->AddChild(ActionButton);
 			}
 		}
 	}
@@ -599,6 +696,41 @@ void UConquestGameWidget::HandleTileImprovementCloseClicked()
 	else
 	{
 		ClearTileImprovementChoices();
+	}
+}
+
+void UConquestGameWidget::HandleUnitActionClicked(FName ActionId)
+{
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (!ConquestHUD)
+	{
+		return;
+	}
+
+	if (ActionId == FName(TEXT("Move")))
+	{
+		ConquestHUD->EnterSelectedUnitMoveMode();
+	}
+	else if (ActionId == FName(TEXT("Fortify")))
+	{
+		ConquestHUD->FortifySelectedUnit();
+	}
+	else if (ActionId == FName(TEXT("DoNothing")))
+	{
+		ConquestHUD->DoNothingSelectedUnit();
+	}
+	else if (ActionId == FName(TEXT("Sleep")))
+	{
+		ConquestHUD->SleepSelectedUnit();
+	}
+	else if (ActionId == FName(TEXT("Settle")))
+	{
+		ConquestHUD->SettleSelectedUnit();
+	}
+	else if (ActionId == FName(TEXT("Disband")))
+	{
+		ConquestHUD->DisbandSelectedUnit();
 	}
 }
 

@@ -133,11 +133,12 @@ void AConquestUnitActor::RebuildMeshInstances()
 	const TArray<FVector> Offsets = BuildFormationOffsets(VisibleMeshCount);
 	const FVector FinalScale = UnitMeshScale / FMath::Sqrt(static_cast<float>(UnitMeshCount));
 
-	for (const FVector& Offset : Offsets)
+	for (int32 OffsetIndex = 0; OffsetIndex < Offsets.Num(); ++OffsetIndex)
 	{
+		const FVector& Offset = Offsets[OffsetIndex];
 		const FVector SurfaceLocation = ProjectLocalPointToTerrain(TileCenter + Offset);
 		UnitMeshInstances->AddInstance(FTransform(
-			UnitMeshRotation,
+			BuildInstanceRotation(OffsetIndex),
 			GridLocalToActorLocal(SurfaceLocation + UnitMeshOffset),
 			FinalScale
 		));
@@ -315,23 +316,78 @@ TArray<FVector> AConquestUnitActor::BuildFormationOffsets(int32 VisibleMeshCount
 {
 	TArray<FVector> Result;
 	const float HexRadius = GridActor ? GridActor->GetGridModel().GetHexRadius() : 100.0f;
-	const float MaxRadius = HexRadius * 0.58f;
+	const float MaxRadius = HexRadius * 0.52f;
 	const float SafeSpacing = FMath::Min(UnitMeshSpacing, MaxRadius);
+	const float MinimumSpacing = FMath::Min(SafeSpacing * 0.55f, MaxRadius * 0.45f);
 
-	if (VisibleMeshCount <= 1 || SafeSpacing <= KINDA_SMALL_NUMBER)
+	const int32 Seed = static_cast<int32>(HashCombine(
+		::GetTypeHash(UnitInstanceId),
+		HashCombine(::GetTypeHash(UnitMeshCount), ::GetTypeHash(OwnerPlayerId))
+	));
+	FRandomStream RandomStream(Seed);
+
+	if (VisibleMeshCount <= 1)
 	{
-		Result.Add(FVector::ZeroVector);
+		const float Radius = MaxRadius * 0.15f * FMath::Sqrt(RandomStream.FRand());
+		const float Angle = RandomStream.FRandRange(0.0f, TWO_PI);
+		Result.Add(FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f));
 		return Result;
 	}
 
-	const int32 RingCount = FMath::Max(1, FMath::CeilToInt(FMath::Sqrt(static_cast<float>(VisibleMeshCount))));
 	for (int32 Index = 0; Index < VisibleMeshCount; ++Index)
 	{
-		const float Angle = (TWO_PI / static_cast<float>(VisibleMeshCount)) * static_cast<float>(Index);
-		const int32 Ring = 1 + (Index % RingCount);
-		const float Radius = FMath::Min(MaxRadius, SafeSpacing * static_cast<float>(Ring) / static_cast<float>(RingCount));
-		Result.Add(FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f));
+		FVector ChosenOffset = FVector::ZeroVector;
+		float BestScore = -1.0f;
+
+		for (int32 Attempt = 0; Attempt < 32; ++Attempt)
+		{
+			const float Radius = MaxRadius * FMath::Sqrt(RandomStream.FRand());
+			const float Angle = RandomStream.FRandRange(0.0f, TWO_PI);
+			const FVector Candidate(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+
+			float NearestDistance = TNumericLimits<float>::Max();
+			for (const FVector& ExistingOffset : Result)
+			{
+				NearestDistance = FMath::Min(
+					NearestDistance,
+					FVector::Dist2D(Candidate, ExistingOffset)
+				);
+			}
+
+			if (Result.Num() <= 0)
+			{
+				ChosenOffset = Candidate;
+				break;
+			}
+
+			if (NearestDistance >= MinimumSpacing)
+			{
+				ChosenOffset = Candidate;
+				break;
+			}
+
+			if (NearestDistance > BestScore)
+			{
+				BestScore = NearestDistance;
+				ChosenOffset = Candidate;
+			}
+		}
+
+		Result.Add(ChosenOffset);
 	}
 
+	return Result;
+}
+
+FRotator AConquestUnitActor::BuildInstanceRotation(int32 InstanceIndex) const
+{
+	const int32 Seed = static_cast<int32>(HashCombine(
+		::GetTypeHash(UnitInstanceId),
+		HashCombine(::GetTypeHash(InstanceIndex), ::GetTypeHash(OwnerPlayerId))
+	));
+	FRandomStream RandomStream(Seed);
+
+	FRotator Result = UnitMeshRotation;
+	Result.Yaw += RandomStream.FRandRange(-35.0f, 35.0f);
 	return Result;
 }

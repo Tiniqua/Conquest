@@ -29,6 +29,9 @@ struct FConquestSelectedUnitWidgetData
 	FText HealthText;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	bool bCanFoundCity = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
 	bool bIsValid = false;
 };
 
@@ -169,6 +172,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void RefreshTurnInfo();
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Turn")
+	FText GetEndTurnButtonText() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void RefreshTopBarYieldInfo();
@@ -365,6 +371,7 @@ private:
 	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn);
 	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn);
 	void ClearTileTexts();
+	void RefreshSelectedUnitInfoFromGameState();
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
@@ -381,6 +388,9 @@ private:
 
 	UFUNCTION()
 	void HandleTileImprovementCloseClicked();
+
+	UFUNCTION()
+	void HandleUnitActionClicked(FName ActionId);
 
 	UFUNCTION()
 	void HandleResearchChanged();

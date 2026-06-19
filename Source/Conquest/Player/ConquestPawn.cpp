@@ -251,6 +251,7 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
 	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Pressed, this, &AConquestPawn::HandlePrimaryClick);
+	PlayerInputComponent->BindAction(TEXT("SecondaryClick"), IE_Pressed, this, &AConquestPawn::HandleSecondaryClick);
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
@@ -469,6 +470,11 @@ void AConquestPawn::HandlePrimaryClick()
 				return;
 			}
 
+			if (ConquestHUD->IsSelectedUnitMovementTile(Q, R) && ConquestHUD->TryMoveSelectedUnitToTile(Q, R))
+			{
+				return;
+			}
+
 			if (ConquestHUD->ShowTileImprovementChoicesForTile(Q, R))
 			{
 				return;
@@ -486,6 +492,46 @@ void AConquestPawn::HandlePrimaryClick()
 
 	// Later:
 	// select unit / tile action panel / improvement actions.
+}
+
+void AConquestPawn::HandleSecondaryClick()
+{
+	AModularHexGridActor* HexGridActor = nullptr;
+	int32 Q = INDEX_NONE;
+	int32 R = INDEX_NONE;
+	FHexTileData TileData;
+
+	if (!GetTileUnderMouse(HexGridActor, Q, R, TileData))
+	{
+		return;
+	}
+
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+		{
+			if (ConquestHUD->TryMoveSelectedUnitToTile(Q, R))
+			{
+				return;
+			}
+
+			if (UWorld* World = GetWorld())
+			{
+				if (AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>())
+				{
+					const FIntPoint ClickedCoord(Q, R);
+					const bool bClickedCity =
+						ConquestGS->CityManager &&
+						ConquestGS->CityManager->FindCityAtTile(ClickedCoord) != INDEX_NONE;
+
+					if (!bClickedCity)
+					{
+						ConquestHUD->HideCityPanel();
+					}
+				}
+			}
+		}
+	}
 }
 
 AModularHexGridActor* AConquestPawn::FindHexGridActor() const

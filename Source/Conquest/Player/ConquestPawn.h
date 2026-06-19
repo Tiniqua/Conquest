@@ -27,6 +27,7 @@ public:
 	void UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTileData& TileData) const;
 
 	void HandlePrimaryClick();
+	void HandleSecondaryClick();
 	bool GetTileUnderMouse(AModularHexGridActor*& OutGridActor, int32& OutQ, int32& OutR, FHexTileData& OutTileData) const;
 
 	void TryOpenCityPanelAtTile(const FIntPoint& Coord);

@@ -295,6 +295,7 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 		LabelComponent = ExistingComponent->Get();
 	}
 
+	bool bShouldRemainVisible = true;
 	if (!LabelComponent)
 	{
 		const FName ComponentName = MakeUniqueObjectName(
@@ -324,10 +325,14 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 		AddInstanceComponent(LabelComponent);
 		CityWorldLabelComponents.Add(CityId, LabelComponent);
 	}
+	else
+	{
+		bShouldRemainVisible = LabelComponent->IsVisible();
+	}
 
 	LabelComponent->SetRelativeTransform(BuildCityWorldLabelTransform(Coord));
 	LabelComponent->InitWidget();
-	LabelComponent->SetVisibility(true);
+	LabelComponent->SetVisibility(bShouldRemainVisible);
 	UpdateCityWorldLabel(CityId, CityName, Population, CivilisationThemeMaterial, CivilisationThemeColor);
 }
 

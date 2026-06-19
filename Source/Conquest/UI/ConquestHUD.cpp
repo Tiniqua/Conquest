@@ -12,6 +12,7 @@
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
@@ -70,6 +71,31 @@ namespace
 		return TileData.Resource.Quantity > 0
 			? FString::Printf(TEXT("%s x%d"), *TileData.Resource.ResourceId.ToString(), TileData.Resource.Quantity)
 			: TileData.Resource.ResourceId.ToString();
+	}
+
+	bool ConquestHUDHasDifficultFeature(const FHexTileData& TileData)
+	{
+		return
+			TileData.Features.Contains(EHexFeatureType::Forest) ||
+			TileData.Features.Contains(EHexFeatureType::Jungle) ||
+			TileData.Features.Contains(EHexFeatureType::Hill) ||
+			TileData.Features.Contains(EHexFeatureType::Marsh);
+	}
+
+	bool ConquestHUDIsImpassableForLandUnit(const FHexGridModel& GridModel, const FHexTileData& TileData)
+	{
+		return GridModel.IsWaterTileType(TileData.TileType) || TileData.TileType == EHexTileType::Mountain;
+	}
+
+	FConquestUnitState* ConquestHUDFindUnitMutable(
+		FConquestPlayerEmpireState& Player,
+		int32 UnitInstanceId
+	)
+	{
+		return Player.Units.FindByPredicate([UnitInstanceId](const FConquestUnitState& Unit)
+		{
+			return Unit.UnitInstanceId == UnitInstanceId;
+		});
 	}
 }
 
@@ -185,6 +211,15 @@ void AConquestHUD::SetCityWorldLabelHiddenForPanel(int32 CityId)
 {
 	if (HiddenCityWorldLabelId == CityId)
 	{
+		AConquestGameState* ConquestGS = GetWorld()
+			? GetWorld()->GetGameState<AConquestGameState>()
+			: nullptr;
+
+		if (ConquestGS && ConquestGS->ActiveGridActor)
+		{
+			ConquestGS->ActiveGridActor->SetCityWorldLabelVisible(CityId, false);
+		}
+
 		return;
 	}
 
@@ -590,23 +625,10 @@ bool AConquestHUD::SelectUnitAtTile(int32 Q, int32 R)
 		}
 	}
 
-	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	RefreshSelectedUnitWidget(*UnitToSelect);
+	if (!UnitToSelect->bIsSleeping)
 	{
-		FConquestSelectedUnitWidgetData UnitWidgetData;
-		UnitWidgetData.UnitInstanceId = UnitToSelect->UnitInstanceId;
-		UnitWidgetData.bIsValid = true;
-
-		const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(UnitToSelect->UnitId);
-		UnitWidgetData.UnitName = UnitRow && !UnitRow->DisplayName.IsEmpty()
-			? UnitRow->DisplayName
-			: FText::FromName(UnitToSelect->UnitId);
-		UnitWidgetData.HealthText = FText::Format(
-			NSLOCTEXT("Conquest", "SelectedUnitHealthFormat", "{0}/{1} HP"),
-			FText::AsNumber(UnitToSelect->CurrentHealth),
-			FText::AsNumber(UnitToSelect->CachedMaxHealth)
-		);
-
-		ActiveGameWidget->ShowSelectedUnitInfo(UnitWidgetData);
+		EnterSelectedUnitMoveMode();
 	}
 
 	return true;
@@ -636,11 +658,477 @@ void AConquestHUD::ClearUnitSelection()
 	}
 
 	ConquestGS->SelectedUnitInstanceId = INDEX_NONE;
+	ClearUnitMovementHighlights();
 
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
 		ActiveGameWidget->ClearSelectedUnitInfo();
 	}
+}
+
+void AConquestHUD::RefreshSelectedUnitWidget(const FConquestUnitState& UnitState)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ContentManager)
+	{
+		return;
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		FConquestSelectedUnitWidgetData UnitWidgetData;
+		UnitWidgetData.UnitInstanceId = UnitState.UnitInstanceId;
+		UnitWidgetData.bIsValid = true;
+
+		const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(UnitState.UnitId);
+		UnitWidgetData.UnitName = UnitRow && !UnitRow->DisplayName.IsEmpty()
+			? UnitRow->DisplayName
+			: FText::FromName(UnitState.UnitId);
+		UnitWidgetData.bCanFoundCity = UnitRow && UnitRow->bCanFoundCity;
+		UnitWidgetData.HealthText = FText::Format(
+			NSLOCTEXT("Conquest", "SelectedUnitHealthMovementFormat", "{0}/{1} HP | {2}/{3} Move"),
+			FText::AsNumber(UnitState.CurrentHealth),
+			FText::AsNumber(UnitState.CachedMaxHealth),
+			FText::AsNumber(UnitState.CurrentMovementPoints),
+			FText::AsNumber(UnitState.CachedMovementPoints)
+		);
+
+		ActiveGameWidget->ShowSelectedUnitInfo(UnitWidgetData);
+	}
+}
+
+void AConquestHUD::ClearUnitMovementHighlights()
+{
+	CurrentUnitMovementRemainingByTile.Reset();
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (ConquestGS && ConquestGS->ActiveGridActor)
+	{
+		ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+	}
+}
+
+bool AConquestHUD::EnterSelectedUnitMoveMode()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ActiveGridActor || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearUnitMovementHighlights();
+		return false;
+	}
+
+	SelectedUnit->bIsSleeping = false;
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	if (!GridModel || !GridModel->IsValidTile(SelectedUnit->TileCoord.X, SelectedUnit->TileCoord.Y))
+	{
+		ClearUnitMovementHighlights();
+		return false;
+	}
+
+	CurrentUnitMovementRemainingByTile.Reset();
+	TMap<FIntPoint, int32> BestRemainingByCoord;
+	TArray<FIntPoint> Frontier;
+
+	BestRemainingByCoord.Add(SelectedUnit->TileCoord, SelectedUnit->CurrentMovementPoints);
+	Frontier.Add(SelectedUnit->TileCoord);
+
+	auto IsOccupiedByAnotherUnit = [&Player, SelectedUnit](const FIntPoint& Coord)
+	{
+		for (const FConquestUnitState& Unit : Player.Units)
+		{
+			if (Unit.UnitInstanceId != SelectedUnit->UnitInstanceId && Unit.TileCoord == Coord)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	auto GetMoveCost = [GridModel](const FIntPoint& FromCoord, const FIntPoint& ToCoord)
+	{
+		const FHexTileData* FromTile = GridModel->GetTile(FromCoord);
+		const FHexTileData* ToTile = GridModel->GetTile(ToCoord);
+		if (!FromTile || !ToTile)
+		{
+			return TNumericLimits<int32>::Max();
+		}
+
+		if (ConquestHUDIsImpassableForLandUnit(*GridModel, *ToTile))
+		{
+			return TNumericLimits<int32>::Max();
+		}
+
+		int32 Cost = 1;
+		if (
+			ToTile->TileType == EHexTileType::Jungle ||
+			ConquestHUDHasDifficultFeature(*ToTile) ||
+			FromTile->bHasRiver ||
+			ToTile->bHasRiver
+		)
+		{
+			Cost = 2;
+		}
+
+		return Cost;
+	};
+
+	for (int32 FrontierIndex = 0; FrontierIndex < Frontier.Num(); ++FrontierIndex)
+	{
+		const FIntPoint CurrentCoord = Frontier[FrontierIndex];
+		const int32 CurrentRemaining = BestRemainingByCoord.FindRef(CurrentCoord);
+
+		for (int32 Direction = 0; Direction < 6; ++Direction)
+		{
+			int32 NeighborQ = INDEX_NONE;
+			int32 NeighborR = INDEX_NONE;
+			if (!GridModel->GetNeighbourCoord(CurrentCoord.X, CurrentCoord.Y, Direction, NeighborQ, NeighborR))
+			{
+				continue;
+			}
+
+			const FIntPoint NeighborCoord(NeighborQ, NeighborR);
+			if (IsOccupiedByAnotherUnit(NeighborCoord))
+			{
+				continue;
+			}
+
+			const int32 MoveCost = GetMoveCost(CurrentCoord, NeighborCoord);
+			if (MoveCost == TNumericLimits<int32>::Max())
+			{
+				continue;
+			}
+
+			const bool bOneTileMinimumMove =
+				CurrentCoord == SelectedUnit->TileCoord &&
+				CurrentRemaining > 0;
+			if (CurrentRemaining < MoveCost && !bOneTileMinimumMove)
+			{
+				continue;
+			}
+
+			const int32 NewRemaining = FMath::Max(0, CurrentRemaining - MoveCost);
+			const int32* ExistingRemaining = BestRemainingByCoord.Find(NeighborCoord);
+			if (ExistingRemaining && *ExistingRemaining >= NewRemaining)
+			{
+				continue;
+			}
+
+			BestRemainingByCoord.Add(NeighborCoord, NewRemaining);
+			CurrentUnitMovementRemainingByTile.Add(NeighborCoord, NewRemaining);
+
+			if (NewRemaining > 0)
+			{
+				Frontier.Add(NeighborCoord);
+			}
+		}
+	}
+
+	TArray<FIntPoint> ReachableTiles;
+	CurrentUnitMovementRemainingByTile.GetKeys(ReachableTiles);
+
+	UMaterialInterface* HighlightMaterial = nullptr;
+	if (ConquestGS->HumanCivilisation)
+	{
+		HighlightMaterial = ConquestGS->HumanCivilisation->BorderMaterial;
+	}
+
+	ConquestGS->ActiveGridActor->RebuildExpansionCandidateHighlights(ReachableTiles, HighlightMaterial);
+	return ReachableTiles.Num() > 0;
+}
+
+bool AConquestHUD::TryMoveSelectedUnitToTile(int32 Q, int32 R)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ContentManager || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
+	{
+		return false;
+	}
+
+	const FIntPoint TargetCoord(Q, R);
+	if (TargetCoord == SelectedUnit->TileCoord)
+	{
+		return false;
+	}
+
+	if (!CurrentUnitMovementRemainingByTile.Contains(TargetCoord))
+	{
+		EnterSelectedUnitMoveMode();
+	}
+
+	const int32* NewRemainingMovement = CurrentUnitMovementRemainingByTile.Find(TargetCoord);
+	if (!NewRemainingMovement)
+	{
+		return false;
+	}
+
+	SelectedUnit->TileCoord = TargetCoord;
+	SelectedUnit->CurrentMovementPoints = FMath::Clamp(
+		*NewRemainingMovement,
+		0,
+		SelectedUnit->CachedMovementPoints
+	);
+	SelectedUnit->bIsFortified = false;
+	SelectedUnit->bIsSleeping = false;
+
+	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+		ConquestGS->UnitActorsByInstanceId.Find(SelectedUnit->UnitInstanceId))
+	{
+		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+		{
+			UnitActor->MoveToTile(TargetCoord);
+		}
+	}
+
+	RefreshSelectedUnitWidget(*SelectedUnit);
+
+	if (SelectedUnit->CurrentMovementPoints > 0)
+	{
+		EnterSelectedUnitMoveMode();
+	}
+	else
+	{
+		ClearUnitMovementHighlights();
+	}
+
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestHUD::IsSelectedUnitMovementTile(int32 Q, int32 R) const
+{
+	return CurrentUnitMovementRemainingByTile.Contains(FIntPoint(Q, R));
+}
+
+bool AConquestHUD::FortifySelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
+	{
+		return false;
+	}
+
+	if (SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	SelectedUnit->bIsFortified = true;
+	SelectedUnit->bIsSleeping = false;
+	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+	ClearUnitMovementHighlights();
+	RefreshSelectedUnitWidget(*SelectedUnit);
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestHUD::DoNothingSelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	SelectedUnit->bIsFortified = false;
+	SelectedUnit->bIsSleeping = false;
+	SelectedUnit->CurrentMovementPoints = 0;
+	ClearUnitMovementHighlights();
+	RefreshSelectedUnitWidget(*SelectedUnit);
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestHUD::SleepSelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
+	{
+		return false;
+	}
+
+	SelectedUnit->bIsSleeping = true;
+	SelectedUnit->bIsFortified = false;
+	ClearUnitMovementHighlights();
+	RefreshSelectedUnitWidget(*SelectedUnit);
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestHUD::DisbandSelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const int32 UnitInstanceId = ConquestGS->SelectedUnitInstanceId;
+
+	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+		ConquestGS->UnitActorsByInstanceId.Find(UnitInstanceId))
+	{
+		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+		{
+			UnitActor->Destroy();
+		}
+
+		ConquestGS->UnitActorsByInstanceId.Remove(UnitInstanceId);
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	Player.Units.RemoveAll([UnitInstanceId](const FConquestUnitState& Unit)
+	{
+		return Unit.UnitInstanceId == UnitInstanceId;
+	});
+
+	ClearUnitSelection();
+
+	if (ConquestGS->YieldManager)
+	{
+		ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(Player.PlayerId);
+	}
+
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestHUD::SettleSelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (
+		!ConquestGS ||
+		!ConquestGS->CityManager ||
+		!ConquestGS->ContentManager ||
+		ConquestGS->SelectedUnitInstanceId == INDEX_NONE
+	)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
+	{
+		return false;
+	}
+
+	if (SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(SelectedUnit->UnitId);
+	if (!UnitRow || !UnitRow->bCanFoundCity)
+	{
+		return false;
+	}
+
+	SelectedUnit->bIsSleeping = false;
+
+	const int32 UnitInstanceId = SelectedUnit->UnitInstanceId;
+	const int32 OwnerPlayerId = SelectedUnit->OwnerPlayerId;
+	const FIntPoint CityCoord = SelectedUnit->TileCoord;
+
+	if (!ConquestGS->CityManager->FoundCity(OwnerPlayerId, CityCoord, NAME_None))
+	{
+		return false;
+	}
+
+	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+		ConquestGS->UnitActorsByInstanceId.Find(UnitInstanceId))
+	{
+		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+		{
+			UnitActor->Destroy();
+		}
+
+		ConquestGS->UnitActorsByInstanceId.Remove(UnitInstanceId);
+	}
+
+	Player.Units.RemoveAll([UnitInstanceId](const FConquestUnitState& Unit)
+	{
+		return Unit.UnitInstanceId == UnitInstanceId;
+	});
+
+	const int32 NewCityId = ConquestGS->CityManager->FindCityAtTile(CityCoord);
+	ClearUnitSelection();
+
+	if (NewCityId != INDEX_NONE)
+	{
+		ShowCityPanel(NewCityId);
+	}
+
+	if (ConquestGS->YieldManager)
+	{
+		ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(Player.PlayerId);
+	}
+
+	ConquestGS->BroadcastStateChanged();
+	return true;
 }
 
 void AConquestHUD::ShowResearchPanel()

@@ -13,6 +13,27 @@
 #include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 
+namespace
+{
+	const FName ConquestProductionProjectFoodFocus(TEXT("FoodFocus"));
+	const FName ConquestProductionProjectGoldFocus(TEXT("GoldFocus"));
+	const FName ConquestProductionProjectCultureFocus(TEXT("CultureFocus"));
+	const FName ConquestProductionProjectScienceFocus(TEXT("ScienceFocus"));
+
+	const TArray<FName>& GetConquestProductionProjectIds()
+	{
+		static const TArray<FName> ProjectIds =
+		{
+			ConquestProductionProjectFoodFocus,
+			ConquestProductionProjectGoldFocus,
+			ConquestProductionProjectCultureFocus,
+			ConquestProductionProjectScienceFocus
+		};
+
+		return ProjectIds;
+	}
+}
+
 void UConquestCityManager::Initialize(AConquestGameState* InGameState)
 {
 	GameStateRef = InGameState;
@@ -170,11 +191,7 @@ bool UConquestCityManager::IsValidFoundCityTile(const FIntPoint& TileCoord) cons
 
 	for (const FCityState& City : Cities)
 	{
-		const int32 ApproxDistance =
-			FMath::Abs(City.CenterTile.X - TileCoord.X) +
-			FMath::Abs(City.CenterTile.Y - TileCoord.Y);
-
-		if (ApproxDistance < 3)
+		if (GridModel->GetHexDistance(City.CenterTile, TileCoord) < 3)
 		{
 			return false;
 		}
@@ -405,6 +422,41 @@ void UConquestCityManager::RecalculateCityYields(FCityState& City)
 	}
 
 	City.CachedYieldPerTurn = GameStateRef->YieldManager->CalculateCityTotalYields(City);
+	City.CachedYieldPerTurn += GetProductionProjectYieldBonus(City);
+}
+
+FHexYield UConquestCityManager::GetProductionProjectYieldBonus(const FCityState& City) const
+{
+	FHexYield Result;
+	if (City.CurrentProduction.Type != ECityProductionType::Project)
+	{
+		return Result;
+	}
+
+	const int32 ProductionPerTurn = FMath::Max(0, City.CachedYieldPerTurn.Production);
+	if (ProductionPerTurn <= 0)
+	{
+		return Result;
+	}
+
+	if (City.CurrentProduction.ProductionId == ConquestProductionProjectFoodFocus)
+	{
+		Result.Food = ProductionPerTurn;
+	}
+	else if (City.CurrentProduction.ProductionId == ConquestProductionProjectGoldFocus)
+	{
+		Result.Gold = ProductionPerTurn;
+	}
+	else if (City.CurrentProduction.ProductionId == ConquestProductionProjectCultureFocus)
+	{
+		Result.Culture = ProductionPerTurn;
+	}
+	else if (City.CurrentProduction.ProductionId == ConquestProductionProjectScienceFocus)
+	{
+		Result.Science = ProductionPerTurn;
+	}
+
+	return Result;
 }
 
 void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
@@ -602,6 +654,11 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 	Unit.CurrentHealth = Unit.CurrentHealth <= 0
 		? Unit.CachedMaxHealth
 		: FMath::Clamp(Unit.CurrentHealth, 1, Unit.CachedMaxHealth);
+	Unit.CurrentMovementPoints = FMath::Clamp(
+		Unit.CurrentMovementPoints,
+		0,
+		Unit.CachedMovementPoints
+	);
 }
 
 int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FName UnitId)
@@ -632,10 +689,58 @@ int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FNa
 	NewUnit.CurrentHealth = UnitRow->MaxHealth;
 
 	RecalculateUnitStats(NewUnit);
+	NewUnit.CurrentMovementPoints = NewUnit.CachedMovementPoints;
 
 	Player.Units.Add(NewUnit);
 	SpawnUnitActorForState(NewUnit);
 	return NewUnit.UnitInstanceId;
+}
+
+void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
+{
+	if (!GameStateRef || !GameStateRef->ContentManager)
+	{
+		return;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != PlayerId)
+	{
+		return;
+	}
+
+	for (FConquestUnitState& Unit : Player.Units)
+	{
+		if (Unit.OwnerPlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		RecalculateUnitStats(Unit);
+		Unit.CurrentMovementPoints = Unit.CachedMovementPoints;
+
+		if (Unit.bIsFortified)
+		{
+			constexpr int32 FortifyHealPerTurn = 10;
+			Unit.CurrentHealth = FMath::Clamp(
+				Unit.CurrentHealth + FortifyHealPerTurn,
+				1,
+				FMath::Max(1, Unit.CachedMaxHealth)
+			);
+		}
+
+		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+			GameStateRef->UnitActorsByInstanceId.Find(Unit.UnitInstanceId))
+		{
+			if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+			{
+				if (const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(Unit.UnitId))
+				{
+					UnitActor->RefreshUnitVisuals(Unit, *UnitRow);
+				}
+			}
+		}
+	}
 }
 
 void UConquestCityManager::SpawnUnitActorForState(const FConquestUnitState& UnitState)
@@ -872,6 +977,12 @@ void UConquestCityManager::ProcessCityProduction(FCityState& City)
 	if (!City.CurrentProduction.IsValid())
 	{
 		City.bNeedsProductionChoice = true;
+		return;
+	}
+
+	if (City.CurrentProduction.Type == ECityProductionType::Project)
+	{
+		City.bNeedsProductionChoice = false;
 		return;
 	}
 
@@ -1255,6 +1366,37 @@ bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
 	return true;
 }
 
+bool UConquestCityManager::SetCityProductionProjectById(int32 CityId, FName ProjectId)
+{
+	if (ProjectId.IsNone() || !GetConquestProductionProjectIds().Contains(ProjectId))
+	{
+		return false;
+	}
+
+	FCityState* City = GetCityMutable(CityId);
+	if (!City)
+	{
+		return false;
+	}
+
+	City->CurrentProduction.Type = ECityProductionType::Project;
+	City->CurrentProduction.ProductionId = ProjectId;
+	City->CurrentProduction.Progress = 0.0f;
+	City->CurrentProduction.Cost = 1.0f;
+	City->bNeedsProductionChoice = false;
+
+	RecalculateCityYields(*City);
+	RecalculateEmpireYields(City->OwnerPlayerId);
+	OnCityChanged.Broadcast(CityId);
+
+	if (GameStateRef)
+	{
+		GameStateRef->BroadcastStateChanged();
+	}
+
+	return true;
+}
+
 TArray<FName> UConquestCityManager::GetAvailableProductionBuildingIdsForCity(int32 CityId) const
 {
 	TArray<FName> Result;
@@ -1367,6 +1509,18 @@ TArray<FName> UConquestCityManager::GetAvailableProductionUnitIdsForCity(int32 C
 		Result.Add(ResolvedRow->UnitId);
 	}
 
+	return Result;
+}
+
+TArray<FName> UConquestCityManager::GetAvailableProductionProjectIdsForCity(int32 CityId) const
+{
+	TArray<FName> Result;
+	if (!GetCity(CityId))
+	{
+		return Result;
+	}
+
+	Result = GetConquestProductionProjectIds();
 	return Result;
 }
 

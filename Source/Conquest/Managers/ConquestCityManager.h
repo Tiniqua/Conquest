@@ -45,16 +45,25 @@ public:
 	void ProcessCitiesAtStartOfTurn(int32 PlayerId);
 
 	UFUNCTION(BlueprintCallable)
+	void ProcessUnitsAtStartOfTurn(int32 PlayerId);
+
+	UFUNCTION(BlueprintCallable)
 	bool SetCityProductionBuildingById(int32 CityId, FName BuildingId);
 
 	UFUNCTION(BlueprintCallable)
 	bool SetCityProductionUnitById(int32 CityId, FName UnitId);
 
 	UFUNCTION(BlueprintCallable)
+	bool SetCityProductionProjectById(int32 CityId, FName ProjectId);
+
+	UFUNCTION(BlueprintCallable)
 	TArray<FName> GetAvailableProductionBuildingIdsForCity(int32 CityId) const;
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FName> GetAvailableProductionUnitIdsForCity(int32 CityId) const;
+
+	UFUNCTION(BlueprintCallable)
+	TArray<FName> GetAvailableProductionProjectIdsForCity(int32 CityId) const;
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FIntPoint> GetExpansionCandidateTiles(int32 CityId) const;
@@ -108,6 +117,7 @@ private:
 	int32 GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const;
 	bool AssignCitizenToTile(FCityState& City, const FIntPoint& Coord);
 	void RecalculateCityYields(FCityState& City);
+	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
 	void RecalculateEmpireYields(int32 PlayerId);
 	void RecalculateStrategicResourceEconomy(int32 PlayerId);
 	void AccumulateStrategicResourceIncome(int32 PlayerId);

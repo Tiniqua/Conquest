@@ -13,6 +13,7 @@ class UConquestMainMenuWidget;
 class UConquestGameSetupWidget;
 class UConquestGameWidget;
 class AModularHexGridActor;
+struct FConquestUnitState;
 
 UCLASS()
 class CONQUEST_API AConquestHUD : public AHUD
@@ -102,6 +103,33 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void ClearUnitSelection();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool EnterSelectedUnitMoveMode();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool TryMoveSelectedUnitToTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
+	bool IsSelectedUnitMovementTile(int32 Q, int32 R) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool FortifySelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool DoNothingSelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool SleepSelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool DisbandSelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool SettleSelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearUnitMovementHighlights();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;
@@ -131,9 +159,11 @@ protected:
 	FIntPoint PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 	FIntPoint PendingImprovementTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 	int32 HiddenCityWorldLabelId = INDEX_NONE;
+	TMap<FIntPoint, int32> CurrentUnitMovementRemainingByTile;
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();
 	void SetCityWorldLabelHiddenForPanel(int32 CityId);
 	void RestoreHiddenCityWorldLabel();
+	void RefreshSelectedUnitWidget(const FConquestUnitState& UnitState);
 };

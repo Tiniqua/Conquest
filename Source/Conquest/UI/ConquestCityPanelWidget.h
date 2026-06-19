@@ -91,6 +91,7 @@ private:
 	void BuildBuildingButtons();
 	void BuildBuildingChoices(AConquestGameState& GS);
 	void BuildUnitChoices(AConquestGameState& GS);
+	void BuildProductionProjectChoices(AConquestGameState& GS);
 	void ApplyCivilisationTheme(const FCityState& City, const AConquestGameState& GS);
 	void BindToGameState();
 	void UnbindFromGameState();

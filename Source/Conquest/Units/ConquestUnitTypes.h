@@ -103,6 +103,9 @@ struct FConquestUnitRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
 	int32 GoldMaintenancePerTurn = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actions")
+	bool bCanFoundCity = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<UStaticMesh> UnitMesh = nullptr;
 

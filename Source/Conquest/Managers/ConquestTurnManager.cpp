@@ -63,6 +63,7 @@ void UConquestTurnManager::StartTurnProcessing()
 	if (GameStateRef->CityManager)
 	{
 		GameStateRef->CityManager->ProcessCitiesAtStartOfTurn(0);
+		GameStateRef->CityManager->ProcessUnitsAtStartOfTurn(0);
 	}
 
 	if (GameStateRef->YieldManager)

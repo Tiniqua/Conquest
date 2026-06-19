@@ -21,5 +21,8 @@ public:
 	void EndCurrentTurn();
 
 	UFUNCTION(BlueprintCallable)
+	bool CanEndCurrentTurn(UPARAM(ref) FText& OutBlockReason) const;
+
+	UFUNCTION(BlueprintCallable)
 	bool FoundStartingCity(const FIntPoint& TileCoord, FName CityName);
 };

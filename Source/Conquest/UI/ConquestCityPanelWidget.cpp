@@ -151,6 +151,13 @@ void UConquestCityPanelWidget::Refresh()
 					FText::AsNumber(FMath::FloorToInt(City->CurrentProduction.Cost))
 				);
 			}
+			else if (City->CurrentProduction.Type == ECityProductionType::Project)
+			{
+				ProductionText = FText::Format(
+					NSLOCTEXT("Conquest", "ProjectProductionFormat", "Focus: {0}"),
+					FText::FromName(City->CurrentProduction.ProductionId)
+				);
+			}
 			else
 			{
 				ProductionText = FText::Format(
@@ -343,6 +350,7 @@ void UConquestCityPanelWidget::BuildBuildingButtons()
 	if (ActiveProductionPanelTab == EConquestCityProductionPanelTab::Buildings)
 	{
 		BuildBuildingChoices(*GS);
+		BuildProductionProjectChoices(*GS);
 	}
 	else
 	{
@@ -510,13 +518,85 @@ void UConquestCityPanelWidget::BuildUnitChoices(AConquestGameState& GS)
 	}
 }
 
+void UConquestCityPanelWidget::BuildProductionProjectChoices(AConquestGameState& GS)
+{
+	if (!BuildingButtonBox || !GS.CityManager || !ChoiceButtonWidgetClass)
+	{
+		return;
+	}
+
+	const TArray<FName> AvailableProjectIds =
+		GS.CityManager->GetAvailableProductionProjectIdsForCity(CityId);
+
+	for (const FName ProjectId : AvailableProjectIds)
+	{
+		if (ProjectId.IsNone())
+		{
+			continue;
+		}
+
+		UConquestChoiceButtonWidget* ChoiceButton =
+			CreateWidget<UConquestChoiceButtonWidget>(
+				GetOwningPlayer(),
+				ChoiceButtonWidgetClass
+			);
+
+		if (!ChoiceButton)
+		{
+			continue;
+		}
+
+		FText Title = FText::FromName(ProjectId);
+		FText DetailText = NSLOCTEXT("Conquest", "ProductionFocusDetail", "Converts this city's production into a focused yield each turn.");
+		if (ProjectId == FName(TEXT("FoodFocus")))
+		{
+			Title = NSLOCTEXT("Conquest", "ProductionFocusFood", "Food Focus");
+		}
+		else if (ProjectId == FName(TEXT("GoldFocus")))
+		{
+			Title = NSLOCTEXT("Conquest", "ProductionFocusGold", "Gold Focus");
+		}
+		else if (ProjectId == FName(TEXT("CultureFocus")))
+		{
+			Title = NSLOCTEXT("Conquest", "ProductionFocusCulture", "Culture Focus");
+		}
+		else if (ProjectId == FName(TEXT("ScienceFocus")))
+		{
+			Title = NSLOCTEXT("Conquest", "ProductionFocusScience", "Science Focus");
+		}
+
+		FConquestChoiceButtonData ChoiceData;
+		ChoiceData.ChoiceType = EConquestChoiceType::ProductionProject;
+		ChoiceData.ChoiceId = ProjectId;
+		ChoiceData.Title = Title;
+		ChoiceData.Cost = 0;
+		ChoiceData.Turns = INDEX_NONE;
+		ChoiceData.bEnabled = true;
+		ChoiceData.DetailText = DetailText;
+		ChoiceData.Subtitle = NSLOCTEXT("Conquest", "ProductionFocusSubtitle", "City focus | Never completes");
+
+		ChoiceButton->SetupChoiceButton(ChoiceData);
+		ChoiceButton->OnChoiceClicked.RemoveDynamic(
+			this,
+			&UConquestCityPanelWidget::HandleProductionChoiceClicked
+		);
+		ChoiceButton->OnChoiceClicked.AddDynamic(
+			this,
+			&UConquestCityPanelWidget::HandleProductionChoiceClicked
+		);
+
+		BuildingButtonBox->AddChild(ChoiceButton);
+	}
+}
+
 void UConquestCityPanelWidget::HandleProductionChoiceClicked(
 	const FConquestChoiceButtonData& ChoiceData
 )
 {
 	if (
 		ChoiceData.ChoiceType != EConquestChoiceType::ProductionBuilding &&
-		ChoiceData.ChoiceType != EConquestChoiceType::ProductionUnit
+		ChoiceData.ChoiceType != EConquestChoiceType::ProductionUnit &&
+		ChoiceData.ChoiceType != EConquestChoiceType::ProductionProject
 	)
 	{
 		return;
@@ -547,6 +627,13 @@ void UConquestCityPanelWidget::HandleProductionChoiceClicked(
 	else if (ChoiceData.ChoiceType == EConquestChoiceType::ProductionUnit)
 	{
 		bSelectedProduction = GS->CityManager->SetCityProductionUnitById(
+			CityId,
+			ChoiceData.ChoiceId
+		);
+	}
+	else if (ChoiceData.ChoiceType == EConquestChoiceType::ProductionProject)
+	{
+		bSelectedProduction = GS->CityManager->SetCityProductionProjectById(
 			CityId,
 			ChoiceData.ChoiceId
 		);

@@ -73,4 +73,5 @@ private:
 	FVector ProjectLocalPointToTerrain(const FVector& LocalPoint) const;
 	FVector GridLocalToActorLocal(const FVector& GridLocalPoint) const;
 	TArray<FVector> BuildFormationOffsets(int32 VisibleMeshCount) const;
+	FRotator BuildInstanceRotation(int32 InstanceIndex) const;
 };

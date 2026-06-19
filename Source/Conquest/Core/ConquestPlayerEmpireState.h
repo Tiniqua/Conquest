@@ -62,6 +62,15 @@ struct FConquestUnitState
 	int32 CurrentHealth = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentMovementPoints = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bIsFortified = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bIsSleeping = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FConquestUnitAugmentState> Augments;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

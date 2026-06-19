@@ -11,6 +11,7 @@
 AConquestGameState::AConquestGameState()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	UnitActorClass = AConquestUnitActor::StaticClass();
 }
 
 void AConquestGameState::BeginPlay()

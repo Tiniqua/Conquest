@@ -6,6 +6,7 @@
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
 #include "Conquest/World/Generation/HexResourceSetData.h"
@@ -627,12 +628,53 @@ int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FNa
 	NewUnit.OwnerPlayerId = City.OwnerPlayerId;
 	NewUnit.UnitId = UnitRow->UnitId;
 	NewUnit.SourceCityId = City.CityId;
+	NewUnit.TileCoord = City.CenterTile;
 	NewUnit.CurrentHealth = UnitRow->MaxHealth;
 
 	RecalculateUnitStats(NewUnit);
 
 	Player.Units.Add(NewUnit);
+	SpawnUnitActorForState(NewUnit);
 	return NewUnit.UnitInstanceId;
+}
+
+void UConquestCityManager::SpawnUnitActorForState(const FConquestUnitState& UnitState)
+{
+	if (!GameStateRef || !GameStateRef->ContentManager || !GameStateRef->ActiveGridActor)
+	{
+		return;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(UnitState.UnitId);
+	if (!UnitRow)
+	{
+		return;
+	}
+
+	TSubclassOf<AConquestUnitActor> ActorClass = GameStateRef->UnitActorClass;
+	if (!ActorClass)
+	{
+		ActorClass = AConquestUnitActor::StaticClass();
+	}
+
+	UWorld* World = GameStateRef->GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AConquestUnitActor* UnitActor = World->SpawnActor<AConquestUnitActor>(
+		ActorClass,
+		GameStateRef->ActiveGridActor->GetActorTransform()
+	);
+
+	if (!UnitActor)
+	{
+		return;
+	}
+
+	UnitActor->InitializeUnit(UnitState, *UnitRow, GameStateRef->ActiveGridActor);
+	GameStateRef->UnitActorsByInstanceId.Add(UnitState.UnitInstanceId, UnitActor);
 }
 
 void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)

@@ -6,6 +6,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/Widget.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
+#include "Conquest/UI/ConquestUnitActionButtonWidget.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Core/ConquestContentManager.h"
@@ -198,6 +199,7 @@ void UConquestGameWidget::NativeConstruct()
 	ClearHoveredTileInfo();
 	ClearTileExpansionConfirmation();
 	ClearTileImprovementChoices();
+	ClearSelectedUnitInfo();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
@@ -364,6 +366,55 @@ FText UConquestGameWidget::GetCurrentResearchStatusText() const
 void UConquestGameWidget::RefreshResearchInfo()
 {
 	SetText(CurrentResearchText, GetCurrentResearchStatusText());
+}
+
+void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidgetData& UnitData)
+{
+	if (!UnitData.bIsValid)
+	{
+		ClearSelectedUnitInfo();
+		return;
+	}
+
+	SetVisibility(UnitActionPanel, ESlateVisibility::Visible);
+	SetText(
+		SelectedUnitText,
+		FText::Format(
+			NSLOCTEXT("Conquest", "SelectedUnitPanelFormat", "{0} | {1}"),
+			UnitData.UnitName,
+			UnitData.HealthText
+		)
+	);
+
+	if (UnitActionButtonBox)
+	{
+		UnitActionButtonBox->ClearChildren();
+
+		if (UnitActionButtonWidgetClass)
+		{
+			UConquestUnitActionButtonWidget* MoveButton =
+				CreateWidget<UConquestUnitActionButtonWidget>(GetOwningPlayer(), UnitActionButtonWidgetClass);
+			if (MoveButton)
+			{
+				MoveButton->SetupUnitActionButton(
+					FName(TEXT("Move")),
+					NSLOCTEXT("Conquest", "UnitActionMove", "Move")
+				);
+				UnitActionButtonBox->AddChild(MoveButton);
+			}
+		}
+	}
+}
+
+void UConquestGameWidget::ClearSelectedUnitInfo()
+{
+	SetVisibility(UnitActionPanel, ESlateVisibility::Collapsed);
+	ClearText(SelectedUnitText);
+
+	if (UnitActionButtonBox)
+	{
+		UnitActionButtonBox->ClearChildren();
+	}
 }
 
 void UConquestGameWidget::SetSelectedCityYieldContext(int32 CityId)

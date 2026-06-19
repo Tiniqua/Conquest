@@ -113,6 +113,7 @@ private:
 	void AccumulateStrategicResourceIncome(int32 PlayerId);
 	void RecalculateUnitStats(FConquestUnitState& Unit) const;
 	int32 CreateUnitFromProduction(const FCityState& City, FName UnitId);
+	void SpawnUnitActorForState(const FConquestUnitState& UnitState);
 	void UpdateOwnedTileVisuals(int32 PlayerId);
 	void UpdateCityWorldLabel(const FCityState& City);
 	FName ResolveCityName(int32 PlayerId, FName RequestedCityName) const;

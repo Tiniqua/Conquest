@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
+#include "Conquest/Units/ConquestUnitActor.h"
 #include "GameFramework/GameStateBase.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
@@ -15,7 +16,6 @@ class UConquestTechManager;
 class UConquestBuildingData;
 class UConquestTechData;
 class FHexGridModel;
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnConquestStateChanged);
 
 UCLASS()
@@ -66,6 +66,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	FConquestPlayerEmpireState HumanPlayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Units")
+	TSubclassOf<AConquestUnitActor> UnitActorClass;
+
+	UPROPERTY(BlueprintReadOnly, Category="Conquest|Units")
+	TMap<int32, TObjectPtr<AConquestUnitActor>> UnitActorsByInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category="Conquest|Units")
+	int32 SelectedUnitInstanceId = INDEX_NONE;
 
 	UFUNCTION(BlueprintCallable)
 	void BroadcastStateChanged();

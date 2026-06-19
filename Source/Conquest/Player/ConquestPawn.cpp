@@ -473,6 +473,11 @@ void AConquestPawn::HandlePrimaryClick()
 			{
 				return;
 			}
+
+			if (ConquestHUD->SelectUnitAtTile(Q, R))
+			{
+				return;
+			}
 		}
 	}
 

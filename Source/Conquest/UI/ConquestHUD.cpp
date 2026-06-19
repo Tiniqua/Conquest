@@ -8,9 +8,12 @@
 #include "ConquestMainMenuWidget.h"
 #include "ConquestResearchPanelWidget.h"
 #include "Conquest/UI/ConquestChoiceTypes.h"
+#include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Units/ConquestUnitActor.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
 #include "Conquest/World/Generation/HexImprovementTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
@@ -537,6 +540,106 @@ void AConquestHUD::ClearTileImprovementChoices()
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
 		ActiveGameWidget->ClearTileImprovementChoices();
+	}
+}
+
+bool AConquestHUD::SelectUnitAtTile(int32 Q, int32 R)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ContentManager)
+	{
+		return false;
+	}
+
+	const FIntPoint Coord(Q, R);
+	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+
+	const FConquestUnitState* UnitToSelect = nullptr;
+	for (const FConquestUnitState& Unit : Player.Units)
+	{
+		if (Unit.OwnerPlayerId == Player.PlayerId && Unit.TileCoord == Coord)
+		{
+			UnitToSelect = &Unit;
+			break;
+		}
+	}
+
+	if (!UnitToSelect)
+	{
+		return false;
+	}
+
+	ClearUnitSelection();
+
+	ConquestGS->SelectedUnitInstanceId = UnitToSelect->UnitInstanceId;
+
+	UMaterialInterface* SelectionMaterial = nullptr;
+	if (ConquestGS->HumanCivilisation)
+	{
+		SelectionMaterial = ConquestGS->HumanCivilisation->BorderMaterial;
+	}
+
+	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = ConquestGS->UnitActorsByInstanceId.Find(UnitToSelect->UnitInstanceId))
+	{
+		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+		{
+			UnitActor->SetSelected(true, SelectionMaterial);
+		}
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		FConquestSelectedUnitWidgetData UnitWidgetData;
+		UnitWidgetData.UnitInstanceId = UnitToSelect->UnitInstanceId;
+		UnitWidgetData.bIsValid = true;
+
+		const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(UnitToSelect->UnitId);
+		UnitWidgetData.UnitName = UnitRow && !UnitRow->DisplayName.IsEmpty()
+			? UnitRow->DisplayName
+			: FText::FromName(UnitToSelect->UnitId);
+		UnitWidgetData.HealthText = FText::Format(
+			NSLOCTEXT("Conquest", "SelectedUnitHealthFormat", "{0}/{1} HP"),
+			FText::AsNumber(UnitToSelect->CurrentHealth),
+			FText::AsNumber(UnitToSelect->CachedMaxHealth)
+		);
+
+		ActiveGameWidget->ShowSelectedUnitInfo(UnitWidgetData);
+	}
+
+	return true;
+}
+
+void AConquestHUD::ClearUnitSelection()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS)
+	{
+		return;
+	}
+
+	if (ConquestGS->SelectedUnitInstanceId != INDEX_NONE)
+	{
+		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+			ConquestGS->UnitActorsByInstanceId.Find(ConquestGS->SelectedUnitInstanceId))
+		{
+			if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+			{
+				UnitActor->SetSelected(false);
+			}
+		}
+	}
+
+	ConquestGS->SelectedUnitInstanceId = INDEX_NONE;
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearSelectedUnitInfo();
 	}
 }
 

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Components/HorizontalBox.h"
 #include "Conquest/UI/ConquestChoiceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "ConquestGameWidget.generated.h"
@@ -11,6 +12,25 @@ class UTextBlock;
 class UVerticalBox;
 class UWidget;
 class UConquestChoiceButtonWidget;
+class UConquestUnitActionButtonWidget;
+
+USTRUCT(BlueprintType)
+struct FConquestSelectedUnitWidgetData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	int32 UnitInstanceId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	FText UnitName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	FText HealthText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	bool bIsValid = false;
+};
 
 USTRUCT(BlueprintType)
 struct FConquestTileImprovementChoiceData
@@ -158,6 +178,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Research")
 	FText GetCurrentResearchStatusText() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ShowSelectedUnitInfo(const FConquestSelectedUnitWidgetData& UnitData);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearSelectedUnitInfo();
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void SetSelectedCityYieldContext(int32 CityId);
@@ -315,6 +341,18 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
 	TSubclassOf<UConquestChoiceButtonWidget> ChoiceButtonWidgetClass;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> UnitActionPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SelectedUnitText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UHorizontalBox> UnitActionButtonBox = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestUnitActionButtonWidget> UnitActionButtonWidgetClass;
 
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);

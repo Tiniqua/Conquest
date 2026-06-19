@@ -4,6 +4,9 @@
 #include "Engine/DataTable.h"
 #include "ConquestUnitTypes.generated.h"
 
+class UMaterialInterface;
+class UStaticMesh;
+
 UENUM(BlueprintType)
 enum class EConquestUnitAugmentStat : uint8
 {
@@ -99,4 +102,25 @@ struct FConquestUnitRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
 	int32 GoldMaintenancePerTurn = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<UStaticMesh> UnitMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<UMaterialInterface> UnitMeshMaterialOverride = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta=(ClampMin="1"))
+	int32 UnitMeshCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual", meta=(ClampMin="0.0"))
+	float UnitMeshSpacing = 60.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	FVector UnitMeshScale = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	FVector UnitMeshOffset = FVector(0.0f, 0.0f, 8.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	FRotator UnitMeshRotation = FRotator::ZeroRotator;
 };

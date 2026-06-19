@@ -96,6 +96,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
 	void ClearTileImprovementChoices();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool SelectUnitAtTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearUnitSelection();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;

@@ -56,6 +56,9 @@ struct FConquestUnitState
 	int32 SourceCityId = INDEX_NONE;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FIntPoint TileCoord = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CurrentHealth = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

@@ -5,6 +5,7 @@
 #include "ConquestCivilisationTypes.generated.h"
 
 class UMaterialInterface;
+class UStaticMesh;
 
 USTRUCT(BlueprintType)
 struct FConquestContentOverride
@@ -39,6 +40,24 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
 	TObjectPtr<UMaterialInterface> BorderMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
+	TObjectPtr<UMaterialInterface> BorderFillMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities")
+	TArray<FName> CityNames;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities")
+	TObjectPtr<UStaticMesh> CityMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities")
+	TObjectPtr<UMaterialInterface> CityMeshMaterialOverride = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities")
+	bool bOverrideCityMeshScale = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Cities", meta=(EditCondition="bOverrideCityMeshScale"))
+	FVector CityMeshScaleOverride = FVector(0.5f, 0.5f, 0.5f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FConquestContentOverride> BuildingOverrides;

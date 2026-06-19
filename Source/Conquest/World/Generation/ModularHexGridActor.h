@@ -15,7 +15,9 @@
 
 class USceneComponent;
 class UProceduralMeshComponent;
+class UInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UStaticMesh;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UHexImprovementSetData;
@@ -27,12 +29,19 @@ class CONQUEST_API AModularHexGridActor : public AActor
 
 public:
 	AModularHexGridActor();
-	void EnsureCityPlaceholderMeshComponent();
-	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord) const;
-	void AddCityPlaceholder(int32 CityId, const FIntPoint& Coord);
+	UInstancedStaticMeshComponent* EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh = nullptr, UMaterialInterface* OverrideMaterial = nullptr);
+	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord, bool bOverrideScale = false, const FVector& OverrideScale = FVector::OneVector) const;
+	void AddCityPlaceholder(
+		int32 CityId,
+		const FIntPoint& Coord,
+		UStaticMesh* OverrideMesh = nullptr,
+		UMaterialInterface* OverrideMaterial = nullptr,
+		bool bOverrideScale = false,
+		const FVector& OverrideScale = FVector::OneVector
+	);
 	void ClearCityPlaceholders();
-	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial);
-	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial);
+	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
+	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
 	void RebuildExpansionCandidateHighlights(const TArray<FIntPoint>& CandidateCoords, UMaterialInterface* HighlightMaterial = nullptr);
 	void ClearExpansionCandidateHighlights();
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
@@ -56,11 +65,20 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
 	FVector CityPlaceholderScale = FVector(0.5f, 0.5f, 0.5f);
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities")
+	float CityPlaceholderGroundTraceHeight = 10000.0f;
+
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> CityPlaceholderMeshComponent = nullptr;
 
 	UPROPERTY()
 	TMap<int32, int32> CityIdToPlaceholderInstanceIndex;
+
+	UPROPERTY()
+	TMap<int32, int32> CityIdToPlaceholderVisualKey;
+
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UInstancedStaticMeshComponent>> CityPlaceholderMeshComponentsByVisualKey;
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();
@@ -137,20 +155,35 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Borders")
 	TObjectPtr<UProceduralMeshComponent> CivilisationBorderMesh = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Borders")
+	TObjectPtr<UProceduralMeshComponent> CivilisationBorderFillMesh = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
 	TObjectPtr<UMaterialInterface> DefaultCivilisationBorderMaterial = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
-	float CivilisationBorderEdgeWidth = 14.0f;
+	TObjectPtr<UMaterialInterface> DefaultCivilisationBorderFillMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	float CivilisationBorderEdgeWidth = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
 	float CivilisationBorderSurfaceOffset = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
-	float CivilisationBorderVertexRadius = 16.0f;
+	float CivilisationBorderFillSurfaceOffset = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders", meta=(ClampMin="0.01", ClampMax="1.0"))
+	float CivilisationBorderFillHexScale = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	float CivilisationBorderVertexRadius = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
 	int32 CivilisationBorderTranslucencySortPriority = 7;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	int32 CivilisationBorderFillTranslucencySortPriority = 4;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Expansion")
 	TObjectPtr<UProceduralMeshComponent> ExpansionCandidateMesh = nullptr;

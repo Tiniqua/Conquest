@@ -56,6 +56,16 @@ AModularHexGridActor::AModularHexGridActor()
 	CivilisationBorderMesh->CastShadow = false;
 	CivilisationBorderMesh->TranslucencySortPriority = CivilisationBorderTranslucencySortPriority;
 
+	CivilisationBorderFillMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("CivilisationBorderFillMesh"));
+	CivilisationBorderFillMesh->SetupAttachment(SceneRoot);
+	CivilisationBorderFillMesh->bUseAsyncCooking = true;
+	CivilisationBorderFillMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CivilisationBorderFillMesh->SetCastShadow(false);
+	CivilisationBorderFillMesh->bCastDynamicShadow = false;
+	CivilisationBorderFillMesh->bCastStaticShadow = false;
+	CivilisationBorderFillMesh->CastShadow = false;
+	CivilisationBorderFillMesh->TranslucencySortPriority = CivilisationBorderFillTranslucencySortPriority;
+
 	ExpansionCandidateMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ExpansionCandidateMesh"));
 	ExpansionCandidateMesh->SetupAttachment(SceneRoot);
 	ExpansionCandidateMesh->bUseAsyncCooking = true;
@@ -80,16 +90,24 @@ AModularHexGridActor::AModularHexGridActor()
 	ConfigureMeshComponents();
 }
 
-void AModularHexGridActor::EnsureCityPlaceholderMeshComponent()
+UInstancedStaticMeshComponent* AModularHexGridActor::EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh, UMaterialInterface* OverrideMaterial)
 {
-	if (CityPlaceholderMeshComponent)
+	UStaticMesh* EffectiveMesh = OverrideMesh ? OverrideMesh : CityPlaceholderMesh.Get();
+	UMaterialInterface* EffectiveMaterial = OverrideMaterial ? OverrideMaterial : CityPlaceholderMaterialOverride.Get();
+
+	if (!EffectiveMesh)
 	{
-		return;
+		return nullptr;
 	}
 
-	if (!CityPlaceholderMesh)
+	const int32 VisualKey = HashCombine(
+		PointerHash(EffectiveMesh),
+		PointerHash(EffectiveMaterial)
+	);
+
+	if (TObjectPtr<UInstancedStaticMeshComponent>* ExistingComponent = CityPlaceholderMeshComponentsByVisualKey.Find(VisualKey))
 	{
-		return;
+		return ExistingComponent->Get();
 	}
 
 	const FName ComponentName = MakeUniqueObjectName(
@@ -98,44 +116,57 @@ void AModularHexGridActor::EnsureCityPlaceholderMeshComponent()
 		TEXT("CityPlaceholderMesh")
 	);
 
-	CityPlaceholderMeshComponent =
+	UInstancedStaticMeshComponent* NewCityPlaceholderMeshComponent =
 		NewObject<UInstancedStaticMeshComponent>(this, ComponentName);
 
-	if (!CityPlaceholderMeshComponent)
+	if (!NewCityPlaceholderMeshComponent)
 	{
-		return;
+		return nullptr;
 	}
 
-	CityPlaceholderMeshComponent->SetStaticMesh(CityPlaceholderMesh);
+	NewCityPlaceholderMeshComponent->SetStaticMesh(EffectiveMesh);
 
-	if (CityPlaceholderMaterialOverride)
+	if (EffectiveMaterial)
 	{
-		const int32 MaterialSlotCount = CityPlaceholderMesh->GetStaticMaterials().Num();
+		const int32 MaterialSlotCount = EffectiveMesh->GetStaticMaterials().Num();
 
 		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotCount; ++MaterialIndex)
 		{
-			CityPlaceholderMeshComponent->SetMaterial(
+			NewCityPlaceholderMeshComponent->SetMaterial(
 				MaterialIndex,
-				CityPlaceholderMaterialOverride
+				EffectiveMaterial
 			);
 		}
 	}
 
-	CityPlaceholderMeshComponent->SetupAttachment(SceneRoot);
-	CityPlaceholderMeshComponent->RegisterComponent();
+	NewCityPlaceholderMeshComponent->SetupAttachment(SceneRoot);
+	NewCityPlaceholderMeshComponent->RegisterComponent();
 
-	CityPlaceholderMeshComponent->SetMobility(EComponentMobility::Static);
-	CityPlaceholderMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	CityPlaceholderMeshComponent->SetGenerateOverlapEvents(false);
+	NewCityPlaceholderMeshComponent->SetMobility(EComponentMobility::Static);
+	NewCityPlaceholderMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	NewCityPlaceholderMeshComponent->SetGenerateOverlapEvents(false);
 
-	CityPlaceholderMeshComponent->bCastDynamicShadow = true;
-	CityPlaceholderMeshComponent->bCastStaticShadow = true;
-	CityPlaceholderMeshComponent->CastShadow = true;
+	NewCityPlaceholderMeshComponent->bCastDynamicShadow = true;
+	NewCityPlaceholderMeshComponent->bCastStaticShadow = true;
+	NewCityPlaceholderMeshComponent->CastShadow = true;
 
-	AddInstanceComponent(CityPlaceholderMeshComponent);
+	AddInstanceComponent(NewCityPlaceholderMeshComponent);
+
+	CityPlaceholderMeshComponentsByVisualKey.Add(VisualKey, NewCityPlaceholderMeshComponent);
+
+	if (!OverrideMesh && !OverrideMaterial)
+	{
+		CityPlaceholderMeshComponent = NewCityPlaceholderMeshComponent;
+	}
+
+	return NewCityPlaceholderMeshComponent;
 }
 
-FTransform AModularHexGridActor::BuildCityPlaceholderTransform(const FIntPoint& Coord) const
+FTransform AModularHexGridActor::BuildCityPlaceholderTransform(
+	const FIntPoint& Coord,
+	bool bOverrideScale,
+	const FVector& OverrideScale
+) const
 {
 	const FVector FlatCenter = GridModel.GetHexCenter(Coord.X, Coord.Y);
 
@@ -147,20 +178,53 @@ FTransform AModularHexGridActor::BuildCityPlaceholderTransform(const FIntPoint& 
 		SurfaceZ = Tile->Height;
 	}
 
-	const FVector Location(
+	FVector LocalSurfaceLocation(
 		FlatCenter.X,
 		FlatCenter.Y,
 		SurfaceZ
 	);
 
+	if (UWorld* World = GetWorld())
+	{
+		const float TraceHeight = FMath::Max(100.0f, CityPlaceholderGroundTraceHeight);
+		const FVector LocalTraceStart(FlatCenter.X, FlatCenter.Y, SurfaceZ + TraceHeight);
+		const FVector LocalTraceEnd(FlatCenter.X, FlatCenter.Y, SurfaceZ - TraceHeight);
+
+		const FVector WorldTraceStart = GetActorTransform().TransformPosition(LocalTraceStart);
+		const FVector WorldTraceEnd = GetActorTransform().TransformPosition(LocalTraceEnd);
+
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(CityPlaceholderGroundTrace), false, this);
+
+		if (World->LineTraceSingleByChannel(
+			HitResult,
+			WorldTraceStart,
+			WorldTraceEnd,
+			ECC_Visibility,
+			QueryParams
+		))
+		{
+			LocalSurfaceLocation = GetActorTransform().InverseTransformPosition(HitResult.ImpactPoint);
+		}
+	}
+
+	const FVector FinalScale = bOverrideScale ? OverrideScale : CityPlaceholderScale;
+
 	return FTransform(
 		CityPlaceholderRotation,
-		Location + CityPlaceholderOffset,
-		CityPlaceholderScale
+		LocalSurfaceLocation + CityPlaceholderOffset,
+		FinalScale
 	);
 }
 
-void AModularHexGridActor::AddCityPlaceholder(int32 CityId, const FIntPoint& Coord)
+void AModularHexGridActor::AddCityPlaceholder(
+	int32 CityId,
+	const FIntPoint& Coord,
+	UStaticMesh* OverrideMesh,
+	UMaterialInterface* OverrideMaterial,
+	bool bOverrideScale,
+	const FVector& OverrideScale
+)
 {
 	if (CityId == INDEX_NONE)
 	{
@@ -172,9 +236,11 @@ void AModularHexGridActor::AddCityPlaceholder(int32 CityId, const FIntPoint& Coo
 		return;
 	}
 
-	EnsureCityPlaceholderMeshComponent();
+	UStaticMesh* EffectiveMesh = OverrideMesh ? OverrideMesh : CityPlaceholderMesh.Get();
+	UMaterialInterface* EffectiveMaterial = OverrideMaterial ? OverrideMaterial : CityPlaceholderMaterialOverride.Get();
+	UInstancedStaticMeshComponent* CityMeshComponent = EnsureCityPlaceholderMeshComponent(OverrideMesh, OverrideMaterial);
 
-	if (!CityPlaceholderMeshComponent)
+	if (!CityMeshComponent)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AddCityPlaceholder failed: CityPlaceholderMeshComponent is null. Assign CityPlaceholderMesh on the grid actor."));
 		return;
@@ -185,25 +251,34 @@ void AModularHexGridActor::AddCityPlaceholder(int32 CityId, const FIntPoint& Coo
 		return;
 	}
 
-	const FTransform InstanceTransform = BuildCityPlaceholderTransform(Coord);
-	const int32 InstanceIndex = CityPlaceholderMeshComponent->AddInstance(InstanceTransform);
+	const FTransform InstanceTransform = BuildCityPlaceholderTransform(Coord, bOverrideScale, OverrideScale);
+	const int32 InstanceIndex = CityMeshComponent->AddInstance(InstanceTransform);
+	const int32 VisualKey = HashCombine(
+		PointerHash(EffectiveMesh),
+		PointerHash(EffectiveMaterial)
+	);
 
 	CityIdToPlaceholderInstanceIndex.Add(CityId, InstanceIndex);
-	CityPlaceholderMeshComponent->MarkRenderStateDirty();
+	CityIdToPlaceholderVisualKey.Add(CityId, VisualKey);
+	CityMeshComponent->MarkRenderStateDirty();
 }
 
 void AModularHexGridActor::ClearCityPlaceholders()
 {
 	CityIdToPlaceholderInstanceIndex.Reset();
+	CityIdToPlaceholderVisualKey.Reset();
 
-	if (CityPlaceholderMeshComponent)
+	for (const TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Pair : CityPlaceholderMeshComponentsByVisualKey)
 	{
-		CityPlaceholderMeshComponent->ClearInstances();
-		CityPlaceholderMeshComponent->MarkRenderStateDirty();
+		if (Pair.Value)
+		{
+			Pair.Value->ClearInstances();
+			Pair.Value->MarkRenderStateDirty();
+		}
 	}
 }
 
-void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial)
+void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)
 {
 	TArray<FIntPoint> OwnedTiles;
 
@@ -222,10 +297,10 @@ void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMate
 		}
 	}
 
-	RebuildCivilisationBordersForTiles(OwnedTiles, BorderMaterial);
+	RebuildCivilisationBordersForTiles(OwnedTiles, BorderMaterial, BorderFillMaterial);
 }
 
-void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial)
+void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)
 {
 	if (!CivilisationBorderMesh)
 	{
@@ -233,10 +308,18 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 	}
 
 	CivilisationBorderMesh->ClearAllMeshSections();
+	if (CivilisationBorderFillMesh)
+	{
+		CivilisationBorderFillMesh->ClearAllMeshSections();
+	}
 
 	if (OwnedTiles.Num() <= 0)
 	{
 		CivilisationBorderMesh->SetVisibility(false);
+		if (CivilisationBorderFillMesh)
+		{
+			CivilisationBorderFillMesh->SetVisibility(false);
+		}
 		return;
 	}
 
@@ -246,6 +329,13 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 	TArray<FVector2D> UVs;
 	TArray<FColor> VertexColors;
 	TArray<FProcMeshTangent> Tangents;
+
+	TArray<FVector> FillVertices;
+	TArray<int32> FillTriangles;
+	TArray<FVector> FillNormals;
+	TArray<FVector2D> FillUVs;
+	TArray<FColor> FillVertexColors;
+	TArray<FProcMeshTangent> FillTangents;
 
 	struct FBorderEdgeRecord
 	{
@@ -317,6 +407,49 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 		}
 	};
 
+	auto AddFillHex = [&](
+		const FVector& Center,
+		const TArray<FVector>& Corners
+	)
+	{
+		if (Corners.Num() != 6)
+		{
+			return;
+		}
+
+		const int32 StartIndex = FillVertices.Num();
+
+		FillVertices.Add(Center);
+		FillNormals.Add(FVector::UpVector);
+		FillUVs.Add(FVector2D(0.5f, 0.5f));
+		FillVertexColors.Add(FColor::White);
+		FillTangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const FVector& Corner = Corners[CornerIndex];
+			FillVertices.Add(Corner);
+			FillNormals.Add(FVector::UpVector);
+			FillUVs.Add(GridModel.GetHexCornerUV(CornerIndex));
+			FillVertexColors.Add(FColor::White);
+			FillTangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const int32 CurrentIndex = StartIndex + 1 + CornerIndex;
+			const int32 NextIndex = StartIndex + 1 + ((CornerIndex + 1) % 6);
+
+			FillTriangles.Add(StartIndex);
+			FillTriangles.Add(NextIndex);
+			FillTriangles.Add(CurrentIndex);
+
+			FillTriangles.Add(StartIndex);
+			FillTriangles.Add(CurrentIndex);
+			FillTriangles.Add(NextIndex);
+		}
+	};
+
 	auto AddBoundaryVertexCap = [&BoundaryVertexCaps, this](const FVector& FlatVertex, const FVector& RaisedVertex)
 	{
 		const FHexVertexKey VertexKey = GridModel.MakeVertexKey(FlatVertex);
@@ -332,10 +465,19 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 	for (const FIntPoint& Coord : UniqueOwnedTiles)
 	{
 		const FVector Center = GridModel.GetHexCenter(Coord.X, Coord.Y);
+		const FHexTileData* Tile = GridModel.GetTile(Coord);
+		if (!Tile)
+		{
+			continue;
+		}
+
+		const float FillScale = FMath::Clamp(CivilisationBorderFillHexScale, 0.01f, 1.0f);
 
 		TArray<FVector> Corners;
+		TArray<FVector> FillCorners;
 		TArray<FVector> FlatCorners;
 		Corners.SetNum(6);
+		FillCorners.SetNum(6);
 		FlatCorners.SetNum(6);
 
 		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
@@ -355,7 +497,25 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 				FlatCorner.Y,
 				CornerZ + CivilisationBorderSurfaceOffset
 			);
+
+			const FVector FillFlatCorner = Center + (GridModel.GetHexCornerOffset(CornerIndex) * FillScale);
+			const float FillCornerZ = FMath::Lerp(
+				Tile->Height,
+				CornerZ,
+				FillScale
+			);
+
+			FillCorners[CornerIndex] = FVector(
+				FillFlatCorner.X,
+				FillFlatCorner.Y,
+				FillCornerZ + CivilisationBorderFillSurfaceOffset
+			);
 		}
+
+		AddFillHex(
+			FVector(Center.X, Center.Y, Tile->Height + CivilisationBorderFillSurfaceOffset),
+			FillCorners
+		);
 
 		for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
 		{
@@ -481,6 +641,35 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 			Triangles.Add(CenterIndex);
 			Triangles.Add(CurrentIndex);
 			Triangles.Add(NextIndex);
+		}
+	}
+
+	if (CivilisationBorderFillMesh)
+	{
+		if (FillVertices.Num() > 0)
+		{
+			CivilisationBorderFillMesh->CreateMeshSection(
+				0,
+				FillVertices,
+				FillTriangles,
+				FillNormals,
+				FillUVs,
+				FillVertexColors,
+				FillTangents,
+				false
+			);
+
+			UMaterialInterface* EffectiveFillMaterial = BorderFillMaterial ? BorderFillMaterial : DefaultCivilisationBorderFillMaterial.Get();
+			if (EffectiveFillMaterial)
+			{
+				CivilisationBorderFillMesh->SetMaterial(0, EffectiveFillMaterial);
+			}
+
+			CivilisationBorderFillMesh->SetVisibility(true);
+		}
+		else
+		{
+			CivilisationBorderFillMesh->SetVisibility(false);
 		}
 	}
 
@@ -806,6 +995,11 @@ void AModularHexGridActor::RebuildGrid()
 	{
 		CivilisationBorderMesh->ClearAllMeshSections();
 		CivilisationBorderMesh->SetVisibility(false);
+	}
+	if (CivilisationBorderFillMesh)
+	{
+		CivilisationBorderFillMesh->ClearAllMeshSections();
+		CivilisationBorderFillMesh->SetVisibility(false);
 	}
 	ClearExpansionCandidateHighlights();
 }
@@ -1164,6 +1358,17 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		CivilisationBorderMesh->CastShadow = false;
 		CivilisationBorderMesh->TranslucencySortPriority = CivilisationBorderTranslucencySortPriority;
 		CivilisationBorderMesh->SetVisibility(false);
+	}
+
+	if (CivilisationBorderFillMesh)
+	{
+		CivilisationBorderFillMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CivilisationBorderFillMesh->SetCastShadow(false);
+		CivilisationBorderFillMesh->bCastDynamicShadow = false;
+		CivilisationBorderFillMesh->bCastStaticShadow = false;
+		CivilisationBorderFillMesh->CastShadow = false;
+		CivilisationBorderFillMesh->TranslucencySortPriority = CivilisationBorderFillTranslucencySortPriority;
+		CivilisationBorderFillMesh->SetVisibility(false);
 	}
 
 	if (ExpansionCandidateMesh)

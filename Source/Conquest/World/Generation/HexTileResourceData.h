@@ -107,6 +107,12 @@ struct FHexFeatureDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feature|Visual")
 	FVector MeshScale = FVector(1.0f, 1.0f, 1.0f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feature|Visual")
+	bool bOverrideMeshScale = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feature|Visual", meta = (EditCondition = "bOverrideMeshScale"))
+	FVector MeshScaleOverride = FVector(1.0f, 1.0f, 1.0f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feature|Visual", meta = (ClampMin = "1"))
 	int32 MinMeshInstancesPerTile = 1;
 

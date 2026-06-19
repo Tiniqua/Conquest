@@ -24,7 +24,7 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	FCityState NewCity;
 	NewCity.CityId = NextCityId++;
 	NewCity.OwnerPlayerId = PlayerId;
-	NewCity.CityName = CityName.IsNone() ? FName(TEXT("New City")) : CityName;
+	NewCity.CityName = ResolveCityName(PlayerId, CityName);
 	NewCity.CenterTile = TileCoord;
 	NewCity.Population = 1;
 	NewCity.FoodStored = 0.0f;
@@ -43,9 +43,25 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 
 	if (GameStateRef->ActiveGridActor)
 	{
+		UStaticMesh* CityMesh = nullptr;
+		UMaterialInterface* CityMaterial = nullptr;
+		bool bOverrideCityScale = false;
+		FVector CityScale = FVector::OneVector;
+		if (GameStateRef->HumanPlayer.PlayerId == PlayerId && GameStateRef->HumanCivilisation)
+		{
+			CityMesh = GameStateRef->HumanCivilisation->CityMesh;
+			CityMaterial = GameStateRef->HumanCivilisation->CityMeshMaterialOverride;
+			bOverrideCityScale = GameStateRef->HumanCivilisation->bOverrideCityMeshScale;
+			CityScale = GameStateRef->HumanCivilisation->CityMeshScaleOverride;
+		}
+
 		GameStateRef->ActiveGridActor->AddCityPlaceholder(
 			NewCity.CityId,
-			NewCity.CenterTile
+			NewCity.CenterTile,
+			CityMesh,
+			CityMaterial,
+			bOverrideCityScale,
+			CityScale
 		);
 	}
 
@@ -289,9 +305,11 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 	}
 
 	UMaterialInterface* BorderMaterial = nullptr;
+	UMaterialInterface* BorderFillMaterial = nullptr;
 	if (GameStateRef->HumanPlayer.PlayerId == PlayerId && GameStateRef->HumanCivilisation)
 	{
 		BorderMaterial = GameStateRef->HumanCivilisation->BorderMaterial;
+		BorderFillMaterial = GameStateRef->HumanCivilisation->BorderFillMaterial;
 	}
 
 	TArray<FIntPoint> PlayerOwnedTiles;
@@ -308,7 +326,77 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 		}
 	}
 
-	GameStateRef->ActiveGridActor->RebuildCivilisationBordersForTiles(PlayerOwnedTiles, BorderMaterial);
+	GameStateRef->ActiveGridActor->RebuildCivilisationBordersForTiles(PlayerOwnedTiles, BorderMaterial, BorderFillMaterial);
+}
+
+FName UConquestCityManager::ResolveCityName(int32 PlayerId, FName RequestedCityName) const
+{
+	if (!RequestedCityName.IsNone())
+	{
+		return RequestedCityName;
+	}
+
+	const TArray<FName>* CivilisationCityNames = nullptr;
+	if (
+		GameStateRef &&
+		GameStateRef->HumanPlayer.PlayerId == PlayerId &&
+		GameStateRef->HumanCivilisation &&
+		GameStateRef->HumanCivilisation->CityNames.Num() > 0
+	)
+	{
+		CivilisationCityNames = &GameStateRef->HumanCivilisation->CityNames;
+	}
+
+	if (!CivilisationCityNames)
+	{
+		return FName(TEXT("New City"));
+	}
+
+	TSet<FName> ExistingCityNames;
+	int32 ExistingCityCount = 0;
+	for (const FCityState& City : Cities)
+	{
+		if (City.OwnerPlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		++ExistingCityCount;
+		ExistingCityNames.Add(City.CityName);
+	}
+
+	for (const FName CandidateName : *CivilisationCityNames)
+	{
+		if (!CandidateName.IsNone() && !ExistingCityNames.Contains(CandidateName))
+		{
+			return CandidateName;
+		}
+	}
+
+	const int32 NameCount = CivilisationCityNames->Num();
+	for (int32 Attempt = 0; Attempt < NameCount * 100; ++Attempt)
+	{
+		const int32 NameIndex = (ExistingCityCount + Attempt) % NameCount;
+		const FName BaseName = (*CivilisationCityNames)[NameIndex];
+		if (BaseName.IsNone())
+		{
+			continue;
+		}
+
+		const int32 Suffix = ((ExistingCityCount + Attempt) / NameCount) + 1;
+		const FName CandidateName(*FString::Printf(
+			TEXT("%s_%d"),
+			*BaseName.ToString(),
+			FMath::Max(2, Suffix)
+		));
+
+		if (!ExistingCityNames.Contains(CandidateName))
+		{
+			return CandidateName;
+		}
+	}
+
+	return FName(*FString::Printf(TEXT("New City_%d"), ExistingCityCount + 1));
 }
 
 void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)

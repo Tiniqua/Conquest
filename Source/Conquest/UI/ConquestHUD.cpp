@@ -18,7 +18,7 @@
 
 namespace
 {
-	FString HexTileTypeToString(EHexTileType TileType)
+	FString ConquestHUDHexTileTypeToString(EHexTileType TileType)
 	{
 		if (const UEnum* EnumPtr = StaticEnum<EHexTileType>())
 		{
@@ -28,7 +28,7 @@ namespace
 		return TEXT("Unknown");
 	}
 
-	FString HexFeatureTypeToString(EHexFeatureType FeatureType)
+	FString ConquestHUDHexFeatureTypeToString(EHexFeatureType FeatureType)
 	{
 		if (const UEnum* EnumPtr = StaticEnum<EHexFeatureType>())
 		{
@@ -38,7 +38,7 @@ namespace
 		return TEXT("Unknown");
 	}
 
-	FString FormatTileFeatures(const FHexTileData& TileData)
+	FString ConquestHUDFormatTileFeatures(const FHexTileData& TileData)
 	{
 		TArray<FString> FeatureNames;
 
@@ -46,7 +46,7 @@ namespace
 		{
 			if (Feature != EHexFeatureType::None)
 			{
-				FeatureNames.Add(HexFeatureTypeToString(Feature));
+				FeatureNames.Add(ConquestHUDHexFeatureTypeToString(Feature));
 			}
 		}
 
@@ -55,7 +55,7 @@ namespace
 			: TEXT("None");
 	}
 
-	FString FormatTileResource(const FHexTileData& TileData)
+	FString ConquestHUDFormatTileResource(const FHexTileData& TileData)
 	{
 		if (!TileData.Resource.HasResource())
 		{
@@ -238,9 +238,9 @@ bool AConquestHUD::SelectExpansionCandidateTile(int32 Q, int32 R)
 	FConquestTileExpansionChoiceData ChoiceData;
 	ChoiceData.CityId = ExpansionSelectionCityId;
 	ChoiceData.Coord = Coord;
-	ChoiceData.TileType = HexTileTypeToString(Tile->TileType);
-	ChoiceData.Resource = FormatTileResource(*Tile);
-	ChoiceData.Features = FormatTileFeatures(*Tile);
+	ChoiceData.TileType = ConquestHUDHexTileTypeToString(Tile->TileType);
+	ChoiceData.Resource = ConquestHUDFormatTileResource(*Tile);
+	ChoiceData.Features = ConquestHUDFormatTileFeatures(*Tile);
 	ChoiceData.Yield = Tile->FinalYield;
 	ChoiceData.bIsValid = true;
 

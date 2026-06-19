@@ -414,7 +414,10 @@ FTransform FHexFeatureMeshBuilder::BuildFeatureTransform(
 		ScaleMultiplier = 1.0f / FMath::Sqrt(static_cast<float>(FMath::Max(1, SpawnedInstanceCount)));
 	}
 
-	const FVector FinalScale = FeatureDefinition.MeshScale * ScaleMultiplier;
+	const FVector BaseScale = FeatureDefinition.bOverrideMeshScale
+		? FeatureDefinition.MeshScaleOverride
+		: FeatureDefinition.MeshScale;
+	const FVector FinalScale = BaseScale * ScaleMultiplier;
 	const FVector FinalLocation = SurfaceLocation + FeatureDefinition.MeshOffset;
 
 	return FTransform(

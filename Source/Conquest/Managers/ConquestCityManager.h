@@ -6,6 +6,7 @@
 #include "ConquestCityManager.generated.h"
 
 class AConquestGameState;
+struct FConquestUnitState;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCityChanged, int32, CityId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCityFounded, int32, CityId, FIntPoint, Coord);
@@ -47,13 +48,25 @@ public:
 	bool SetCityProductionBuildingById(int32 CityId, FName BuildingId);
 
 	UFUNCTION(BlueprintCallable)
+	bool SetCityProductionUnitById(int32 CityId, FName UnitId);
+
+	UFUNCTION(BlueprintCallable)
 	TArray<FName> GetAvailableProductionBuildingIdsForCity(int32 CityId) const;
+
+	UFUNCTION(BlueprintCallable)
+	TArray<FName> GetAvailableProductionUnitIdsForCity(int32 CityId) const;
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FIntPoint> GetExpansionCandidateTiles(int32 CityId) const;
 
 	UFUNCTION(BlueprintCallable)
 	bool ClaimExpansionTileForCity(int32 CityId, const FIntPoint& Coord);
+
+	UFUNCTION(BlueprintCallable)
+	TArray<FName> GetAvailableTileImprovementIdsForPlayer(int32 PlayerId, const FIntPoint& Coord) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool PurchaseTileImprovementForPlayer(int32 PlayerId, const FIntPoint& Coord, FName ImprovementId);
 
 	UFUNCTION(BlueprintCallable)
 	bool RefreshCityYields(int32 CityId);
@@ -63,6 +76,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	int32 EstimateTurnsToBuildById(int32 CityId, FName BuildingId) const;
+
+	UFUNCTION(BlueprintCallable)
+	int32 EstimateTurnsToTrainUnitById(int32 CityId, FName UnitId) const;
 
 	UFUNCTION(BlueprintCallable)
 	int32 EstimateTurnsToGrowth(int32 CityId) const;
@@ -89,6 +105,10 @@ private:
 	void AutoAssignWorkedTiles(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
 	void RecalculateEmpireYields(int32 PlayerId);
+	void RecalculateStrategicResourceEconomy(int32 PlayerId);
+	void AccumulateStrategicResourceIncome(int32 PlayerId);
+	void RecalculateUnitStats(FConquestUnitState& Unit) const;
+	int32 CreateUnitFromProduction(const FCityState& City, FName UnitId);
 	void UpdateOwnedTileVisuals(int32 PlayerId);
 	void UpdateCityWorldLabel(const FCityState& City);
 	FName ResolveCityName(int32 PlayerId, FName RequestedCityName) const;

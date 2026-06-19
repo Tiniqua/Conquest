@@ -44,6 +44,9 @@ struct FHexResourceDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Strategic", meta = (ClampMin = "0"))
 	int32 MaxStrategicQuantity = 6;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Strategic", meta = (ClampMin = "0"))
+	int32 StartingStorageCap = 10;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Placement")
 	TArray<EHexTileType> ValidTileTypes;
 

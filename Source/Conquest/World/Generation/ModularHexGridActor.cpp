@@ -1073,6 +1073,14 @@ void AModularHexGridActor::RebuildGrid()
 		EffectiveGenerationSettings.RandomSeed,
 		ResourceMeshComponents
 	);
+
+	ImprovementMeshBuilder.BuildImprovementMeshes(
+		this,
+		SceneRoot,
+		GridModel,
+		ImprovementSetData,
+		ImprovementMeshComponents
+	);
 	
 
 	if (bGenerateFogOfWar)
@@ -1324,6 +1332,7 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 	{
 		// Terrain shape does not change yet, but this makes material/yield-driven visual changes easy later.
 		MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
+		RebuildPlacedTileVisualMeshes();
 
 		if (const FHexTileData* Tile = GridModel.GetTile(Q, R))
 		{
@@ -1342,6 +1351,26 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 		}
 	}
 	return bChanged;
+}
+
+void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
+{
+	FeatureMeshBuilder.BuildFeatureMeshes(
+		this,
+		SceneRoot,
+		GridModel,
+		TileResourceData,
+		GenerationSettings.RandomSeed,
+		FeatureMeshComponents
+	);
+
+	ImprovementMeshBuilder.BuildImprovementMeshes(
+		this,
+		SceneRoot,
+		GridModel,
+		ImprovementSetData,
+		ImprovementMeshComponents
+	);
 }
 
 bool AModularHexGridActor::GetTileAtWorldLocation(

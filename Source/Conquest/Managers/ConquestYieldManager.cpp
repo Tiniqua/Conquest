@@ -110,6 +110,15 @@ FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurn(int32 PlayerId) con
 		}
 	}
 
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	if (Player.PlayerId == PlayerId)
+	{
+		for (const FConquestUnitState& Unit : Player.Units)
+		{
+			Result.Gold -= FMath::Max(0, Unit.CachedGoldMaintenancePerTurn);
+		}
+	}
+
 	return Result;
 }
 

@@ -3,12 +3,26 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Conquest/UI/ConquestChoiceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "ConquestGameWidget.generated.h"
 
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
+class UConquestChoiceButtonWidget;
+
+USTRUCT(BlueprintType)
+struct FConquestTileImprovementChoiceData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Improvement")
+	FIntPoint Coord = FIntPoint::ZeroValue;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Improvement")
+	bool bIsValid = false;
+};
 
 USTRUCT(BlueprintType)
 struct FConquestTileExpansionChoiceData
@@ -148,11 +162,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
 	void ClearTileExpansionConfirmation();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
+	void ShowTileImprovementChoices(const FConquestTileImprovementChoiceData& ChoiceData, const TArray<FConquestChoiceButtonData>& ImprovementChoices);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
+	void ClearTileImprovementChoices();
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	FConquestTopBarYieldData GetTopBarYieldData() const;
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Tile Expansion")
 	FConquestTileExpansionChoiceData GetPendingTileExpansionChoice() const { return PendingTileExpansionChoice; }
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Tile Improvement")
+	FConquestTileImprovementChoiceData GetPendingTileImprovementChoice() const { return PendingTileImprovementChoice; }
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	bool ShouldShowSelectedCityLocalYields() const { return SelectedCityYieldContextId != INDEX_NONE; }
@@ -269,6 +292,21 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> TileExpansionCancelButton = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> TileImprovementChoicePanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TileImprovementTitleText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> TileImprovementButtonBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> TileImprovementCloseButton = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestChoiceButtonWidget> ChoiceButtonWidgetClass;
+
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
@@ -283,12 +321,19 @@ private:
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
+	FConquestTileImprovementChoiceData PendingTileImprovementChoice;
 
 	UFUNCTION()
 	void HandleTileExpansionConfirmClicked();
 
 	UFUNCTION()
 	void HandleTileExpansionCancelClicked();
+
+	UFUNCTION()
+	void HandleTileImprovementChoiceClicked(const FConquestChoiceButtonData& ChoiceData);
+
+	UFUNCTION()
+	void HandleTileImprovementCloseClicked();
 
 	UFUNCTION()
 	void HandleResearchChanged();

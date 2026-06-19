@@ -468,6 +468,11 @@ void AConquestPawn::HandlePrimaryClick()
 			{
 				return;
 			}
+
+			if (ConquestHUD->ShowTileImprovementChoicesForTile(Q, R))
+			{
+				return;
+			}
 		}
 	}
 

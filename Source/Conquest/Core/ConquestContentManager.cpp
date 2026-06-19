@@ -52,6 +52,19 @@ const FConquestUnitRow* UConquestContentManager::FindUnit(FName UnitId) const
 	);
 }
 
+const FConquestUnitAugmentRow* UConquestContentManager::FindUnitAugment(FName AugmentId) const
+{
+	if (!GameStateRef || !GameStateRef->UnitAugmentTable || AugmentId.IsNone())
+	{
+		return nullptr;
+	}
+
+	return GameStateRef->UnitAugmentTable->FindRow<FConquestUnitAugmentRow>(
+		AugmentId,
+		TEXT("FindUnitAugment")
+	);
+}
+
 const FConquestPhilosophyRow* UConquestContentManager::FindPhilosophy(FName PhilosophyId) const
 {
 	if (!GameStateRef || !GameStateRef->PhilosophyTable || PhilosophyId.IsNone())
@@ -169,6 +182,37 @@ void UConquestContentManager::GetStartingBuildingIdsForPlayer(int32 PlayerId, TA
 	}
 }
 
+void UConquestContentManager::GetAllBaseUnits(TArray<const FConquestUnitRow*>& OutRows) const
+{
+	OutRows.Reset();
+
+	if (!GameStateRef || !GameStateRef->UnitTable)
+	{
+		return;
+	}
+
+	TArray<FConquestUnitRow*> AllRows;
+	GameStateRef->UnitTable->GetAllRows<FConquestUnitRow>(
+		TEXT("GetAllBaseUnits"),
+		AllRows
+	);
+
+	for (const FConquestUnitRow* Row : AllRows)
+	{
+		if (!Row)
+		{
+			continue;
+		}
+
+		if (!Row->ReplacesUnitId.IsNone())
+		{
+			continue;
+		}
+
+		OutRows.Add(Row);
+	}
+}
+
 void UConquestContentManager::GetAllTechs(TArray<const FConquestTechRow*>& OutRows) const
 {
 	OutRows.Reset();
@@ -185,6 +229,30 @@ void UConquestContentManager::GetAllTechs(TArray<const FConquestTechRow*>& OutRo
 	);
 
 	for (const FConquestTechRow* Row : AllRows)
+	{
+		if (Row)
+		{
+			OutRows.Add(Row);
+		}
+	}
+}
+
+void UConquestContentManager::GetAllUnitAugments(TArray<const FConquestUnitAugmentRow*>& OutRows) const
+{
+	OutRows.Reset();
+
+	if (!GameStateRef || !GameStateRef->UnitAugmentTable)
+	{
+		return;
+	}
+
+	TArray<FConquestUnitAugmentRow*> AllRows;
+	GameStateRef->UnitAugmentTable->GetAllRows<FConquestUnitAugmentRow>(
+		TEXT("GetAllUnitAugments"),
+		AllRows
+	);
+
+	for (const FConquestUnitAugmentRow* Row : AllRows)
 	{
 		if (Row)
 		{

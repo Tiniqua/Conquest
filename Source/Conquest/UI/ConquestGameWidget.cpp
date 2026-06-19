@@ -1,9 +1,11 @@
 ﻿#include "ConquestGameWidget.h"
 
 #include "ConquestHUD.h"
+#include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/Widget.h"
+#include "Conquest/UI/ConquestChoiceButtonWidget.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Core/ConquestContentManager.h"
@@ -169,6 +171,12 @@ void UConquestGameWidget::NativeConstruct()
 		TileExpansionCancelButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleTileExpansionCancelClicked);
 	}
 
+	if (TileImprovementCloseButton)
+	{
+		TileImprovementCloseButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleTileImprovementCloseClicked);
+		TileImprovementCloseButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleTileImprovementCloseClicked);
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
@@ -189,6 +197,7 @@ void UConquestGameWidget::NativeConstruct()
 	
 	ClearHoveredTileInfo();
 	ClearTileExpansionConfirmation();
+	ClearTileImprovementChoices();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
@@ -406,6 +415,78 @@ void UConquestGameWidget::ClearTileExpansionConfirmation()
 	ClearText(TileExpansionYieldText);
 }
 
+void UConquestGameWidget::ShowTileImprovementChoices(
+	const FConquestTileImprovementChoiceData& ChoiceData,
+	const TArray<FConquestChoiceButtonData>& ImprovementChoices
+)
+{
+	PendingTileImprovementChoice = ChoiceData;
+
+	if (!ChoiceData.bIsValid || ImprovementChoices.Num() <= 0)
+	{
+		ClearTileImprovementChoices();
+		return;
+	}
+
+	SetVisibility(TileImprovementChoicePanel, ESlateVisibility::Visible);
+	SetText(
+		TileImprovementTitleText,
+		FString::Printf(TEXT("Upgrade Tile [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
+	);
+
+	if (!TileImprovementButtonBox)
+	{
+		return;
+	}
+
+	TileImprovementButtonBox->ClearChildren();
+
+	if (!ChoiceButtonWidgetClass)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("ConquestGameWidget: ChoiceButtonWidgetClass is not set for tile improvements.")
+		);
+		return;
+	}
+
+	for (const FConquestChoiceButtonData& ImprovementChoice : ImprovementChoices)
+	{
+		UConquestChoiceButtonWidget* ChoiceButton =
+			CreateWidget<UConquestChoiceButtonWidget>(GetOwningPlayer(), ChoiceButtonWidgetClass);
+
+		if (!ChoiceButton)
+		{
+			continue;
+		}
+
+		ChoiceButton->SetupChoiceButton(ImprovementChoice);
+		ChoiceButton->OnChoiceClicked.RemoveDynamic(
+			this,
+			&UConquestGameWidget::HandleTileImprovementChoiceClicked
+		);
+		ChoiceButton->OnChoiceClicked.AddDynamic(
+			this,
+			&UConquestGameWidget::HandleTileImprovementChoiceClicked
+		);
+
+		TileImprovementButtonBox->AddChild(ChoiceButton);
+	}
+}
+
+void UConquestGameWidget::ClearTileImprovementChoices()
+{
+	PendingTileImprovementChoice = FConquestTileImprovementChoiceData();
+	SetVisibility(TileImprovementChoicePanel, ESlateVisibility::Collapsed);
+	ClearText(TileImprovementTitleText);
+
+	if (TileImprovementButtonBox)
+	{
+		TileImprovementButtonBox->ClearChildren();
+	}
+}
+
 void UConquestGameWidget::HandleTileExpansionConfirmClicked()
 {
 	APlayerController* PC = GetOwningPlayer();
@@ -427,6 +508,35 @@ void UConquestGameWidget::HandleTileExpansionCancelClicked()
 	else
 	{
 		ClearTileExpansionConfirmation();
+	}
+}
+
+void UConquestGameWidget::HandleTileImprovementChoiceClicked(const FConquestChoiceButtonData& ChoiceData)
+{
+	if (!PendingTileImprovementChoice.bIsValid || ChoiceData.ChoiceType != EConquestChoiceType::TileImprovement)
+	{
+		return;
+	}
+
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->PurchaseSelectedTileImprovement(ChoiceData.ChoiceId);
+	}
+}
+
+void UConquestGameWidget::HandleTileImprovementCloseClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->ClearTileImprovementChoices();
+	}
+	else
+	{
+		ClearTileImprovementChoices();
 	}
 }
 

@@ -2,7 +2,83 @@
 
 #include "CoreMinimal.h"
 #include "Conquest/World/Generation/HexYieldTypes.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 #include "ConquestPlayerEmpireState.generated.h"
+
+USTRUCT(BlueprintType)
+struct FConquestStrategicResourceStockpile
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ResourceId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Stored = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Cap = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PerTurn = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FConquestUnitAugmentState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName AugmentId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EConquestUnitAugmentStat ModifiedStat = EConquestUnitAugmentStat::Strength;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 FlatBonus = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FConquestUnitState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 UnitInstanceId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 OwnerPlayerId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName UnitId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 SourceCityId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentHealth = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestUnitAugmentState> Augments;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedStrength = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedAttackRange = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedMaxHealth = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedHealthRegenPerTurn = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedMovementPoints = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedGoldMaintenancePerTurn = 0;
+};
 
 USTRUCT(BlueprintType)
 struct FConquestPlayerEmpireState
@@ -20,6 +96,15 @@ struct FConquestPlayerEmpireState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FHexYield CachedYieldPerTurn;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestStrategicResourceStockpile> StrategicResources;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestUnitState> Units;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 NextUnitInstanceId = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 BaseHappiness = 6;
@@ -54,5 +139,21 @@ struct FConquestPlayerEmpireState
 	bool HasResearched(FName TechId) const
 	{
 		return !TechId.IsNone() && ResearchedTechIds.Contains(TechId);
+	}
+
+	FConquestStrategicResourceStockpile* FindStrategicResource(FName ResourceId)
+	{
+		return StrategicResources.FindByPredicate([ResourceId](const FConquestStrategicResourceStockpile& Stockpile)
+		{
+			return Stockpile.ResourceId == ResourceId;
+		});
+	}
+
+	const FConquestStrategicResourceStockpile* FindStrategicResource(FName ResourceId) const
+	{
+		return StrategicResources.FindByPredicate([ResourceId](const FConquestStrategicResourceStockpile& Stockpile)
+		{
+			return Stockpile.ResourceId == ResourceId;
+		});
 	}
 };

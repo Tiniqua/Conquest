@@ -87,6 +87,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
 	void ClearCityTileExpansionSelection();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
+	bool ShowTileImprovementChoicesForTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
+	bool PurchaseSelectedTileImprovement(FName ImprovementId);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
+	void ClearTileImprovementChoices();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;
@@ -114,6 +123,7 @@ protected:
 
 	int32 ExpansionSelectionCityId = INDEX_NONE;
 	FIntPoint PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+	FIntPoint PendingImprovementTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();

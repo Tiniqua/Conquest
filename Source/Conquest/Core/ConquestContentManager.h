@@ -10,6 +10,7 @@ class UConquestCivilisationData;
 struct FConquestBuildingRow;
 struct FConquestTechRow;
 struct FConquestUnitRow;
+struct FConquestUnitAugmentRow;
 struct FConquestPhilosophyRow;
 
 UCLASS(BlueprintType)
@@ -23,6 +24,7 @@ public:
 	const FConquestBuildingRow* FindBuilding(FName BuildingId) const;
 	const FConquestTechRow* FindTech(FName TechId) const;
 	const FConquestUnitRow* FindUnit(FName UnitId) const;
+	const FConquestUnitAugmentRow* FindUnitAugment(FName AugmentId) const;
 	const FConquestPhilosophyRow* FindPhilosophy(FName PhilosophyId) const;
 
 	FName ResolveBuildingIdForPlayer(int32 PlayerId, FName BaseBuildingId) const;
@@ -32,6 +34,8 @@ public:
 	const FConquestUnitRow* ResolveUnitForPlayer(int32 PlayerId, FName BaseUnitId) const;
 
 	void GetAllBaseBuildings(TArray<const FConquestBuildingRow*>& OutRows) const;
+	void GetAllBaseUnits(TArray<const FConquestUnitRow*>& OutRows) const;
+	void GetAllUnitAugments(TArray<const FConquestUnitAugmentRow*>& OutRows) const;
 	void GetStartingBuildingIdsForPlayer(int32 PlayerId, TArray<FName>& OutBuildingIds) const;
 	void GetAllTechs(TArray<const FConquestTechRow*>& OutRows) const;
 

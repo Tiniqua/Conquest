@@ -4,6 +4,7 @@
 #include "ConquestGameSetupTypes.h"
 #include "HexFeatureGenerator.h"
 #include "HexFeatureMeshBuilder.h"
+#include "HexImprovementMeshBuilder.h"
 #include "GameFramework/Actor.h"
 #include "HexGridModel.h"
 #include "HexMapGenerator.h"
@@ -322,9 +323,14 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ResourceMeshComponents;
 
 	FHexTileResourceMeshBuilder ResourceMeshBuilder;
+	FHexImprovementMeshBuilder ImprovementMeshBuilder;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ImprovementMeshComponents;
 
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
+	void RebuildPlacedTileVisualMeshes();
 
-	
+
 };

@@ -7,10 +7,12 @@
 #include "ConquestGameWidget.h"
 #include "ConquestMainMenuWidget.h"
 #include "ConquestResearchPanelWidget.h"
+#include "Conquest/UI/ConquestChoiceTypes.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexImprovementTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "GameFramework/PlayerController.h"
@@ -145,6 +147,7 @@ void AConquestHUD::ShowCityPanel(int32 CityId)
 		return;
 	}
 
+	ClearTileImprovementChoices();
 	CityPanelWidget->SetCity(CityId);
 	CityPanelWidget->SetVisibility(ESlateVisibility::Visible);
 
@@ -169,6 +172,7 @@ void AConquestHUD::HideCityPanel()
 	}
 
 	ClearCityTileExpansionSelection();
+	ClearTileImprovementChoices();
 }
 
 void AConquestHUD::BeginCityTileExpansionSelection(int32 CityId)
@@ -320,6 +324,155 @@ void AConquestHUD::ClearCityTileExpansionSelection()
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
 		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+}
+
+bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
+{
+	if (!CityPanelWidget || !CityPanelWidget->IsVisible())
+	{
+		return false;
+	}
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return false;
+	}
+
+	const FIntPoint Coord(Q, R);
+	if (ConquestGS->CityManager->FindCityAtTile(Coord) != INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
+	const int32 PlayerId = ConquestGS->HumanPlayer.PlayerId;
+	if (!GridModel || !Tile || Tile->Gameplay.OwnerPlayerId != PlayerId || !Tile->ImprovementId.IsNone())
+	{
+		ClearTileImprovementChoices();
+		return false;
+	}
+
+	TArray<FName> AvailableImprovementIds =
+		ConquestGS->CityManager->GetAvailableTileImprovementIdsForPlayer(PlayerId, Coord);
+
+	if (AvailableImprovementIds.Num() <= 0)
+	{
+		ClearTileImprovementChoices();
+		return false;
+	}
+
+	TArray<const FHexImprovementDefinition*> PossibleImprovements;
+	GridModel->GetPossibleImprovementsForTile(Q, R, PossibleImprovements);
+
+	TArray<FConquestChoiceButtonData> ImprovementChoices;
+	for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+	{
+		if (!Improvement || !AvailableImprovementIds.Contains(Improvement->ImprovementId))
+		{
+			continue;
+		}
+
+		const int32 GoldCost = FMath::Max(0, Improvement->PurchaseGoldCost);
+		const bool bCanAfford = ConquestGS->HumanPlayer.StoredYields.Gold >= GoldCost;
+
+		FConquestChoiceButtonData ChoiceData;
+		ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
+		ChoiceData.ChoiceId = Improvement->ImprovementId;
+		ChoiceData.Title = !Improvement->DisplayName.IsEmpty()
+			? Improvement->DisplayName
+			: FText::FromName(Improvement->ImprovementId);
+		ChoiceData.Cost = GoldCost;
+		ChoiceData.bEnabled = bCanAfford;
+		ChoiceData.Subtitle = FText::Format(
+			NSLOCTEXT("Conquest", "TileImprovementChoiceSubtitle", "{0} Gold | Gain: {1}"),
+			FText::AsNumber(GoldCost),
+			FText::FromString(Improvement->YieldModifier.ToCompactString())
+		);
+
+		if (!bCanAfford)
+		{
+			ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "TileImprovementNotEnoughGold", "Not enough gold");
+			ChoiceData.DetailText = ChoiceData.DisabledReason;
+		}
+
+		ImprovementChoices.Add(ChoiceData);
+	}
+
+	if (ImprovementChoices.Num() <= 0)
+	{
+		ClearTileImprovementChoices();
+		return false;
+	}
+
+	PendingImprovementTileCoord = Coord;
+
+	FConquestTileImprovementChoiceData ChoiceData;
+	ChoiceData.Coord = Coord;
+	ChoiceData.bIsValid = true;
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ShowTileImprovementChoices(ChoiceData, ImprovementChoices);
+	}
+
+	return true;
+}
+
+bool AConquestHUD::PurchaseSelectedTileImprovement(FName ImprovementId)
+{
+	if (PendingImprovementTileCoord == FIntPoint(INT32_MIN, INT32_MIN))
+	{
+		return false;
+	}
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return false;
+	}
+
+	const int32 PlayerId = ConquestGS->HumanPlayer.PlayerId;
+	const bool bPurchased = ConquestGS->CityManager->PurchaseTileImprovementForPlayer(
+		PlayerId,
+		PendingImprovementTileCoord,
+		ImprovementId
+	);
+
+	if (!bPurchased)
+	{
+		return false;
+	}
+
+	if (CityPanelWidget)
+	{
+		CityPanelWidget->Refresh();
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->RefreshTopBarYieldInfo();
+	}
+
+	ClearTileImprovementChoices();
+	return true;
+}
+
+void AConquestHUD::ClearTileImprovementChoices()
+{
+	PendingImprovementTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileImprovementChoices();
 	}
 }
 

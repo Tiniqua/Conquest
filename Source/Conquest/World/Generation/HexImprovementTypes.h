@@ -34,6 +34,9 @@ struct FHexImprovementDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Yield")
 	FHexYield YieldModifier;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Cost", meta = (ClampMin = "0"))
+	int32 PurchaseGoldCost = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	TArray<EHexTileType> ValidTileTypes;
 
@@ -47,6 +50,13 @@ struct FHexImprovementDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	TArray<FName> RequiredResources;
+
+	// If true, any visible resource blocks this improvement unless that resource is explicitly required.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
+	bool bBlockedByAnyResource = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
+	TArray<FName> BlockedResources;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	bool bRequiresRiver = false;
@@ -63,11 +73,20 @@ struct FHexImprovementDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	TArray<EHexFeatureType> RemovedFeatures;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules", meta = (ClampMin = "1"))
-	int32 BuildTurns = 4;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
 	TObjectPtr<UStaticMesh> WorldMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
+	TObjectPtr<UMaterialInterface> WorldMeshMaterialOverride = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
+	FVector MeshOffset = FVector(0.0f, 0.0f, 8.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
+	FRotator MeshRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
+	FVector MeshScale = FVector(1.0f, 1.0f, 1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
 	TObjectPtr<UMaterialInterface> IconMaterial = nullptr;
@@ -116,6 +135,22 @@ struct FHexImprovementDefinition
 		if (bRequiresResource && !RequiredResources.Contains(Tile.Resource.ResourceId))
 		{
 			return false;
+		}
+
+		if (Tile.Resource.HasResource())
+		{
+			const bool bResourceIsRequired =
+				bRequiresResource && RequiredResources.Contains(Tile.Resource.ResourceId);
+
+			if (!bResourceIsRequired && bBlockedByAnyResource)
+			{
+				return false;
+			}
+
+			if (BlockedResources.Contains(Tile.Resource.ResourceId))
+			{
+				return false;
+			}
 		}
 
 		if (bRequiresRiver && !Tile.bHasRiver)

@@ -7,6 +7,18 @@
 #include "ConquestBuildingTypes.generated.h"
 
 USTRUCT(BlueprintType)
+struct FConquestStrategicResourceCapBonus
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName ResourceId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
+	int32 CapBonus = 0;
+};
+
+USTRUCT(BlueprintType)
 struct FConquestBuildingRow : public FTableRowBase
 {
 	GENERATED_BODY()
@@ -37,6 +49,9 @@ struct FConquestBuildingRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 HappinessBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FConquestStrategicResourceCapBonus> StrategicResourceCapBonuses;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bGrantedOnCityFounding = false;

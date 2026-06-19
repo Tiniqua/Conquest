@@ -4,6 +4,52 @@
 #include "Engine/DataTable.h"
 #include "ConquestUnitTypes.generated.h"
 
+UENUM(BlueprintType)
+enum class EConquestUnitAugmentStat : uint8
+{
+	Strength,
+	AttackRange,
+	MaxHealth,
+	HealthRegen,
+	Movement
+};
+
+USTRUCT(BlueprintType)
+struct FConquestStrategicResourceCost
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ResourceId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0"))
+	int32 Amount = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FConquestUnitAugmentRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName AugmentId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(MultiLine=true))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	EConquestUnitAugmentStat ModifiedStat = EConquestUnitAugmentStat::Strength;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int32 FlatBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FConquestStrategicResourceCost> ResourceCosts;
+};
+
 USTRUCT(BlueprintType)
 struct FConquestUnitRow : public FTableRowBase
 {
@@ -28,8 +74,29 @@ struct FConquestUnitRow : public FTableRowBase
 	FName RequiredTechId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int32 CombatStrength = 10;
+	FName UpgradeUnlockedByTechId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int32 Movement = 2;
+	FName UpgradesToUnitId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
+	int32 UpgradeGoldCost = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="1"))
+	int32 Strength = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="1"))
+	int32 AttackRange = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="1"))
+	int32 MaxHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
+	int32 HealthRegenPerTurn = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
+	int32 MovementPoints = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0"))
+	int32 GoldMaintenancePerTurn = 0;
 };

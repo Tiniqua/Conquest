@@ -6,7 +6,10 @@
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexResourceSetData.h"
+#include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 
 void UConquestCityManager::Initialize(AConquestGameState* InGameState)
@@ -309,7 +312,218 @@ void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
 		}
 
 		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
+		RecalculateStrategicResourceEconomy(PlayerId);
 	}
+}
+
+void UConquestCityManager::RecalculateStrategicResourceEconomy(int32 PlayerId)
+{
+	if (!GameStateRef)
+	{
+		return;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != PlayerId)
+	{
+		return;
+	}
+
+	for (FConquestStrategicResourceStockpile& Stockpile : Player.StrategicResources)
+	{
+		Stockpile.PerTurn = 0;
+		Stockpile.Cap = 0;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	if (GridModel)
+	{
+		for (const FCityState& City : Cities)
+		{
+			if (City.OwnerPlayerId != PlayerId)
+			{
+				continue;
+			}
+
+			for (const FIntPoint& Coord : City.WorkedTiles)
+			{
+				const FHexTileData* Tile = GridModel->GetTile(Coord);
+				if (!Tile || !Tile->Resource.HasResource() || Tile->ImprovementId.IsNone())
+				{
+					continue;
+				}
+
+				const FHexResourceDefinition* ResourceDefinition =
+					GridModel->FindResourceDefinition(Tile->Resource.ResourceId);
+
+				if (!ResourceDefinition || ResourceDefinition->Category != EHexResourceCategory::Strategic)
+				{
+					continue;
+				}
+
+				FConquestStrategicResourceStockpile* Stockpile = Player.FindStrategicResource(Tile->Resource.ResourceId);
+				if (!Stockpile)
+				{
+					Stockpile = &Player.StrategicResources.AddDefaulted_GetRef();
+					Stockpile->ResourceId = Tile->Resource.ResourceId;
+				}
+
+				Stockpile->PerTurn += FMath::Max(1, Tile->Resource.Quantity);
+				Stockpile->Cap = FMath::Max(Stockpile->Cap, ResourceDefinition->StartingStorageCap);
+			}
+		}
+	}
+
+	if (GameStateRef->ContentManager)
+	{
+		for (const FCityState& City : Cities)
+		{
+			if (City.OwnerPlayerId != PlayerId)
+			{
+				continue;
+			}
+
+			for (const FName BuildingId : City.ConstructedBuildingIds)
+			{
+				const FConquestBuildingRow* BuildingRow = GameStateRef->ContentManager->FindBuilding(BuildingId);
+				if (!BuildingRow)
+				{
+					continue;
+				}
+
+				for (const FConquestStrategicResourceCapBonus& CapBonus : BuildingRow->StrategicResourceCapBonuses)
+				{
+					if (CapBonus.ResourceId.IsNone() || CapBonus.CapBonus <= 0)
+					{
+						continue;
+					}
+
+					FConquestStrategicResourceStockpile* Stockpile = Player.FindStrategicResource(CapBonus.ResourceId);
+					if (!Stockpile)
+					{
+						Stockpile = &Player.StrategicResources.AddDefaulted_GetRef();
+						Stockpile->ResourceId = CapBonus.ResourceId;
+					}
+
+					Stockpile->Cap += CapBonus.CapBonus;
+				}
+			}
+		}
+	}
+
+	for (FConquestStrategicResourceStockpile& Stockpile : Player.StrategicResources)
+	{
+		Stockpile.Stored = FMath::Clamp(Stockpile.Stored, 0, FMath::Max(0, Stockpile.Cap));
+	}
+}
+
+void UConquestCityManager::AccumulateStrategicResourceIncome(int32 PlayerId)
+{
+	if (!GameStateRef)
+	{
+		return;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != PlayerId)
+	{
+		return;
+	}
+
+	RecalculateStrategicResourceEconomy(PlayerId);
+
+	for (FConquestStrategicResourceStockpile& Stockpile : Player.StrategicResources)
+	{
+		Stockpile.Stored = FMath::Clamp(
+			Stockpile.Stored + Stockpile.PerTurn,
+			0,
+			FMath::Max(0, Stockpile.Cap)
+		);
+	}
+}
+
+void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
+{
+	if (!GameStateRef || !GameStateRef->ContentManager)
+	{
+		return;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(Unit.UnitId);
+	if (!UnitRow)
+	{
+		return;
+	}
+
+	Unit.CachedStrength = UnitRow->Strength;
+	Unit.CachedAttackRange = UnitRow->AttackRange;
+	Unit.CachedMaxHealth = UnitRow->MaxHealth;
+	Unit.CachedHealthRegenPerTurn = UnitRow->HealthRegenPerTurn;
+	Unit.CachedMovementPoints = UnitRow->MovementPoints;
+	Unit.CachedGoldMaintenancePerTurn = UnitRow->GoldMaintenancePerTurn;
+
+	for (const FConquestUnitAugmentState& Augment : Unit.Augments)
+	{
+		switch (Augment.ModifiedStat)
+		{
+		case EConquestUnitAugmentStat::Strength:
+			Unit.CachedStrength += Augment.FlatBonus;
+			break;
+		case EConquestUnitAugmentStat::AttackRange:
+			Unit.CachedAttackRange += Augment.FlatBonus;
+			break;
+		case EConquestUnitAugmentStat::MaxHealth:
+			Unit.CachedMaxHealth += Augment.FlatBonus;
+			break;
+		case EConquestUnitAugmentStat::HealthRegen:
+			Unit.CachedHealthRegenPerTurn += Augment.FlatBonus;
+			break;
+		case EConquestUnitAugmentStat::Movement:
+			Unit.CachedMovementPoints += Augment.FlatBonus;
+			break;
+		default:
+			break;
+		}
+	}
+
+	Unit.CachedAttackRange = FMath::Max(1, Unit.CachedAttackRange);
+	Unit.CachedMaxHealth = FMath::Max(1, Unit.CachedMaxHealth);
+	Unit.CachedMovementPoints = FMath::Max(0, Unit.CachedMovementPoints);
+	Unit.CurrentHealth = Unit.CurrentHealth <= 0
+		? Unit.CachedMaxHealth
+		: FMath::Clamp(Unit.CurrentHealth, 1, Unit.CachedMaxHealth);
+}
+
+int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FName UnitId)
+{
+	if (!GameStateRef || !GameStateRef->ContentManager || UnitId.IsNone())
+	{
+		return INDEX_NONE;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(UnitId);
+	if (!UnitRow)
+	{
+		return INDEX_NONE;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != City.OwnerPlayerId)
+	{
+		return INDEX_NONE;
+	}
+
+	FConquestUnitState NewUnit;
+	NewUnit.UnitInstanceId = Player.NextUnitInstanceId++;
+	NewUnit.OwnerPlayerId = City.OwnerPlayerId;
+	NewUnit.UnitId = UnitRow->UnitId;
+	NewUnit.SourceCityId = City.CityId;
+	NewUnit.CurrentHealth = UnitRow->MaxHealth;
+
+	RecalculateUnitStats(NewUnit);
+
+	Player.Units.Add(NewUnit);
+	return NewUnit.UnitInstanceId;
 }
 
 void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
@@ -463,6 +677,7 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 	if (GameStateRef)
 	{
 		RecalculateEmpireYields(PlayerId);
+		AccumulateStrategicResourceIncome(PlayerId);
 		GameStateRef->BroadcastStateChanged();
 	}
 }
@@ -525,6 +740,10 @@ void UConquestCityManager::ProcessCityProduction(FCityState& City)
 	if (City.CurrentProduction.Type == ECityProductionType::Building &&	!City.CurrentProduction.ProductionId.IsNone())
 	{
 		City.ConstructedBuildingIds.AddUnique(City.CurrentProduction.ProductionId);
+	}
+	else if (City.CurrentProduction.Type == ECityProductionType::Unit && !City.CurrentProduction.ProductionId.IsNone())
+	{
+		CreateUnitFromProduction(City, City.CurrentProduction.ProductionId);
 	}
 
 	City.CurrentProduction.Clear();
@@ -599,6 +818,106 @@ bool UConquestCityManager::ClaimExpansionTileForCity(int32 CityId, const FIntPoi
 	{
 		GameStateRef->BroadcastStateChanged();
 	}
+
+	return true;
+}
+
+TArray<FName> UConquestCityManager::GetAvailableTileImprovementIdsForPlayer(int32 PlayerId, const FIntPoint& Coord) const
+{
+	TArray<FName> Result;
+
+	if (!GameStateRef)
+	{
+		return Result;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	if (!GridModel)
+	{
+		return Result;
+	}
+
+	const FHexTileData* Tile = GridModel->GetTile(Coord);
+	if (!Tile || Tile->Gameplay.OwnerPlayerId != PlayerId || !Tile->ImprovementId.IsNone())
+	{
+		return Result;
+	}
+
+	GridModel->GetPossibleImprovementIdsForTile(Coord.X, Coord.Y, Result);
+	return Result;
+}
+
+bool UConquestCityManager::PurchaseTileImprovementForPlayer(int32 PlayerId, const FIntPoint& Coord, FName ImprovementId)
+{
+	if (!GameStateRef || !GameStateRef->ActiveGridActor || ImprovementId.IsNone())
+	{
+		return false;
+	}
+
+	FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable();
+	if (!GridModel)
+	{
+		return false;
+	}
+
+	FHexTileData* Tile = GridModel->GetTileMutable(Coord);
+	if (!Tile || Tile->Gameplay.OwnerPlayerId != PlayerId || !Tile->ImprovementId.IsNone())
+	{
+		return false;
+	}
+
+	TArray<const FHexImprovementDefinition*> PossibleImprovements;
+	GridModel->GetPossibleImprovementsForTile(Coord.X, Coord.Y, PossibleImprovements);
+
+	const FHexImprovementDefinition* ChosenImprovement = nullptr;
+	for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+	{
+		if (Improvement && Improvement->ImprovementId == ImprovementId)
+		{
+			ChosenImprovement = Improvement;
+			break;
+		}
+	}
+
+	if (!ChosenImprovement)
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != PlayerId)
+	{
+		return false;
+	}
+
+	const int32 GoldCost = FMath::Max(0, ChosenImprovement->PurchaseGoldCost);
+	if (Player.StoredYields.Gold < GoldCost)
+	{
+		return false;
+	}
+
+	Player.StoredYields.Gold -= GoldCost;
+
+	const bool bApplied = GameStateRef->ActiveGridActor->SetTileImprovement(
+		Coord.X,
+		Coord.Y,
+		ImprovementId
+	);
+
+	if (!bApplied)
+	{
+		Player.StoredYields.Gold += GoldCost;
+		return false;
+	}
+
+	if (Tile->Gameplay.OwningCityId != INDEX_NONE)
+	{
+		RefreshCityYields(Tile->Gameplay.OwningCityId);
+	}
+
+	RecalculateEmpireYields(PlayerId);
+	RecalculateStrategicResourceEconomy(PlayerId);
+	GameStateRef->BroadcastStateChanged();
 
 	return true;
 }
@@ -720,6 +1039,52 @@ bool UConquestCityManager::SetCityProductionBuildingById(int32 CityId, FName Bui
 	return true;
 }
 
+bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
+{
+	if (UnitId.IsNone())
+	{
+		return false;
+	}
+
+	if (!GameStateRef || !GameStateRef->ContentManager)
+	{
+		return false;
+	}
+
+	FCityState* City = GetCityMutable(CityId);
+	if (!City)
+	{
+		return false;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(UnitId);
+	if (!UnitRow)
+	{
+		return false;
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	if (!UnitRow->RequiredTechId.IsNone() && !Player.HasResearched(UnitRow->RequiredTechId))
+	{
+		return false;
+	}
+
+	City->CurrentProduction.Type = ECityProductionType::Unit;
+	City->CurrentProduction.ProductionId = UnitRow->UnitId;
+	City->CurrentProduction.Progress = 0.0f;
+	City->CurrentProduction.Cost = UnitRow->ProductionCost;
+	City->bNeedsProductionChoice = false;
+
+	OnCityChanged.Broadcast(CityId);
+
+	if (GameStateRef)
+	{
+		GameStateRef->BroadcastStateChanged();
+	}
+
+	return true;
+}
+
 TArray<FName> UConquestCityManager::GetAvailableProductionBuildingIdsForCity(int32 CityId) const
 {
 	TArray<FName> Result;
@@ -788,6 +1153,53 @@ TArray<FName> UConquestCityManager::GetAvailableProductionBuildingIdsForCity(int
 	return Result;
 }
 
+TArray<FName> UConquestCityManager::GetAvailableProductionUnitIdsForCity(int32 CityId) const
+{
+	TArray<FName> Result;
+
+	if (!GameStateRef || !GameStateRef->ContentManager)
+	{
+		return Result;
+	}
+
+	const FCityState* City = GetCity(CityId);
+	if (!City)
+	{
+		return Result;
+	}
+
+	TArray<const FConquestUnitRow*> BaseUnits;
+	GameStateRef->ContentManager->GetAllBaseUnits(BaseUnits);
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+
+	for (const FConquestUnitRow* BaseRow : BaseUnits)
+	{
+		if (!BaseRow)
+		{
+			continue;
+		}
+
+		const FName BaseUnitId = BaseRow->UnitId;
+		const FConquestUnitRow* ResolvedRow =
+			GameStateRef->ContentManager->ResolveUnitForPlayer(City->OwnerPlayerId, BaseUnitId);
+
+		if (!ResolvedRow)
+		{
+			continue;
+		}
+
+		if (!ResolvedRow->RequiredTechId.IsNone() && !Player.HasResearched(ResolvedRow->RequiredTechId))
+		{
+			continue;
+		}
+
+		Result.Add(ResolvedRow->UnitId);
+	}
+
+	return Result;
+}
+
 int32 UConquestCityManager::EstimateTurnsToBuildById(int32 CityId, FName BuildingId) const
 {
 	if (BuildingId.IsNone())
@@ -822,6 +1234,39 @@ int32 UConquestCityManager::EstimateTurnsToBuildById(int32 CityId, FName Buildin
 
 	const float RemainingCost = BuildingRow->ProductionCost;
 	return FMath::Max(1, FMath::CeilToInt(RemainingCost / ProductionPerTurn));
+}
+
+int32 UConquestCityManager::EstimateTurnsToTrainUnitById(int32 CityId, FName UnitId) const
+{
+	if (UnitId.IsNone())
+	{
+		return INDEX_NONE;
+	}
+
+	if (!GameStateRef || !GameStateRef->ContentManager)
+	{
+		return INDEX_NONE;
+	}
+
+	const FCityState* City = GetCity(CityId);
+	if (!City)
+	{
+		return INDEX_NONE;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(UnitId);
+	if (!UnitRow)
+	{
+		return INDEX_NONE;
+	}
+
+	const int32 ProductionPerTurn = FMath::Max(0, City->CachedYieldPerTurn.Production);
+	if (ProductionPerTurn <= 0)
+	{
+		return INDEX_NONE;
+	}
+
+	return FMath::Max(1, FMath::CeilToInt(static_cast<float>(UnitRow->ProductionCost) / ProductionPerTurn));
 }
 
 int32 UConquestCityManager::EstimateTurnsToGrowth(int32 CityId) const

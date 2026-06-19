@@ -53,6 +53,9 @@ public:
 	TObjectPtr<UDataTable> UnitTable = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Data")
+	TObjectPtr<UDataTable> UnitAugmentTable = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Data")
 	TObjectPtr<UDataTable> TechTable = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Data")

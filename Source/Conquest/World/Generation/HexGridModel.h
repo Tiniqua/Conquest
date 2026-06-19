@@ -44,6 +44,7 @@ public:
 	const FHexTileData* GetTile(const FIntPoint& Coord) const;
 
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
+	const FHexResourceDefinition* FindResourceDefinition(FName ResourceId) const;
 	void GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const;
 	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
 
@@ -57,6 +58,7 @@ public:
 
 	bool GetNeighbourCoord(int32 Q, int32 R, int32 Direction, int32& OutQ, int32& OutR) const;
 	TArray<FIntPoint> GetCoordsInRange(const FIntPoint& Center, int32 Range) const;
+	int32 GetHexDistance(const FIntPoint& A, const FIntPoint& B) const;
 	int32 GetTileIndex(int32 Q, int32 R) const;
 	bool IsValidCoord(int32 Q, int32 R) const;
 	bool IsValidTile(int32 Q, int32 R) const;

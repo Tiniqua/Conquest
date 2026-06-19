@@ -17,6 +17,7 @@ class CONQUEST_API UConquestCityPanelWidget : public UUserWidget
 
 public:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UFUNCTION(BlueprintCallable)
 	void SetCity(int32 InCityId);
@@ -56,10 +57,18 @@ private:
 	int32 CityId = INDEX_NONE;
 
 	void BuildBuildingButtons();
+	void BindToGameState();
+	void UnbindFromGameState();
 
 	UFUNCTION()
 	void HandleCloseClicked();
 
 	UFUNCTION()
 	void HandleProductionChoiceClicked(const FConquestChoiceButtonData& ChoiceData);
+
+	UFUNCTION()
+	void HandleCityChanged(int32 ChangedCityId);
+
+	UFUNCTION()
+	void HandleConquestStateChanged();
 };

@@ -57,9 +57,15 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	bool RefreshCityYields(int32 CityId);
+
+	UFUNCTION(BlueprintPure)
+	int32 GetFoodRequiredForNextPopulation(const FCityState& City) const;
 	
 	UFUNCTION(BlueprintCallable)
 	int32 EstimateTurnsToBuildById(int32 CityId, FName BuildingId) const;
+
+	UFUNCTION(BlueprintCallable)
+	int32 EstimateTurnsToGrowth(int32 CityId) const;
 
 	UFUNCTION(BlueprintCallable)
 	FCityState GetCityCopy(int32 CityId) const;
@@ -73,6 +79,8 @@ private:
 	TObjectPtr<AConquestGameState> GameStateRef;
 
 	int32 NextCityId = 1;
+
+	static constexpr int32 MaxCityExpansionRange = 5;
 
 	bool IsValidFoundCityTile(const FIntPoint& TileCoord) const;
 	void GrantStartingBuildings(FCityState& City);

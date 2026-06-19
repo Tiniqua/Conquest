@@ -72,6 +72,21 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void HideResearchPanel();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	void BeginCityTileExpansionSelection(int32 CityId);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	bool SelectExpansionCandidateTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	bool ConfirmSelectedExpansionTile();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	void CancelSelectedExpansionTile();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	void ClearCityTileExpansionSelection();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;
@@ -96,6 +111,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AModularHexGridActor> SpawnedHexGridActor = nullptr;
+
+	int32 ExpansionSelectionCityId = INDEX_NONE;
+	FIntPoint PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();

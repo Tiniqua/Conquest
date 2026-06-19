@@ -22,14 +22,23 @@ public:
 	FHexYield CalculateCityBuildingYields(const FCityState& City) const;
 	FHexYield CalculateCityTotalYields(const FCityState& City) const;
 	FHexYield CalculateEmpireYieldPerTurn(int32 PlayerId) const;
+	int32 CalculateEmpireHappiness(int32 PlayerId) const;
 
 	UFUNCTION(BlueprintCallable)
 	FHexYield RecalculateEmpireYieldPerTurn(int32 PlayerId) const;
 
 	UFUNCTION(BlueprintCallable)
+	int32 RecalculateEmpireHappiness(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintCallable)
 	void CollectGlobalYieldIncome(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintPure)
+	bool IsEmpireUnhappy(int32 PlayerId) const;
 
 private:
 	UPROPERTY()
 	TObjectPtr<AConquestGameState> GameStateRef;
+
+	FHexYield ApplyUnhappyYieldPenalty(const FHexYield& Yield, int32 PlayerId) const;
 };

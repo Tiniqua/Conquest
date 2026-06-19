@@ -460,6 +460,17 @@ void AConquestPawn::HandlePrimaryClick()
 		return;
 	}
 
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+		{
+			if (ConquestHUD->SelectExpansionCandidateTile(Q, R))
+			{
+				return;
+			}
+		}
+	}
+
 	// Normal click: if this tile has a city, open its city panel.
 	TryOpenCityPanelAtTile(ClickedCoord);
 

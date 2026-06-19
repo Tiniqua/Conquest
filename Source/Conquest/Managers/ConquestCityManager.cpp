@@ -28,6 +28,7 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	NewCity.CenterTile = TileCoord;
 	NewCity.Population = 1;
 	NewCity.FoodStored = 0.0f;
+	NewCity.CachedFoodRequiredForNextPopulation = GetFoodRequiredForNextPopulation(NewCity);
 	NewCity.bNeedsProductionChoice = true;
 
 	GrantStartingBuildings(NewCity);
@@ -193,6 +194,11 @@ bool UConquestCityManager::IsValidExpansionTileForCity(const FCityState& City, c
 		return false;
 	}
 
+	if (GridModel->GetHexDistance(City.CenterTile, Coord) > MaxCityExpansionRange)
+	{
+		return false;
+	}
+
 	for (const FIntPoint& OwnedCoord : City.OwnedTiles)
 	{
 		for (int32 Direction = 0; Direction < 6; ++Direction)
@@ -261,6 +267,16 @@ void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
 {
 	if (GameStateRef && GameStateRef->YieldManager)
 	{
+		GameStateRef->YieldManager->RecalculateEmpireHappiness(PlayerId);
+
+		for (FCityState& City : Cities)
+		{
+			if (City.OwnerPlayerId == PlayerId)
+			{
+				RecalculateCityYields(City);
+			}
+		}
+
 		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
 	}
 }
@@ -278,7 +294,21 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 		BorderMaterial = GameStateRef->HumanCivilisation->BorderMaterial;
 	}
 
-	GameStateRef->ActiveGridActor->RebuildCivilisationBorders(PlayerId, BorderMaterial);
+	TArray<FIntPoint> PlayerOwnedTiles;
+	for (const FCityState& City : Cities)
+	{
+		if (City.OwnerPlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		for (const FIntPoint& Coord : City.OwnedTiles)
+		{
+			PlayerOwnedTiles.AddUnique(Coord);
+		}
+	}
+
+	GameStateRef->ActiveGridActor->RebuildCivilisationBordersForTiles(PlayerOwnedTiles, BorderMaterial);
 }
 
 void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
@@ -318,16 +348,26 @@ void UConquestCityManager::ProcessCityGrowth(FCityState& City)
 
 	City.FoodStored += FoodSurplus;
 
-	const int32 GrowthCost = 15 + City.Population * 8;
+	const int32 GrowthCost = GetFoodRequiredForNextPopulation(City);
+	City.CachedFoodRequiredForNextPopulation = GrowthCost;
 
 	if (City.FoodStored >= GrowthCost)
 	{
 		City.FoodStored -= GrowthCost;
 		City.Population += 1;
 		City.PendingBorderExpansions += 1;
+		City.CachedFoodRequiredForNextPopulation = GetFoodRequiredForNextPopulation(City);
 		OnCityNeedsBorderExpansion.Broadcast(City.CityId);
 		AutoAssignWorkedTiles(City);
 	}
+}
+
+int32 UConquestCityManager::GetFoodRequiredForNextPopulation(const FCityState& City) const
+{
+	constexpr float BaseFoodCost = 10.0f;
+	constexpr float GrowthExponent = 1.35f;
+	const float PopulationStep = FMath::Max(0.0f, static_cast<float>(City.Population - 1));
+	return FMath::Max(1, FMath::RoundToInt(BaseFoodCost * FMath::Pow(GrowthExponent, PopulationStep)));
 }
 
 void UConquestCityManager::ProcessCityProduction(FCityState& City)
@@ -651,6 +691,30 @@ int32 UConquestCityManager::EstimateTurnsToBuildById(int32 CityId, FName Buildin
 
 	const float RemainingCost = BuildingRow->ProductionCost;
 	return FMath::Max(1, FMath::CeilToInt(RemainingCost / ProductionPerTurn));
+}
+
+int32 UConquestCityManager::EstimateTurnsToGrowth(int32 CityId) const
+{
+	const FCityState* City = GetCity(CityId);
+	if (!City)
+	{
+		return INDEX_NONE;
+	}
+
+	const int32 FoodUpkeep = City->Population * 2;
+	const int32 FoodSurplus = City->CachedYieldPerTurn.Food - FoodUpkeep;
+	if (FoodSurplus <= 0)
+	{
+		return INDEX_NONE;
+	}
+
+	const int32 GrowthCost = GetFoodRequiredForNextPopulation(*City);
+	const float RemainingFood = FMath::Max(
+		0.0f,
+		static_cast<float>(GrowthCost) - City->FoodStored
+	);
+
+	return FMath::Max(1, FMath::CeilToInt(RemainingFood / FoodSurplus));
 }
 
 FCityState UConquestCityManager::GetCityCopy(int32 CityId) const

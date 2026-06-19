@@ -5,6 +5,8 @@
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexResourceSetData.h"
+#include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 
 namespace
@@ -88,7 +90,7 @@ FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City
 
 	Result += CalculateCityBuildingYields(City);
 
-	return Result;
+	return ApplyUnhappyYieldPenalty(Result, City.OwnerPlayerId);
 }
 
 FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurn(int32 PlayerId) const
@@ -113,6 +115,8 @@ FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurn(int32 PlayerId) con
 
 FHexYield UConquestYieldManager::RecalculateEmpireYieldPerTurn(int32 PlayerId) const
 {
+	RecalculateEmpireHappiness(PlayerId);
+
 	FHexYield Result = CalculateEmpireYieldPerTurn(PlayerId);
 
 	if (!GameStateRef)
@@ -126,6 +130,195 @@ FHexYield UConquestYieldManager::RecalculateEmpireYieldPerTurn(int32 PlayerId) c
 		Player.CachedYieldPerTurn = Result;
 	}
 
+	return Result;
+}
+
+int32 UConquestYieldManager::CalculateEmpireHappiness(int32 PlayerId) const
+{
+	if (!GameStateRef || !GameStateRef->CityManager)
+	{
+		return 0;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	TSet<FName> WorkedLuxuryResourceIds;
+
+	int32 CityCount = 0;
+	int32 Population = 0;
+	int32 BuildingHappiness = 0;
+	int32 LuxuryHappiness = 0;
+
+	for (const FCityState& City : GameStateRef->CityManager->Cities)
+	{
+		if (City.OwnerPlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		++CityCount;
+		Population += FMath::Max(0, City.Population - 1);
+
+		for (const FName BuildingId : City.ConstructedBuildingIds)
+		{
+			const FConquestBuildingRow* BuildingRow = GameStateRef->ContentManager
+				? GameStateRef->ContentManager->FindBuilding(BuildingId)
+				: nullptr;
+
+			if (BuildingRow)
+			{
+				BuildingHappiness += BuildingRow->HappinessBonus;
+			}
+		}
+
+		if (!GridModel)
+		{
+			continue;
+		}
+
+		for (const FIntPoint& Coord : City.WorkedTiles)
+		{
+			const FHexTileData* Tile = GridModel->GetTile(Coord);
+			if (Tile && !Tile->Resource.ResourceId.IsNone())
+			{
+				WorkedLuxuryResourceIds.Add(Tile->Resource.ResourceId);
+			}
+		}
+	}
+
+	for (const FName ResourceId : WorkedLuxuryResourceIds)
+	{
+		const FHexResourceDefinition* ResourceDefinition = GridModel
+			? GridModel->FindResourceDefinition(ResourceId)
+			: nullptr;
+
+		if (ResourceDefinition && ResourceDefinition->Category == EHexResourceCategory::Luxury)
+		{
+			LuxuryHappiness += ResourceDefinition->Happiness;
+		}
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	return Player.BaseHappiness + LuxuryHappiness + BuildingHappiness - (CityCount * 2) - Population;
+}
+
+int32 UConquestYieldManager::RecalculateEmpireHappiness(int32 PlayerId) const
+{
+	if (!GameStateRef)
+	{
+		return 0;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	if (Player.PlayerId != PlayerId)
+	{
+		return 0;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	TSet<FName> WorkedLuxuryResourceIds;
+
+	int32 CityCount = 0;
+	int32 Population = 0;
+	int32 BuildingHappiness = 0;
+	int32 LuxuryHappiness = 0;
+
+	if (GameStateRef->CityManager)
+	{
+		for (const FCityState& City : GameStateRef->CityManager->Cities)
+		{
+			if (City.OwnerPlayerId != PlayerId)
+			{
+				continue;
+			}
+
+			++CityCount;
+			Population += FMath::Max(0, City.Population - 1);
+
+			for (const FName BuildingId : City.ConstructedBuildingIds)
+			{
+				const FConquestBuildingRow* BuildingRow = GameStateRef->ContentManager
+					? GameStateRef->ContentManager->FindBuilding(BuildingId)
+					: nullptr;
+
+				if (BuildingRow)
+				{
+					BuildingHappiness += BuildingRow->HappinessBonus;
+				}
+			}
+
+			if (!GridModel)
+			{
+				continue;
+			}
+
+			for (const FIntPoint& Coord : City.WorkedTiles)
+			{
+				const FHexTileData* Tile = GridModel->GetTile(Coord);
+				if (Tile && !Tile->Resource.ResourceId.IsNone())
+				{
+					WorkedLuxuryResourceIds.Add(Tile->Resource.ResourceId);
+				}
+			}
+		}
+	}
+
+	for (const FName ResourceId : WorkedLuxuryResourceIds)
+	{
+		const FHexResourceDefinition* ResourceDefinition = GridModel
+			? GridModel->FindResourceDefinition(ResourceId)
+			: nullptr;
+
+		if (ResourceDefinition && ResourceDefinition->Category == EHexResourceCategory::Luxury)
+		{
+			LuxuryHappiness += ResourceDefinition->Happiness;
+		}
+	}
+
+	Player.CachedCityHappinessCost = CityCount * 2;
+	Player.CachedPopulationHappinessCost = Population;
+	Player.CachedBuildingHappiness = BuildingHappiness;
+	Player.CachedLuxuryHappiness = LuxuryHappiness;
+	Player.CachedHappiness =
+		Player.BaseHappiness +
+		Player.CachedLuxuryHappiness +
+		Player.CachedBuildingHappiness -
+		Player.CachedCityHappinessCost -
+		Player.CachedPopulationHappinessCost;
+
+	return Player.CachedHappiness;
+}
+
+bool UConquestYieldManager::IsEmpireUnhappy(int32 PlayerId) const
+{
+	if (!GameStateRef)
+	{
+		return false;
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	return Player.PlayerId == PlayerId && Player.CachedHappiness < 0;
+}
+
+FHexYield UConquestYieldManager::ApplyUnhappyYieldPenalty(const FHexYield& Yield, int32 PlayerId) const
+{
+	if (!GameStateRef)
+	{
+		return Yield;
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	if (Player.PlayerId != PlayerId || Player.CachedHappiness >= 0)
+	{
+		return Yield;
+	}
+
+	FHexYield Result = Yield;
+	Result.Food = FMath::FloorToInt(static_cast<float>(Result.Food) * 0.75f);
+	Result.Production = FMath::FloorToInt(static_cast<float>(Result.Production) * 0.75f);
+	Result.Gold = FMath::FloorToInt(static_cast<float>(Result.Gold) * 0.75f);
+	Result.Science = FMath::FloorToInt(static_cast<float>(Result.Science) * 0.75f);
+	Result.Culture = FMath::FloorToInt(static_cast<float>(Result.Culture) * 0.75f);
+	Result.Faith = FMath::FloorToInt(static_cast<float>(Result.Faith) * 0.75f);
 	return Result;
 }
 

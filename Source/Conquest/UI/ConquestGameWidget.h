@@ -11,6 +11,33 @@ class UVerticalBox;
 class UWidget;
 
 USTRUCT(BlueprintType)
+struct FConquestTileExpansionChoiceData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	int32 CityId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	FIntPoint Coord = FIntPoint::ZeroValue;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	FString TileType;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	FString Resource;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	FString Features;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	FHexYield Yield;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Tile Expansion")
+	bool bIsValid = false;
+};
+
+USTRUCT(BlueprintType)
 struct FConquestTopBarYieldData
 {
 	GENERATED_BODY()
@@ -29,6 +56,12 @@ struct FConquestTopBarYieldData
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
 	bool bShowSelectedCityLocalYields = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	int32 Happiness = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	bool bIsUnhappy = false;
 };
 
 USTRUCT(BlueprintType)
@@ -103,8 +136,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void ClearSelectedCityYieldContext();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	void ShowTileExpansionConfirmation(const FConquestTileExpansionChoiceData& ChoiceData);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
+	void ClearTileExpansionConfirmation();
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	FConquestTopBarYieldData GetTopBarYieldData() const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Tile Expansion")
+	FConquestTileExpansionChoiceData GetPendingTileExpansionChoice() const { return PendingTileExpansionChoice; }
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	bool ShouldShowSelectedCityLocalYields() const { return SelectedCityYieldContextId != INDEX_NONE; }
@@ -197,6 +239,27 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TopBarFaithText = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarHappinessText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> TileExpansionConfirmPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TileExpansionTitleText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TileExpansionDetailText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TileExpansionYieldText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> TileExpansionConfirmButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> TileExpansionCancelButton = nullptr;
+
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
@@ -210,4 +273,11 @@ private:
 	void ClearTileTexts();
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
+	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
+
+	UFUNCTION()
+	void HandleTileExpansionConfirmClicked();
+
+	UFUNCTION()
+	void HandleTileExpansionCancelClicked();
 };

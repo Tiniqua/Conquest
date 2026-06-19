@@ -54,7 +54,17 @@ AModularHexGridActor::AModularHexGridActor()
 	CivilisationBorderMesh->bCastDynamicShadow = false;
 	CivilisationBorderMesh->bCastStaticShadow = false;
 	CivilisationBorderMesh->CastShadow = false;
-	CivilisationBorderMesh->TranslucencySortPriority = 4;
+	CivilisationBorderMesh->TranslucencySortPriority = CivilisationBorderTranslucencySortPriority;
+
+	ExpansionCandidateMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ExpansionCandidateMesh"));
+	ExpansionCandidateMesh->SetupAttachment(SceneRoot);
+	ExpansionCandidateMesh->bUseAsyncCooking = true;
+	ExpansionCandidateMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ExpansionCandidateMesh->SetCastShadow(false);
+	ExpansionCandidateMesh->bCastDynamicShadow = false;
+	ExpansionCandidateMesh->bCastStaticShadow = false;
+	ExpansionCandidateMesh->CastShadow = false;
+	ExpansionCandidateMesh->TranslucencySortPriority = 6;
 	
 	if (HoverHighlightMesh)
 	{
@@ -195,6 +205,28 @@ void AModularHexGridActor::ClearCityPlaceholders()
 
 void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial)
 {
+	TArray<FIntPoint> OwnedTiles;
+
+	if (OwnerPlayerId != INDEX_NONE)
+	{
+		for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+		{
+			for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+			{
+				const FHexTileData* Tile = GridModel.GetTile(Q, R);
+				if (Tile && Tile->Gameplay.OwnerPlayerId == OwnerPlayerId)
+				{
+					OwnedTiles.Add(FIntPoint(Q, R));
+				}
+			}
+		}
+	}
+
+	RebuildCivilisationBordersForTiles(OwnedTiles, BorderMaterial);
+}
+
+void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial)
+{
 	if (!CivilisationBorderMesh)
 	{
 		return;
@@ -202,9 +234,294 @@ void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMate
 
 	CivilisationBorderMesh->ClearAllMeshSections();
 
-	if (OwnerPlayerId == INDEX_NONE)
+	if (OwnedTiles.Num() <= 0)
 	{
 		CivilisationBorderMesh->SetVisibility(false);
+		return;
+	}
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	struct FBorderEdgeRecord
+	{
+		FIntPoint TileCoord = FIntPoint::ZeroValue;
+		FVector TileCenter = FVector::ZeroVector;
+		FVector Start = FVector::ZeroVector;
+		FVector End = FVector::ZeroVector;
+		FVector FlatStart = FVector::ZeroVector;
+		FVector FlatEnd = FVector::ZeroVector;
+	};
+
+	struct FBorderEdgeBucket
+	{
+		int32 Count = 0;
+		FBorderEdgeRecord FirstEdge;
+	};
+
+	TMap<FHexEdgeKey, FBorderEdgeBucket> EdgeBuckets;
+	TMap<FHexVertexKey, FVector> BoundaryVertexCaps;
+	TArray<FBorderEdgeRecord> BoundaryEdges;
+	TSet<FIntPoint> UniqueOwnedTiles;
+
+	for (const FIntPoint& Coord : OwnedTiles)
+	{
+		if (GridModel.IsValidTile(Coord.X, Coord.Y))
+		{
+			UniqueOwnedTiles.Add(Coord);
+		}
+	}
+
+	auto AddQuad = [&](
+		const FVector& A,
+		const FVector& B,
+		const FVector& C,
+		const FVector& D
+	)
+	{
+		const int32 StartIndex = Vertices.Num();
+
+		Vertices.Add(A);
+		Vertices.Add(B);
+		Vertices.Add(C);
+		Vertices.Add(D);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 1);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 3);
+		Triangles.Add(StartIndex + 2);
+
+		// Border edges can be emitted in either winding direction around a hex.
+		// Add the reverse faces as well so one-sided materials never drop an edge.
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 1);
+		Triangles.Add(StartIndex + 2);
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 3);
+
+		for (int32 i = 0; i < 4; ++i)
+		{
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(FColor::White);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+	};
+
+	auto AddBoundaryVertexCap = [&BoundaryVertexCaps, this](const FVector& FlatVertex, const FVector& RaisedVertex)
+	{
+		const FHexVertexKey VertexKey = GridModel.MakeVertexKey(FlatVertex);
+		if (FVector* ExistingCap = BoundaryVertexCaps.Find(VertexKey))
+		{
+			ExistingCap->Z = FMath::Max(ExistingCap->Z, RaisedVertex.Z);
+			return;
+		}
+
+		BoundaryVertexCaps.Add(VertexKey, RaisedVertex);
+	};
+
+	for (const FIntPoint& Coord : UniqueOwnedTiles)
+	{
+		const FVector Center = GridModel.GetHexCenter(Coord.X, Coord.Y);
+
+		TArray<FVector> Corners;
+		TArray<FVector> FlatCorners;
+		Corners.SetNum(6);
+		FlatCorners.SetNum(6);
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const FVector FlatCorner = Center + GridModel.GetHexCornerOffset(CornerIndex);
+			FlatCorners[CornerIndex] = FlatCorner;
+
+			float CornerZ = 0.0f;
+			if (GridModel.UsesHeightOffsets())
+			{
+				CornerZ = GridModel.GetResolvedCornerHeight(FlatCorner);
+				CornerZ += GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
+			}
+
+			Corners[CornerIndex] = FVector(
+				FlatCorner.X,
+				FlatCorner.Y,
+				CornerZ + CivilisationBorderSurfaceOffset
+			);
+		}
+
+		for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+		{
+			const int32 NextCornerIndex = (EdgeIndex + 1) % 6;
+			const FHexVertexKey StartKey = GridModel.MakeVertexKey(FlatCorners[EdgeIndex]);
+			const FHexVertexKey EndKey = GridModel.MakeVertexKey(FlatCorners[NextCornerIndex]);
+			const FHexEdgeKey EdgeKey = FHexEdgeKey::Make(StartKey, EndKey);
+
+			FBorderEdgeBucket& Bucket = EdgeBuckets.FindOrAdd(EdgeKey);
+			++Bucket.Count;
+
+			if (Bucket.Count == 1)
+			{
+				Bucket.FirstEdge.TileCoord = Coord;
+				Bucket.FirstEdge.TileCenter = Center;
+				Bucket.FirstEdge.Start = Corners[EdgeIndex];
+				Bucket.FirstEdge.End = Corners[NextCornerIndex];
+				Bucket.FirstEdge.FlatStart = FlatCorners[EdgeIndex];
+				Bucket.FirstEdge.FlatEnd = FlatCorners[NextCornerIndex];
+			}
+		}
+	}
+
+	for (const TPair<FHexEdgeKey, FBorderEdgeBucket>& Pair : EdgeBuckets)
+	{
+		const FBorderEdgeBucket& Bucket = Pair.Value;
+
+		if (Bucket.Count == 1)
+		{
+			BoundaryEdges.Add(Bucket.FirstEdge);
+			AddBoundaryVertexCap(Bucket.FirstEdge.FlatStart, Bucket.FirstEdge.Start);
+			AddBoundaryVertexCap(Bucket.FirstEdge.FlatEnd, Bucket.FirstEdge.End);
+			continue;
+		}
+
+		if (Bucket.Count > 2)
+		{
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("Civilisation border edge bucket has %d instances. This suggests duplicate owned coords or unsuitable vertex key precision."),
+				Bucket.Count
+			);
+		}
+	}
+
+	BoundaryEdges.Sort([](const FBorderEdgeRecord& Left, const FBorderEdgeRecord& Right)
+	{
+		if (Left.TileCoord.Y != Right.TileCoord.Y)
+		{
+			return Left.TileCoord.Y < Right.TileCoord.Y;
+		}
+
+		if (Left.TileCoord.X != Right.TileCoord.X)
+		{
+			return Left.TileCoord.X < Right.TileCoord.X;
+		}
+
+		if (!FMath::IsNearlyEqual(Left.FlatStart.X, Right.FlatStart.X))
+		{
+			return Left.FlatStart.X < Right.FlatStart.X;
+		}
+
+		return Left.FlatStart.Y < Right.FlatStart.Y;
+	});
+
+	for (const FBorderEdgeRecord& BorderEdge : BoundaryEdges)
+	{
+		FVector ToCenter = BorderEdge.TileCenter - ((BorderEdge.Start + BorderEdge.End) * 0.5f);
+		ToCenter.Z = 0.0f;
+		ToCenter.Normalize();
+
+		if (ToCenter.IsNearlyZero())
+		{
+			continue;
+		}
+
+		const FVector HalfWidth = ToCenter * (CivilisationBorderEdgeWidth * 0.5f);
+
+		AddQuad(
+			BorderEdge.Start - HalfWidth,
+			BorderEdge.End - HalfWidth,
+			BorderEdge.End + HalfWidth,
+			BorderEdge.Start + HalfWidth
+		);
+	}
+
+	for (const TPair<FHexVertexKey, FVector>& BoundaryVertexCap : BoundaryVertexCaps)
+	{
+		const FVector CapCenter = BoundaryVertexCap.Value;
+		const int32 SegmentCount = 8;
+		const int32 CenterIndex = Vertices.Num();
+
+		Vertices.Add(CapCenter);
+		Normals.Add(FVector::UpVector);
+		UVs.Add(FVector2D(0.5f, 0.5f));
+		VertexColors.Add(FColor::White);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+		for (int32 SegmentIndex = 0; SegmentIndex < SegmentCount; ++SegmentIndex)
+		{
+			const float Angle = (2.0f * PI * static_cast<float>(SegmentIndex)) / static_cast<float>(SegmentCount);
+			Vertices.Add(FVector(
+				CapCenter.X + FMath::Cos(Angle) * CivilisationBorderVertexRadius,
+				CapCenter.Y + FMath::Sin(Angle) * CivilisationBorderVertexRadius,
+				CapCenter.Z
+			));
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(FColor::White);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+
+		for (int32 SegmentIndex = 0; SegmentIndex < SegmentCount; ++SegmentIndex)
+		{
+			const int32 CurrentIndex = CenterIndex + 1 + SegmentIndex;
+			const int32 NextIndex = CenterIndex + 1 + ((SegmentIndex + 1) % SegmentCount);
+
+			Triangles.Add(CenterIndex);
+			Triangles.Add(NextIndex);
+			Triangles.Add(CurrentIndex);
+
+			Triangles.Add(CenterIndex);
+			Triangles.Add(CurrentIndex);
+			Triangles.Add(NextIndex);
+		}
+	}
+
+	if (Vertices.Num() <= 0)
+	{
+		CivilisationBorderMesh->SetVisibility(false);
+		return;
+	}
+
+	CivilisationBorderMesh->CreateMeshSection(
+		0,
+		Vertices,
+		Triangles,
+		Normals,
+		UVs,
+		VertexColors,
+		Tangents,
+		false
+	);
+
+	UMaterialInterface* EffectiveMaterial = BorderMaterial ? BorderMaterial : DefaultCivilisationBorderMaterial.Get();
+	if (EffectiveMaterial)
+	{
+		CivilisationBorderMesh->SetMaterial(0, EffectiveMaterial);
+	}
+
+	CivilisationBorderMesh->SetVisibility(true);
+}
+
+void AModularHexGridActor::RebuildExpansionCandidateHighlights(const TArray<FIntPoint>& CandidateCoords, UMaterialInterface* HighlightMaterial)
+{
+	if (!ExpansionCandidateMesh)
+	{
+		return;
+	}
+
+	ExpansionCandidateMesh->ClearAllMeshSections();
+
+	if (CandidateCoords.Num() <= 0)
+	{
+		ExpansionCandidateMesh->SetVisibility(false);
 		return;
 	}
 
@@ -246,77 +563,63 @@ void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMate
 		}
 	};
 
-	for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+	for (const FIntPoint& Coord : CandidateCoords)
 	{
-		for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+		if (!GridModel.IsValidTile(Coord.X, Coord.Y))
 		{
-			const FHexTileData* Tile = GridModel.GetTile(Q, R);
-			if (!Tile || Tile->Gameplay.OwnerPlayerId != OwnerPlayerId)
+			continue;
+		}
+
+		const FVector Center = GridModel.GetHexCenter(Coord.X, Coord.Y);
+
+		TArray<FVector> Corners;
+		Corners.SetNum(6);
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const FVector FlatCorner = Center + GridModel.GetHexCornerOffset(CornerIndex);
+
+			float CornerZ = 0.0f;
+			if (GridModel.UsesHeightOffsets())
 			{
-				continue;
+				CornerZ = GridModel.GetResolvedCornerHeight(FlatCorner);
+				CornerZ += GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
 			}
 
-			const FVector Center = GridModel.GetHexCenter(Q, R);
+			Corners[CornerIndex] = FVector(
+				FlatCorner.X,
+				FlatCorner.Y,
+				CornerZ + ExpansionCandidateSurfaceOffset
+			);
+		}
 
-			TArray<FVector> Corners;
-			Corners.SetNum(6);
+		for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
+		{
+			const FVector A = Corners[EdgeIndex];
+			const FVector B = Corners[(EdgeIndex + 1) % 6];
 
-			for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
-			{
-				const FVector FlatCorner = Center + GridModel.GetHexCornerOffset(CornerIndex);
+			FVector ToCenter = Center - ((A + B) * 0.5f);
+			ToCenter.Z = 0.0f;
+			ToCenter.Normalize();
 
-				float CornerZ = 0.0f;
-				if (GridModel.UsesHeightOffsets())
-				{
-					CornerZ = GridModel.GetResolvedCornerHeight(FlatCorner);
-					CornerZ += GridModel.GetResolvedCornerHeightVarianceOffset(FlatCorner);
-				}
+			const FVector HalfWidth = ToCenter * ExpansionCandidateEdgeWidth * 0.5f;
 
-				Corners[CornerIndex] = FVector(
-					FlatCorner.X,
-					FlatCorner.Y,
-					CornerZ + CivilisationBorderSurfaceOffset
-				);
-			}
-
-			for (int32 EdgeIndex = 0; EdgeIndex < 6; ++EdgeIndex)
-			{
-				int32 NeighborQ = INDEX_NONE;
-				int32 NeighborR = INDEX_NONE;
-				const bool bHasNeighbor = GridModel.GetNeighbourCoord(Q, R, EdgeIndex, NeighborQ, NeighborR);
-				const FHexTileData* NeighborTile = bHasNeighbor ? GridModel.GetTile(NeighborQ, NeighborR) : nullptr;
-
-				if (NeighborTile && NeighborTile->Gameplay.OwnerPlayerId == OwnerPlayerId)
-				{
-					continue;
-				}
-
-				const FVector A = Corners[EdgeIndex];
-				const FVector B = Corners[(EdgeIndex + 1) % 6];
-
-				FVector ToCenter = Center - ((A + B) * 0.5f);
-				ToCenter.Z = 0.0f;
-				ToCenter.Normalize();
-
-				const FVector HalfWidth = ToCenter * CivilisationBorderEdgeWidth * 0.5f;
-
-				AddQuad(
-					A - HalfWidth,
-					B - HalfWidth,
-					B + HalfWidth,
-					A + HalfWidth
-				);
-			}
+			AddQuad(
+				A - HalfWidth,
+				B - HalfWidth,
+				B + HalfWidth,
+				A + HalfWidth
+			);
 		}
 	}
 
 	if (Vertices.Num() <= 0)
 	{
-		CivilisationBorderMesh->SetVisibility(false);
+		ExpansionCandidateMesh->SetVisibility(false);
 		return;
 	}
 
-	CivilisationBorderMesh->CreateMeshSection(
+	ExpansionCandidateMesh->CreateMeshSection(
 		0,
 		Vertices,
 		Triangles,
@@ -327,13 +630,22 @@ void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMate
 		false
 	);
 
-	UMaterialInterface* EffectiveMaterial = BorderMaterial ? BorderMaterial : DefaultCivilisationBorderMaterial.Get();
+	UMaterialInterface* EffectiveMaterial = HighlightMaterial ? HighlightMaterial : ExpansionCandidateMaterial.Get();
 	if (EffectiveMaterial)
 	{
-		CivilisationBorderMesh->SetMaterial(0, EffectiveMaterial);
+		ExpansionCandidateMesh->SetMaterial(0, EffectiveMaterial);
 	}
 
-	CivilisationBorderMesh->SetVisibility(true);
+	ExpansionCandidateMesh->SetVisibility(true);
+}
+
+void AModularHexGridActor::ClearExpansionCandidateHighlights()
+{
+	if (ExpansionCandidateMesh)
+	{
+		ExpansionCandidateMesh->ClearAllMeshSections();
+		ExpansionCandidateMesh->SetVisibility(false);
+	}
 }
 
 void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
@@ -495,6 +807,7 @@ void AModularHexGridActor::RebuildGrid()
 		CivilisationBorderMesh->ClearAllMeshSections();
 		CivilisationBorderMesh->SetVisibility(false);
 	}
+	ClearExpansionCandidateHighlights();
 }
 
 void AModularHexGridActor::RegenerateGridWithNewRandomSeed()
@@ -849,8 +1162,19 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		CivilisationBorderMesh->bCastDynamicShadow = false;
 		CivilisationBorderMesh->bCastStaticShadow = false;
 		CivilisationBorderMesh->CastShadow = false;
-		CivilisationBorderMesh->TranslucencySortPriority = 4;
+		CivilisationBorderMesh->TranslucencySortPriority = CivilisationBorderTranslucencySortPriority;
 		CivilisationBorderMesh->SetVisibility(false);
+	}
+
+	if (ExpansionCandidateMesh)
+	{
+		ExpansionCandidateMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ExpansionCandidateMesh->SetCastShadow(false);
+		ExpansionCandidateMesh->bCastDynamicShadow = false;
+		ExpansionCandidateMesh->bCastStaticShadow = false;
+		ExpansionCandidateMesh->CastShadow = false;
+		ExpansionCandidateMesh->TranslucencySortPriority = 6;
+		ExpansionCandidateMesh->SetVisibility(false);
 	}
 
 	if (FogOfWarMesh)

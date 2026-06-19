@@ -177,11 +177,57 @@ struct FHexVertexKey
 	{
 		return X == Other.X && Y == Other.Y;
 	}
+
+	bool operator<(const FHexVertexKey& Other) const
+	{
+		if (X != Other.X)
+		{
+			return X < Other.X;
+		}
+
+		return Y < Other.Y;
+	}
 };
 
 FORCEINLINE uint32 GetTypeHash(const FHexVertexKey& Key)
 {
 	uint32 Hash = ::GetTypeHash(Key.X);
 	Hash = HashCombine(Hash, ::GetTypeHash(Key.Y));
+	return Hash;
+}
+
+struct FHexEdgeKey
+{
+	FHexVertexKey A;
+	FHexVertexKey B;
+
+	static FHexEdgeKey Make(FHexVertexKey First, FHexVertexKey Second)
+	{
+		FHexEdgeKey Result;
+
+		if (Second < First)
+		{
+			Result.A = Second;
+			Result.B = First;
+		}
+		else
+		{
+			Result.A = First;
+			Result.B = Second;
+		}
+
+		return Result;
+	}
+
+	bool operator==(const FHexEdgeKey& Other) const
+	{
+		return A == Other.A && B == Other.B;
+	}
+};
+
+FORCEINLINE uint32 GetTypeHash(const FHexEdgeKey& Key)
+{
+	uint32 Hash = GetTypeHash(Key.A);
+	Hash = HashCombine(Hash, GetTypeHash(Key.B));
 	return Hash;
 }

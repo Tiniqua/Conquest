@@ -285,6 +285,12 @@ bool FHexGridModel::SetTileImprovement(int32 Q, int32 R, FName ImprovementId)
 	return true;
 }
 
+const FHexResourceDefinition* FHexGridModel::FindResourceDefinition(FName ResourceId) const
+{
+	const UHexResourceSetData* ResourceData = ResourceSetData.Get();
+	return ResourceData ? ResourceData->FindResource(ResourceId) : nullptr;
+}
+
 void FHexGridModel::GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const
 {
 	OutImprovements.Reset();
@@ -418,6 +424,32 @@ TArray<FIntPoint> FHexGridModel::GetCoordsInRange(const FIntPoint& Center, int32
 	}
 
 	return Result;
+}
+
+int32 FHexGridModel::GetHexDistance(const FIntPoint& A, const FIntPoint& B) const
+{
+	auto OffsetToCube = [](const FIntPoint& Coord, int32& OutX, int32& OutY, int32& OutZ)
+	{
+		OutX = Coord.X - ((Coord.Y - (Coord.Y & 1)) / 2);
+		OutZ = Coord.Y;
+		OutY = -OutX - OutZ;
+	};
+
+	int32 AX = 0;
+	int32 AY = 0;
+	int32 AZ = 0;
+	int32 BX = 0;
+	int32 BY = 0;
+	int32 BZ = 0;
+
+	OffsetToCube(A, AX, AY, AZ);
+	OffsetToCube(B, BX, BY, BZ);
+
+	return FMath::Max3(
+		FMath::Abs(AX - BX),
+		FMath::Abs(AY - BY),
+		FMath::Abs(AZ - BZ)
+	);
 }
 
 int32 FHexGridModel::GetTileIndex(int32 Q, int32 R) const

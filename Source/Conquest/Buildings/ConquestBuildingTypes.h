@@ -36,6 +36,9 @@ struct FConquestBuildingRow : public FTableRowBase
 	FHexYield FlatCityYieldBonus;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int32 HappinessBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bGrantedOnCityFounding = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)

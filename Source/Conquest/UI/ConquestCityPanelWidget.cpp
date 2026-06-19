@@ -15,6 +15,8 @@ void UConquestCityPanelWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	BindToGameState();
+
 	if (CloseButton)
 	{
 		CloseButton->OnClicked.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCloseClicked);
@@ -24,8 +26,15 @@ void UConquestCityPanelWidget::NativeConstruct()
 	Refresh();
 }
 
+void UConquestCityPanelWidget::NativeDestruct()
+{
+	UnbindFromGameState();
+	Super::NativeDestruct();
+}
+
 void UConquestCityPanelWidget::SetCity(int32 InCityId)
 {
+	BindToGameState();
 	CityId = InCityId;
 	Refresh();
 }
@@ -54,10 +63,21 @@ void UConquestCityPanelWidget::Refresh()
 
 	if (PopulationText)
 	{
+		const int32 TurnsToGrowth = GS->CityManager->EstimateTurnsToGrowth(CityId);
+		const FText GrowthText = TurnsToGrowth == INDEX_NONE
+			? NSLOCTEXT("Conquest", "CityGrowthStalled", "Growth: Stalled")
+			: FText::Format(
+				NSLOCTEXT("Conquest", "CityGrowthTurns", "Growth: {0} turns"),
+				FText::AsNumber(TurnsToGrowth)
+			);
+
 		PopulationText->SetText(FText::Format(
-			NSLOCTEXT("Conquest", "PopulationFormat", "Population: {0} | Food: {1}"),
+			NSLOCTEXT("Conquest", "PopulationFormat", "Population: {0} | Food: {1}/{2} | {3} | Expansions: {4}"),
 			FText::AsNumber(City->Population),
-			FText::AsNumber(FMath::FloorToInt(City->FoodStored))
+			FText::AsNumber(FMath::FloorToInt(City->FoodStored)),
+			FText::AsNumber(City->CachedFoodRequiredForNextPopulation),
+			GrowthText,
+			FText::AsNumber(City->PendingBorderExpansions)
 		));
 	}
 
@@ -115,6 +135,77 @@ void UConquestCityPanelWidget::ClosePanel()
 {
 	CityId = INDEX_NONE;
 	SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UConquestCityPanelWidget::BindToGameState()
+{
+	AConquestGameState* GS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!GS)
+	{
+		return;
+	}
+
+	GS->OnConquestStateChanged.RemoveDynamic(this, &UConquestCityPanelWidget::HandleConquestStateChanged);
+	GS->OnConquestStateChanged.AddDynamic(this, &UConquestCityPanelWidget::HandleConquestStateChanged);
+
+	if (GS->CityManager)
+	{
+		GS->CityManager->OnCityChanged.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+		GS->CityManager->OnCityChanged.AddDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+		GS->CityManager->OnCityNeedsBorderExpansion.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+		GS->CityManager->OnCityNeedsBorderExpansion.AddDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+	}
+}
+
+void UConquestCityPanelWidget::UnbindFromGameState()
+{
+	AConquestGameState* GS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!GS)
+	{
+		return;
+	}
+
+	GS->OnConquestStateChanged.RemoveDynamic(this, &UConquestCityPanelWidget::HandleConquestStateChanged);
+
+	if (GS->CityManager)
+	{
+		GS->CityManager->OnCityChanged.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+		GS->CityManager->OnCityNeedsBorderExpansion.RemoveDynamic(this, &UConquestCityPanelWidget::HandleCityChanged);
+	}
+}
+
+void UConquestCityPanelWidget::HandleCityChanged(int32 ChangedCityId)
+{
+	if (CityId == INDEX_NONE || ChangedCityId != CityId || !IsVisible())
+	{
+		return;
+	}
+
+	Refresh();
+
+	if (APlayerController* PlayerController = GetOwningPlayer())
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+		{
+			ConquestHUD->BeginCityTileExpansionSelection(CityId);
+		}
+	}
+}
+
+void UConquestCityPanelWidget::HandleConquestStateChanged()
+{
+	if (CityId == INDEX_NONE || !IsVisible())
+	{
+		return;
+	}
+
+	Refresh();
 }
 
 void UConquestCityPanelWidget::HandleCloseClicked()

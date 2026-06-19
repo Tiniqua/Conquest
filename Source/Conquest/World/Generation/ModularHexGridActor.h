@@ -32,6 +32,9 @@ public:
 	void AddCityPlaceholder(int32 CityId, const FIntPoint& Coord);
 	void ClearCityPlaceholders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial);
+	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial);
+	void RebuildExpansionCandidateHighlights(const TArray<FIntPoint>& CandidateCoords, UMaterialInterface* HighlightMaterial = nullptr);
+	void ClearExpansionCandidateHighlights();
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	// -----------------------------------------------------------------------------
@@ -142,6 +145,24 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
 	float CivilisationBorderSurfaceOffset = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	float CivilisationBorderVertexRadius = 16.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Borders")
+	int32 CivilisationBorderTranslucencySortPriority = 7;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Expansion")
+	TObjectPtr<UProceduralMeshComponent> ExpansionCandidateMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Expansion")
+	TObjectPtr<UMaterialInterface> ExpansionCandidateMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Expansion")
+	float ExpansionCandidateEdgeWidth = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Expansion")
+	float ExpansionCandidateSurfaceOffset = 14.0f;
 	
 protected:
 	virtual void BeginPlay() override;

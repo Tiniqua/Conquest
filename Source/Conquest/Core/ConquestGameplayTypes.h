@@ -152,6 +152,9 @@ struct FCityState
 	float FoodStored = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedFoodRequiredForNextPopulation = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FIntPoint> OwnedTiles;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

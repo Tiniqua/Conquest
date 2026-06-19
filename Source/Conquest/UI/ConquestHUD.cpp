@@ -9,9 +9,64 @@
 #include "ConquestResearchPanelWidget.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexTileTypes.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+
+namespace
+{
+	FString HexTileTypeToString(EHexTileType TileType)
+	{
+		if (const UEnum* EnumPtr = StaticEnum<EHexTileType>())
+		{
+			return EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(TileType)).ToString();
+		}
+
+		return TEXT("Unknown");
+	}
+
+	FString HexFeatureTypeToString(EHexFeatureType FeatureType)
+	{
+		if (const UEnum* EnumPtr = StaticEnum<EHexFeatureType>())
+		{
+			return EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(FeatureType)).ToString();
+		}
+
+		return TEXT("Unknown");
+	}
+
+	FString FormatTileFeatures(const FHexTileData& TileData)
+	{
+		TArray<FString> FeatureNames;
+
+		for (const EHexFeatureType Feature : TileData.Features)
+		{
+			if (Feature != EHexFeatureType::None)
+			{
+				FeatureNames.Add(HexFeatureTypeToString(Feature));
+			}
+		}
+
+		return FeatureNames.Num() > 0
+			? FString::Join(FeatureNames, TEXT(", "))
+			: TEXT("None");
+	}
+
+	FString FormatTileResource(const FHexTileData& TileData)
+	{
+		if (!TileData.Resource.HasResource())
+		{
+			return TEXT("None");
+		}
+
+		return TileData.Resource.Quantity > 0
+			? FString::Printf(TEXT("%s x%d"), *TileData.Resource.ResourceId.ToString(), TileData.Resource.Quantity)
+			: TileData.Resource.ResourceId.ToString();
+	}
+}
 
 AConquestHUD::AConquestHUD()
 {
@@ -97,6 +152,8 @@ void AConquestHUD::ShowCityPanel(int32 CityId)
 	{
 		ActiveGameWidget->SetSelectedCityYieldContext(CityId);
 	}
+
+	BeginCityTileExpansionSelection(CityId);
 }
 
 void AConquestHUD::HideCityPanel()
@@ -109,6 +166,160 @@ void AConquestHUD::HideCityPanel()
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
 		ActiveGameWidget->ClearSelectedCityYieldContext();
+	}
+
+	ClearCityTileExpansionSelection();
+}
+
+void AConquestHUD::BeginCityTileExpansionSelection(int32 CityId)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->CityManager || !ConquestGS->ActiveGridActor)
+	{
+		return;
+	}
+
+	const FCityState* City = ConquestGS->CityManager->GetCity(CityId);
+	if (!City || City->PendingBorderExpansions <= 0)
+	{
+		ClearCityTileExpansionSelection();
+		return;
+	}
+
+	ExpansionSelectionCityId = CityId;
+	PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+
+	const TArray<FIntPoint> Candidates = ConquestGS->CityManager->GetExpansionCandidateTiles(CityId);
+	ConquestGS->ActiveGridActor->RebuildExpansionCandidateHighlights(Candidates);
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+}
+
+bool AConquestHUD::SelectExpansionCandidateTile(int32 Q, int32 R)
+{
+	if (ExpansionSelectionCityId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return false;
+	}
+
+	const FIntPoint Coord(Q, R);
+	const TArray<FIntPoint> Candidates =
+		ConquestGS->CityManager->GetExpansionCandidateTiles(ExpansionSelectionCityId);
+
+	if (!Candidates.Contains(Coord))
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
+	if (!Tile)
+	{
+		return false;
+	}
+
+	PendingExpansionTileCoord = Coord;
+
+	FConquestTileExpansionChoiceData ChoiceData;
+	ChoiceData.CityId = ExpansionSelectionCityId;
+	ChoiceData.Coord = Coord;
+	ChoiceData.TileType = HexTileTypeToString(Tile->TileType);
+	ChoiceData.Resource = FormatTileResource(*Tile);
+	ChoiceData.Features = FormatTileFeatures(*Tile);
+	ChoiceData.Yield = Tile->FinalYield;
+	ChoiceData.bIsValid = true;
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ShowTileExpansionConfirmation(ChoiceData);
+	}
+
+	return true;
+}
+
+bool AConquestHUD::ConfirmSelectedExpansionTile()
+{
+	if (ExpansionSelectionCityId == INDEX_NONE || PendingExpansionTileCoord == FIntPoint(INT32_MIN, INT32_MIN))
+	{
+		return false;
+	}
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return false;
+	}
+
+	const bool bClaimed = ConquestGS->CityManager->ClaimExpansionTileForCity(
+		ExpansionSelectionCityId,
+		PendingExpansionTileCoord
+	);
+
+	if (!bClaimed)
+	{
+		return false;
+	}
+
+	if (CityPanelWidget)
+	{
+		CityPanelWidget->Refresh();
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->SetSelectedCityYieldContext(ExpansionSelectionCityId);
+		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+
+	BeginCityTileExpansionSelection(ExpansionSelectionCityId);
+	return true;
+}
+
+void AConquestHUD::CancelSelectedExpansionTile()
+{
+	PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+}
+
+void AConquestHUD::ClearCityTileExpansionSelection()
+{
+	ExpansionSelectionCityId = INDEX_NONE;
+	PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (ConquestGS && ConquestGS->ActiveGridActor)
+	{
+		ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
 	}
 }
 

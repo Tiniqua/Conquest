@@ -106,6 +106,18 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 		TopBarFaithText,
 		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldFaithShort", "Faith"), YieldData.EmpireStoredYields.Faith, YieldData.EmpireYieldPerTurn.Faith)
 	);
+	SetText(
+		TopBarHappinessText,
+		YieldData.bIsUnhappy
+			? FText::Format(
+				NSLOCTEXT("Conquest", "TopBarUnhappyFormat", "Happy: {0} (-25% Unhappy)"),
+				FText::AsNumber(YieldData.Happiness)
+			)
+			: FText::Format(
+				NSLOCTEXT("Conquest", "TopBarHappinessFormat", "Happy: {0}"),
+				FText::AsNumber(YieldData.Happiness)
+			)
+	);
 }
 
 void UConquestGameWidget::ClearTileTexts()
@@ -142,6 +154,18 @@ void UConquestGameWidget::NativeConstruct()
 		ResearchButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleResearchClicked);
 	}
 
+	if (TileExpansionConfirmButton)
+	{
+		TileExpansionConfirmButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleTileExpansionConfirmClicked);
+		TileExpansionConfirmButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleTileExpansionConfirmClicked);
+	}
+
+	if (TileExpansionCancelButton)
+	{
+		TileExpansionCancelButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleTileExpansionCancelClicked);
+		TileExpansionCancelButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleTileExpansionCancelClicked);
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
@@ -155,6 +179,7 @@ void UConquestGameWidget::NativeConstruct()
 	}
 	
 	ClearHoveredTileInfo();
+	ClearTileExpansionConfirmation();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 }
@@ -237,6 +262,8 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 
 	Result.EmpireStoredYields = ConquestGS->HumanPlayer.StoredYields;
 	Result.EmpireYieldPerTurn = ConquestGS->HumanPlayer.CachedYieldPerTurn;
+	Result.Happiness = ConquestGS->HumanPlayer.CachedHappiness;
+	Result.bIsUnhappy = ConquestGS->HumanPlayer.CachedHappiness < 0;
 	Result.SelectedCityId = SelectedCityYieldContextId;
 	Result.bShowSelectedCityLocalYields = SelectedCityYieldContextId != INDEX_NONE;
 
@@ -279,6 +306,67 @@ void UConquestGameWidget::ClearSelectedCityYieldContext()
 {
 	SelectedCityYieldContextId = INDEX_NONE;
 	RefreshTopBarYieldInfo();
+}
+
+void UConquestGameWidget::ShowTileExpansionConfirmation(const FConquestTileExpansionChoiceData& ChoiceData)
+{
+	PendingTileExpansionChoice = ChoiceData;
+
+	if (!ChoiceData.bIsValid)
+	{
+		ClearTileExpansionConfirmation();
+		return;
+	}
+
+	SetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Visible);
+
+	SetText(
+		TileExpansionTitleText,
+		FString::Printf(TEXT("Claim Tile [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
+	);
+	SetText(
+		TileExpansionDetailText,
+		FString::Printf(
+			TEXT("%s | Resource: %s | Features: %s"),
+			*ChoiceData.TileType,
+			*ChoiceData.Resource,
+			*ChoiceData.Features
+		)
+	);
+	SetText(TileExpansionYieldText, ChoiceData.Yield.ToCompactString());
+}
+
+void UConquestGameWidget::ClearTileExpansionConfirmation()
+{
+	PendingTileExpansionChoice = FConquestTileExpansionChoiceData();
+	SetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Collapsed);
+	ClearText(TileExpansionTitleText);
+	ClearText(TileExpansionDetailText);
+	ClearText(TileExpansionYieldText);
+}
+
+void UConquestGameWidget::HandleTileExpansionConfirmClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->ConfirmSelectedExpansionTile();
+	}
+}
+
+void UConquestGameWidget::HandleTileExpansionCancelClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->CancelSelectedExpansionTile();
+	}
+	else
+	{
+		ClearTileExpansionConfirmation();
+	}
 }
 
 void UConquestGameWidget::UpdateHoveredTileInfo(const FHoveredHexTileWidgetData& HoveredTileData)

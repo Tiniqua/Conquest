@@ -6,6 +6,7 @@
 #include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 #include "ProceduralMeshComponent.h"
 
 #include "Conquest/World/Generation/HexGridModel.h"
@@ -37,7 +38,14 @@ AConquestUnitActor::AConquestUnitActor()
 	SelectionMesh->CastShadow = false;
 	SelectionMesh->SetVisibility(false);
 
+	static ConstructorHelpers::FClassFinder<UConquestUnitWorldIconWidget> UnitWorldIconWidgetFinder(
+		TEXT("/Game/UI/WBP_UnitIcon")
+	);
 	UnitWorldIconWidgetClass = UConquestUnitWorldIconWidget::StaticClass();
+	if (UnitWorldIconWidgetFinder.Succeeded())
+	{
+		UnitWorldIconWidgetClass = UnitWorldIconWidgetFinder.Class;
+	}
 	UnitWorldIconComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("UnitWorldIcon"));
 	UnitWorldIconComponent->SetupAttachment(SceneRoot);
 	UnitWorldIconComponent->SetWidgetSpace(EWidgetSpace::World);
@@ -137,6 +145,20 @@ void AConquestUnitActor::MoveToTile(const FIntPoint& NewCoord)
 	if (SelectionMesh && SelectionMesh->IsVisible())
 	{
 		RebuildSelectionMesh(SelectionMesh->GetMaterial(0));
+	}
+}
+
+void AConquestUnitActor::SetUnitWorldIconWidgetClass(TSubclassOf<UConquestUnitWorldIconWidget> InWidgetClass)
+{
+	if (!InWidgetClass || UnitWorldIconWidgetClass == InWidgetClass)
+	{
+		return;
+	}
+
+	UnitWorldIconWidgetClass = InWidgetClass;
+	if (UnitWorldIconComponent)
+	{
+		UnitWorldIconComponent->SetWidgetClass(UnitWorldIconWidgetClass);
 	}
 }
 

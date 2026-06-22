@@ -562,6 +562,11 @@ void AConquestGameState::RebuildUnitVisualsFromReplicatedState()
 				UnitActorsByInstanceId.Add(UnitState.UnitInstanceId, UnitActor);
 			}
 
+			if (ActiveGridActor->UnitWorldIconWidgetClass)
+			{
+				UnitActor->SetUnitWorldIconWidgetClass(ActiveGridActor->UnitWorldIconWidgetClass);
+			}
+
 			const FText UnitName = !UnitRow->DisplayName.IsEmpty()
 				? UnitRow->DisplayName
 				: FText::FromName(UnitState.UnitId);

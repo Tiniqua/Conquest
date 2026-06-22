@@ -9,13 +9,23 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Conquest/UI/ConquestCityWorldLabelWidget.h"
+#include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "Net/UnrealNetwork.h"
+#include "UObject/ConstructorHelpers.h"
 
 AModularHexGridActor::AModularHexGridActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	SetReplicates(true);
 	bAlwaysRelevant = true;
+
+	static ConstructorHelpers::FClassFinder<UConquestUnitWorldIconWidget> UnitWorldIconWidgetFinder(
+		TEXT("/Game/UI/WBP_UnitIcon")
+	);
+	if (UnitWorldIconWidgetFinder.Succeeded())
+	{
+		UnitWorldIconWidgetClass = UnitWorldIconWidgetFinder.Class;
+	}
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);

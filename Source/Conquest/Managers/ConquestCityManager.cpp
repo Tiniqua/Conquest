@@ -800,6 +800,11 @@ void UConquestCityManager::SpawnUnitActorForState(const FConquestUnitState& Unit
 		return;
 	}
 
+	if (GameStateRef->ActiveGridActor->UnitWorldIconWidgetClass)
+	{
+		UnitActor->SetUnitWorldIconWidgetClass(GameStateRef->ActiveGridActor->UnitWorldIconWidgetClass);
+	}
+
 	const FText UnitName = !UnitRow->DisplayName.IsEmpty()
 		? UnitRow->DisplayName
 		: FText::FromName(UnitState.UnitId);

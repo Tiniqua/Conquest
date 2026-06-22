@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "ConquestGameSetupTypes.h"
 #include "HexFeatureGenerator.h"
 #include "HexFeatureMeshBuilder.h"
@@ -106,6 +107,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
 	float CityWorldLabelScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Units|World Icon")
+	TSubclassOf<UConquestUnitWorldIconWidget> UnitWorldIconWidgetClass;
 
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> CityPlaceholderMeshComponent = nullptr;

@@ -1,13 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "GameFramework/Actor.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "ConquestUnitActor.generated.h"
 
 class AModularHexGridActor;
-class UConquestUnitWorldIconWidget;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
@@ -42,6 +42,7 @@ public:
 	);
 	void SetSelected(bool bSelected, UMaterialInterface* SelectionMaterial = nullptr);
 	void MoveToTile(const FIntPoint& NewCoord);
+	void SetUnitWorldIconWidgetClass(TSubclassOf<UConquestUnitWorldIconWidget> InWidgetClass);
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
 	int32 GetUnitInstanceId() const { return UnitInstanceId; }

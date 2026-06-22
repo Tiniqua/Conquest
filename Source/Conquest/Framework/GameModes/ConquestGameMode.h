@@ -4,6 +4,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "ConquestGameMode.generated.h"
 
+class UConquestCivilisationData;
+
 UCLASS()
 class CONQUEST_API AConquestGameMode : public AGameModeBase
 {
@@ -13,6 +15,12 @@ public:
 	AConquestGameMode();
 
 	virtual void BeginPlay() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Game Setup")
+	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup")
+	TArray<UConquestCivilisationData*> GetAvailableCivilisations() const;
 
 	UFUNCTION(BlueprintCallable)
 	void StartSinglePlayerGame();

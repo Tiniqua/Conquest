@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/World/Generation/HexGridSettings.h"
 #include "ConquestGameSetupTypes.generated.h"
 
@@ -34,7 +35,39 @@ struct FConquestMapSizePresetDefinition
 	int32 Height = 100;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PlayerCount = 6;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FText Tooltip;
+};
+
+UENUM(BlueprintType)
+enum class EConquestLobbySlotType : uint8
+{
+	Human UMETA(DisplayName = "Human"),
+	AI UMETA(DisplayName = "AI"),
+	Closed UMETA(DisplayName = "Closed")
+};
+
+USTRUCT(BlueprintType)
+struct FConquestLobbyPlayerSlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	int32 SlotIndex = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	int32 PlayerId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	EConquestLobbySlotType SlotType = EConquestLobbySlotType::AI;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	bool bIsHost = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	TObjectPtr<UConquestCivilisationData> Civilisation = nullptr;
 };
 
 USTRUCT(BlueprintType)
@@ -71,6 +104,9 @@ struct FConquestGameSetupSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	int32 RandomSeed = 1337;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	TArray<FConquestLobbyPlayerSlot> PlayerSlots;
 };
 
 class FConquestMapSizePresets
@@ -79,12 +115,12 @@ public:
 	static TArray<FConquestMapSizePresetDefinition> GetAllPresets()
 	{
 		return {
-			Make(EConquestMapSizePreset::Tiny,     TEXT("Tiny"),     50,  50),
-			Make(EConquestMapSizePreset::Small,    TEXT("Small"),    75,  75),
-			Make(EConquestMapSizePreset::Standard, TEXT("Standard"), 100, 100),
-			Make(EConquestMapSizePreset::Large,    TEXT("Large"),    150, 150),
-			Make(EConquestMapSizePreset::Huge,     TEXT("Huge"),     200, 200),
-			Make(EConquestMapSizePreset::Stupid,   TEXT("Stupid"),     300, 300)
+			Make(EConquestMapSizePreset::Tiny,     TEXT("Tiny"),      50,  50,  2),
+			Make(EConquestMapSizePreset::Small,    TEXT("Small"),     75,  75,  4),
+			Make(EConquestMapSizePreset::Standard, TEXT("Standard"), 100, 100,  6),
+			Make(EConquestMapSizePreset::Large,    TEXT("Large"),    150, 150,  8),
+			Make(EConquestMapSizePreset::Huge,     TEXT("Huge"),     200, 200, 10),
+			Make(EConquestMapSizePreset::Stupid,   TEXT("Stupid"),   300, 300, 12)
 		};
 	}
 
@@ -107,15 +143,17 @@ private:
 		EConquestMapSizePreset Preset,
 		const TCHAR* Name,
 		int32 Width,
-		int32 Height)
+		int32 Height,
+		int32 PlayerCount)
 	{
 		FConquestMapSizePresetDefinition Result;
 		Result.Preset = Preset;
 		Result.DisplayName = FText::FromString(Name);
 		Result.Width = Width;
 		Result.Height = Height;
+		Result.PlayerCount = PlayerCount;
 		Result.Tooltip = FText::FromString(
-			FString::Printf(TEXT("%s map: %dx%d tiles"), Name, Width, Height)
+			FString::Printf(TEXT("%s map: %dx%d tiles, %d players"), Name, Width, Height, PlayerCount)
 		);
 		return Result;
 	}

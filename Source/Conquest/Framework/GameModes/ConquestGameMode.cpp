@@ -1,6 +1,7 @@
 ﻿
 #include "ConquestGameMode.h"
 #include "ConquestGameState.h"
+#include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
@@ -13,6 +14,22 @@ AConquestGameMode::AConquestGameMode()
 void AConquestGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+TArray<UConquestCivilisationData*> AConquestGameMode::GetAvailableCivilisations() const
+{
+	TArray<UConquestCivilisationData*> Result;
+	Result.Reserve(AvailableCivilisations.Num());
+
+	for (UConquestCivilisationData* Civilisation : AvailableCivilisations)
+	{
+		if (Civilisation)
+		{
+			Result.Add(Civilisation);
+		}
+	}
+
+	return Result;
 }
 
 void AConquestGameMode::StartSinglePlayerGame()

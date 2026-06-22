@@ -14,6 +14,7 @@ class USpinBox;
 class UCheckBox;
 class UTextBlock;
 class UConquestHUDWidget;
+class UConquestCivilisationData;
 
 UCLASS()
 class CONQUEST_API UConquestGameSetupWidget : public UUserWidget
@@ -33,6 +34,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup")
 	FConquestGameSetupSettings GetSelectedGameSetupSettings() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup|Lobby")
+	void RefreshLobbySlots();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup|Lobby")
+	void RefreshCivilisationOptions();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup|Lobby")
+	bool SetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation);
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup|Lobby")
+	TArray<FConquestLobbyPlayerSlot> GetLobbyPlayerSlots() const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup|Lobby")
+	TArray<UConquestCivilisationData*> GetAvailableCivilisations() const;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Conquest|Game Setup|Lobby")
+	void OnLobbySlotsChanged(const TArray<FConquestLobbyPlayerSlot>& PlayerSlots);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Conquest|Game Setup|Lobby")
+	void OnCivilisationOptionsChanged();
+
 protected:
 	virtual void NativeConstruct() override;
 
@@ -44,6 +66,45 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> MapSizeTooltipText = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot0ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot1ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot2ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot3ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot4ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot5ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot6ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot7ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot8ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot9ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot10ComboBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> CivSlot11ComboBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCheckBox> GenerateResourcesCheckBox = nullptr;
@@ -136,6 +197,12 @@ protected:
 	TMap<FString, EConquestMapSizePreset> OptionToMapSizePreset;
 
 	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UConquestCivilisationData>> OptionToCivilisation;
+
+	UPROPERTY(Transient)
+	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
+
+	UPROPERTY(Transient)
 	EHexMapTypePreset SelectedMapPreset = EHexMapTypePreset::Continents;
 
 	UPROPERTY(Transient)
@@ -146,6 +213,42 @@ protected:
 
 	UFUNCTION()
 	void HandleMapSizeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot0SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot1SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot2SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot3SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot4SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot5SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot6SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot7SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot8SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot9SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot10SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleCivSlot11SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
 	UFUNCTION()
 	void HandlePlayButtonClicked();
@@ -163,6 +266,11 @@ private:
 	void SetSelectedRandomSeed(int32 NewSeed, bool bUpdateSpinBox);
 	void ConfigureRandomSeedSpinBox();
 	void UpdateMapSizeTooltip();
+	void BindCivilisationComboBoxes();
+	void RefreshCivilisationComboBox(UComboBoxString* ComboBox, int32 SlotIndex);
+	void HandleCivilisationSelectionChanged(int32 SlotIndex, const FString& SelectedItem);
+	TArray<UComboBoxString*> GetCivilisationComboBoxes() const;
+	FString GetCivilisationOptionName(const UConquestCivilisationData* Civilisation, int32 OptionIndex) const;
 
 	UPROPERTY(Transient)
 	int32 SelectedRandomSeed = 1337;

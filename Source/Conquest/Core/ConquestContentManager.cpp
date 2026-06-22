@@ -80,13 +80,15 @@ const FConquestPhilosophyRow* UConquestContentManager::FindPhilosophy(FName Phil
 
 FName UConquestContentManager::ResolveBuildingIdForPlayer(int32 PlayerId, FName BaseBuildingId) const
 {
-	if (!GameStateRef || !GameStateRef->HumanCivilisation)
+	const UConquestCivilisationData* Civilisation = GameStateRef
+		? GameStateRef->GetCivilisationForPlayer(PlayerId)
+		: nullptr;
+	if (!Civilisation)
 	{
 		return BaseBuildingId;
 	}
 
-	// Single-player for now. Later use PlayerId to get the correct player's civ.
-	for (const FConquestContentOverride& Override : GameStateRef->HumanCivilisation->BuildingOverrides)
+	for (const FConquestContentOverride& Override : Civilisation->BuildingOverrides)
 	{
 		if (Override.ReplacesId == BaseBuildingId && !Override.ReplacementId.IsNone())
 		{
@@ -99,12 +101,15 @@ FName UConquestContentManager::ResolveBuildingIdForPlayer(int32 PlayerId, FName 
 
 FName UConquestContentManager::ResolveUnitIdForPlayer(int32 PlayerId, FName BaseUnitId) const
 {
-	if (!GameStateRef || !GameStateRef->HumanCivilisation)
+	const UConquestCivilisationData* Civilisation = GameStateRef
+		? GameStateRef->GetCivilisationForPlayer(PlayerId)
+		: nullptr;
+	if (!Civilisation)
 	{
 		return BaseUnitId;
 	}
 
-	for (const FConquestContentOverride& Override : GameStateRef->HumanCivilisation->UnitOverrides)
+	for (const FConquestContentOverride& Override : Civilisation->UnitOverrides)
 	{
 		if (Override.ReplacesId == BaseUnitId && !Override.ReplacementId.IsNone())
 		{

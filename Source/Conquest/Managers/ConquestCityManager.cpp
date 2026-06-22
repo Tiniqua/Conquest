@@ -78,16 +78,16 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 		FLinearColor CivilisationThemeColor = FLinearColor::White;
 		bool bOverrideCityScale = false;
 		FVector CityScale = FVector::OneVector;
-		if (GameStateRef->HumanPlayer.PlayerId == PlayerId && GameStateRef->HumanCivilisation)
+		if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(PlayerId))
 		{
-			CityMesh = GameStateRef->HumanCivilisation->CityMesh;
-			CityMaterial = GameStateRef->HumanCivilisation->CityMeshMaterialOverride;
-			CivilisationThemeMaterial = GameStateRef->HumanCivilisation->CityLabelMaterial
-				? GameStateRef->HumanCivilisation->CityLabelMaterial
-				: GameStateRef->HumanCivilisation->BorderMaterial;
-			CivilisationThemeColor = GameStateRef->HumanCivilisation->ThemeColor;
-			bOverrideCityScale = GameStateRef->HumanCivilisation->bOverrideCityMeshScale;
-			CityScale = GameStateRef->HumanCivilisation->CityMeshScaleOverride;
+			CityMesh = Civilisation->CityMesh;
+			CityMaterial = Civilisation->CityMeshMaterialOverride;
+			CivilisationThemeMaterial = Civilisation->CityLabelMaterial
+				? Civilisation->CityLabelMaterial
+				: Civilisation->BorderMaterial;
+			CivilisationThemeColor = Civilisation->ThemeColor;
+			bOverrideCityScale = Civilisation->bOverrideCityMeshScale;
+			CityScale = Civilisation->CityMeshScaleOverride;
 		}
 
 		GameStateRef->ActiveGridActor->AddCityPlaceholder(
@@ -791,10 +791,10 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 
 	UMaterialInterface* BorderMaterial = nullptr;
 	UMaterialInterface* BorderFillMaterial = nullptr;
-	if (GameStateRef->HumanPlayer.PlayerId == PlayerId && GameStateRef->HumanCivilisation)
+	if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(PlayerId))
 	{
-		BorderMaterial = GameStateRef->HumanCivilisation->BorderMaterial;
-		BorderFillMaterial = GameStateRef->HumanCivilisation->BorderFillMaterial;
+		BorderMaterial = Civilisation->BorderMaterial;
+		BorderFillMaterial = Civilisation->BorderFillMaterial;
 	}
 
 	TArray<FIntPoint> PlayerOwnedTiles;
@@ -823,12 +823,12 @@ void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
 
 	UMaterialInterface* CivilisationThemeMaterial = nullptr;
 	FLinearColor CivilisationThemeColor = FLinearColor::White;
-	if (GameStateRef->HumanPlayer.PlayerId == City.OwnerPlayerId && GameStateRef->HumanCivilisation)
+	if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(City.OwnerPlayerId))
 	{
-		CivilisationThemeMaterial = GameStateRef->HumanCivilisation->CityLabelMaterial
-			? GameStateRef->HumanCivilisation->CityLabelMaterial
-			: GameStateRef->HumanCivilisation->BorderMaterial;
-		CivilisationThemeColor = GameStateRef->HumanCivilisation->ThemeColor;
+		CivilisationThemeMaterial = Civilisation->CityLabelMaterial
+			? Civilisation->CityLabelMaterial
+			: Civilisation->BorderMaterial;
+		CivilisationThemeColor = Civilisation->ThemeColor;
 	}
 
 	GameStateRef->ActiveGridActor->AddOrUpdateCityWorldLabel(
@@ -849,14 +849,15 @@ FName UConquestCityManager::ResolveCityName(int32 PlayerId, FName RequestedCityN
 	}
 
 	const TArray<FName>* CivilisationCityNames = nullptr;
-	if (
-		GameStateRef &&
-		GameStateRef->HumanPlayer.PlayerId == PlayerId &&
-		GameStateRef->HumanCivilisation &&
-		GameStateRef->HumanCivilisation->CityNames.Num() > 0
-	)
+	if (GameStateRef)
 	{
-		CivilisationCityNames = &GameStateRef->HumanCivilisation->CityNames;
+		if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(PlayerId))
+		{
+			if (Civilisation->CityNames.Num() > 0)
+			{
+				CivilisationCityNames = &Civilisation->CityNames;
+			}
+		}
 	}
 
 	if (!CivilisationCityNames)

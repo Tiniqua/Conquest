@@ -180,12 +180,12 @@ void UConquestCityPanelWidget::ApplyCivilisationTheme(const FCityState& City, co
 	UMaterialInterface* CivilisationThemeMaterial = nullptr;
 	FLinearColor CivilisationThemeColor = FLinearColor::White;
 
-	if (GS.HumanPlayer.PlayerId == City.OwnerPlayerId && GS.HumanCivilisation)
+	if (const UConquestCivilisationData* Civilisation = GS.GetCivilisationForPlayer(City.OwnerPlayerId))
 	{
-		CivilisationThemeMaterial = GS.HumanCivilisation->CityLabelMaterial
-			? GS.HumanCivilisation->CityLabelMaterial
-			: GS.HumanCivilisation->BorderMaterial;
-		CivilisationThemeColor = GS.HumanCivilisation->ThemeColor;
+		CivilisationThemeMaterial = Civilisation->CityLabelMaterial
+			? Civilisation->CityLabelMaterial
+			: Civilisation->BorderMaterial;
+		CivilisationThemeColor = Civilisation->ThemeColor;
 	}
 
 	auto ApplyThemeToImage = [CivilisationThemeMaterial, CivilisationThemeColor](UImage* Image)

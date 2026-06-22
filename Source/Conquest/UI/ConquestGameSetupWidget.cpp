@@ -7,6 +7,8 @@
 #include "Components/ComboBoxString.h"
 #include "Components/SpinBox.h"
 #include "Components/TextBlock.h"
+#include "Conquest/Civilisations/ConquestCivilisationTypes.h"
+#include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "ConquestHUDWidget.h"
 #include "Misc/Guid.h"
 
@@ -16,6 +18,8 @@ void UConquestGameSetupWidget::InitializeGameSetupWidget(UConquestHUDWidget* InP
 
 	RefreshMapPresetOptions();
 	RefreshMapSizeOptions();
+	RefreshCivilisationOptions();
+	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
 	UpdateMapSizeTooltip();
 }
@@ -48,10 +52,13 @@ void UConquestGameSetupWidget::NativeConstruct()
 		RandomSeedButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
 	}
 
+	BindCivilisationComboBoxes();
 	ConfigureRandomSeedSpinBox();
 
 	RefreshMapPresetOptions();
 	RefreshMapSizeOptions();
+	RefreshCivilisationOptions();
+	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
 	UpdateMapSizeTooltip();
 }
@@ -336,10 +343,11 @@ void UConquestGameSetupWidget::UpdateMapSizeTooltip()
 
 	const FText TooltipText = FText::FromString(
 		FString::Printf(
-			TEXT("%s: %dx%d tiles"),
+			TEXT("%s: %dx%d tiles, %d players"),
 			*Preset.DisplayName.ToString(),
 			Preset.Width,
-			Preset.Height
+			Preset.Height,
+			Preset.PlayerCount
 		)
 	);
 
@@ -368,6 +376,7 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 		Settings.SizeSettings.GridHeight = SizePreset.Height;
 	}
 
+	Settings.PlayerSlots = LobbyPlayerSlots;
 	Settings.SizeSettings.HexRadius = 100.0f;
 
 	Settings.RandomSeed = SelectedRandomSeed;
@@ -524,6 +533,7 @@ void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedIte
 	{
 		SelectedMapSizePreset = *FoundPreset;
 		UpdateMapSizeTooltip();
+		RefreshLobbySlots();
 	}
 }
 
@@ -551,4 +561,325 @@ void UConquestGameSetupWidget::ConfigureRandomSeedSpinBox()
 	RandomSeedSpinBox->SetMaxValue(2147483646.0f);
 	RandomSeedSpinBox->OnValueChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedValueChanged);
 	RandomSeedSpinBox->OnValueChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedValueChanged);
+}
+
+void UConquestGameSetupWidget::RefreshLobbySlots()
+{
+	FConquestMapSizePresetDefinition SizePreset;
+	const int32 PlayerCount = FConquestMapSizePresets::GetPreset(SelectedMapSizePreset, SizePreset)
+		? FMath::Max(1, SizePreset.PlayerCount)
+		: 1;
+
+	TArray<FConquestLobbyPlayerSlot> PreviousSlots = LobbyPlayerSlots;
+	LobbyPlayerSlots.Reset(PlayerCount);
+
+	for (int32 SlotIndex = 0; SlotIndex < PlayerCount; ++SlotIndex)
+	{
+		FConquestLobbyPlayerSlot LobbySlot;
+		LobbySlot.SlotIndex = SlotIndex;
+		LobbySlot.PlayerId = SlotIndex;
+		LobbySlot.SlotType = SlotIndex == 0 ? EConquestLobbySlotType::Human : EConquestLobbySlotType::AI;
+		LobbySlot.bIsHost = SlotIndex == 0;
+
+		if (const FConquestLobbyPlayerSlot* PreviousSlot = PreviousSlots.FindByPredicate(
+			[SlotIndex](const FConquestLobbyPlayerSlot& Candidate)
+			{
+				return Candidate.SlotIndex == SlotIndex;
+			}))
+		{
+			LobbySlot.Civilisation = PreviousSlot->Civilisation;
+		}
+
+		if (!LobbySlot.Civilisation && AvailableCivilisations.Num() > 0)
+		{
+			LobbySlot.Civilisation = AvailableCivilisations[SlotIndex % AvailableCivilisations.Num()];
+		}
+
+		LobbyPlayerSlots.Add(LobbySlot);
+	}
+
+	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
+	for (int32 SlotIndex = 0; SlotIndex < ComboBoxes.Num(); ++SlotIndex)
+	{
+		RefreshCivilisationComboBox(ComboBoxes[SlotIndex], SlotIndex);
+	}
+
+	OnLobbySlotsChanged(LobbyPlayerSlots);
+}
+
+void UConquestGameSetupWidget::RefreshCivilisationOptions()
+{
+	OptionToCivilisation.Reset();
+	AvailableCivilisations.Reset();
+
+	if (UWorld* World = GetWorld())
+	{
+		if (const AConquestGameMode* ConquestGameMode = World->GetAuthGameMode<AConquestGameMode>())
+		{
+			const TArray<UConquestCivilisationData*> GameModeCivilisations = ConquestGameMode->GetAvailableCivilisations();
+			for (UConquestCivilisationData* Civilisation : GameModeCivilisations)
+			{
+				if (Civilisation)
+				{
+					AvailableCivilisations.Add(Civilisation);
+				}
+			}
+		}
+	}
+
+	for (int32 CivIndex = 0; CivIndex < AvailableCivilisations.Num(); ++CivIndex)
+	{
+		if (UConquestCivilisationData* Civilisation = AvailableCivilisations[CivIndex])
+		{
+			OptionToCivilisation.Add(GetCivilisationOptionName(Civilisation, CivIndex), Civilisation);
+		}
+	}
+
+	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
+	for (int32 SlotIndex = 0; SlotIndex < ComboBoxes.Num(); ++SlotIndex)
+	{
+		RefreshCivilisationComboBox(ComboBoxes[SlotIndex], SlotIndex);
+	}
+
+	OnCivilisationOptionsChanged();
+}
+
+bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation)
+{
+	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation;
+	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
+	RefreshCivilisationComboBox(ComboBoxes.IsValidIndex(SlotIndex) ? ComboBoxes[SlotIndex] : nullptr, SlotIndex);
+	return true;
+}
+
+TArray<FConquestLobbyPlayerSlot> UConquestGameSetupWidget::GetLobbyPlayerSlots() const
+{
+	return LobbyPlayerSlots;
+}
+
+TArray<UConquestCivilisationData*> UConquestGameSetupWidget::GetAvailableCivilisations() const
+{
+	TArray<UConquestCivilisationData*> Result;
+	Result.Reserve(AvailableCivilisations.Num());
+
+	for (UConquestCivilisationData* Civilisation : AvailableCivilisations)
+	{
+		if (Civilisation)
+		{
+			Result.Add(Civilisation);
+		}
+	}
+
+	return Result;
+}
+
+void UConquestGameSetupWidget::BindCivilisationComboBoxes()
+{
+	if (CivSlot0ComboBox)
+	{
+		CivSlot0ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot0SelectionChanged);
+		CivSlot0ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot0SelectionChanged);
+	}
+	if (CivSlot1ComboBox)
+	{
+		CivSlot1ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot1SelectionChanged);
+		CivSlot1ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot1SelectionChanged);
+	}
+	if (CivSlot2ComboBox)
+	{
+		CivSlot2ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot2SelectionChanged);
+		CivSlot2ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot2SelectionChanged);
+	}
+	if (CivSlot3ComboBox)
+	{
+		CivSlot3ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot3SelectionChanged);
+		CivSlot3ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot3SelectionChanged);
+	}
+	if (CivSlot4ComboBox)
+	{
+		CivSlot4ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot4SelectionChanged);
+		CivSlot4ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot4SelectionChanged);
+	}
+	if (CivSlot5ComboBox)
+	{
+		CivSlot5ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot5SelectionChanged);
+		CivSlot5ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot5SelectionChanged);
+	}
+	if (CivSlot6ComboBox)
+	{
+		CivSlot6ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot6SelectionChanged);
+		CivSlot6ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot6SelectionChanged);
+	}
+	if (CivSlot7ComboBox)
+	{
+		CivSlot7ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot7SelectionChanged);
+		CivSlot7ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot7SelectionChanged);
+	}
+	if (CivSlot8ComboBox)
+	{
+		CivSlot8ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot8SelectionChanged);
+		CivSlot8ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot8SelectionChanged);
+	}
+	if (CivSlot9ComboBox)
+	{
+		CivSlot9ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot9SelectionChanged);
+		CivSlot9ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot9SelectionChanged);
+	}
+	if (CivSlot10ComboBox)
+	{
+		CivSlot10ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot10SelectionChanged);
+		CivSlot10ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot10SelectionChanged);
+	}
+	if (CivSlot11ComboBox)
+	{
+		CivSlot11ComboBox->OnSelectionChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleCivSlot11SelectionChanged);
+		CivSlot11ComboBox->OnSelectionChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleCivSlot11SelectionChanged);
+	}
+}
+
+void UConquestGameSetupWidget::RefreshCivilisationComboBox(UComboBoxString* ComboBox, int32 SlotIndex)
+{
+	if (!ComboBox)
+	{
+		return;
+	}
+
+	ComboBox->ClearOptions();
+	ComboBox->SetIsEnabled(LobbyPlayerSlots.IsValidIndex(SlotIndex));
+
+	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	for (int32 CivIndex = 0; CivIndex < AvailableCivilisations.Num(); ++CivIndex)
+	{
+		if (UConquestCivilisationData* Civilisation = AvailableCivilisations[CivIndex])
+		{
+			ComboBox->AddOption(GetCivilisationOptionName(Civilisation, CivIndex));
+		}
+	}
+
+	if (const UConquestCivilisationData* SelectedCivilisation = LobbyPlayerSlots[SlotIndex].Civilisation)
+	{
+		for (int32 CivIndex = 0; CivIndex < AvailableCivilisations.Num(); ++CivIndex)
+		{
+			if (AvailableCivilisations[CivIndex] == SelectedCivilisation)
+			{
+				ComboBox->SetSelectedOption(GetCivilisationOptionName(SelectedCivilisation, CivIndex));
+				return;
+			}
+		}
+	}
+}
+
+void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotIndex, const FString& SelectedItem)
+{
+	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	if (TObjectPtr<UConquestCivilisationData>* Civilisation = OptionToCivilisation.Find(SelectedItem))
+	{
+		LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation->Get();
+	}
+}
+
+TArray<UComboBoxString*> UConquestGameSetupWidget::GetCivilisationComboBoxes() const
+{
+	TArray<UComboBoxString*> ComboBoxes;
+	ComboBoxes.Reserve(12);
+	ComboBoxes.Add(CivSlot0ComboBox.Get());
+	ComboBoxes.Add(CivSlot1ComboBox.Get());
+	ComboBoxes.Add(CivSlot2ComboBox.Get());
+	ComboBoxes.Add(CivSlot3ComboBox.Get());
+	ComboBoxes.Add(CivSlot4ComboBox.Get());
+	ComboBoxes.Add(CivSlot5ComboBox.Get());
+	ComboBoxes.Add(CivSlot6ComboBox.Get());
+	ComboBoxes.Add(CivSlot7ComboBox.Get());
+	ComboBoxes.Add(CivSlot8ComboBox.Get());
+	ComboBoxes.Add(CivSlot9ComboBox.Get());
+	ComboBoxes.Add(CivSlot10ComboBox.Get());
+	ComboBoxes.Add(CivSlot11ComboBox.Get());
+	return ComboBoxes;
+}
+
+FString UConquestGameSetupWidget::GetCivilisationOptionName(const UConquestCivilisationData* Civilisation, int32 OptionIndex) const
+{
+	if (!Civilisation)
+	{
+		return FString();
+	}
+
+	const FString DisplayName = Civilisation->CivilisationName.IsEmpty()
+		? Civilisation->GetName()
+		: Civilisation->CivilisationName.ToString();
+
+	return FString::Printf(TEXT("%s [%d]"), *DisplayName, OptionIndex + 1);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot0SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(0, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot1SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(1, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot2SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(2, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot3SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(3, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot4SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(4, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot5SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(5, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot6SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(6, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot7SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(7, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot8SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(8, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot9SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(9, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot10SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(10, SelectedItem);
+}
+
+void UConquestGameSetupWidget::HandleCivSlot11SelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	HandleCivilisationSelectionChanged(11, SelectedItem);
 }

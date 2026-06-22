@@ -80,6 +80,48 @@ const FConquestPlayerEmpireState& AConquestGameState::GetHumanPlayer() const
 	return HumanPlayer;
 }
 
+void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
+{
+	LobbyPlayerSlots = SetupSettings.PlayerSlots;
+	PlayerCivilisations.Reset();
+
+	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.PlayerId == INDEX_NONE || Slot.SlotType == EConquestLobbySlotType::Closed || !Slot.Civilisation)
+		{
+			continue;
+		}
+
+		PlayerCivilisations.Add(Slot.PlayerId, Slot.Civilisation);
+	}
+
+	if (const TObjectPtr<UConquestCivilisationData>* HostCivilisation = PlayerCivilisations.Find(HumanPlayer.PlayerId))
+	{
+		HumanCivilisation = HostCivilisation->Get();
+	}
+	else if (HumanCivilisation)
+	{
+		PlayerCivilisations.Add(HumanPlayer.PlayerId, HumanCivilisation);
+	}
+
+	BroadcastStateChanged();
+}
+
+UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 PlayerId) const
+{
+	if (const TObjectPtr<UConquestCivilisationData>* FoundCivilisation = PlayerCivilisations.Find(PlayerId))
+	{
+		return FoundCivilisation->Get();
+	}
+
+	if (PlayerId == HumanPlayer.PlayerId)
+	{
+		return HumanCivilisation;
+	}
+
+	return nullptr;
+}
+
 FHexGridModel* AConquestGameState::GetHexGridModelMutable()
 {
 	return ActiveGridActor ? &ActiveGridActor->GetMutableGridModel() : nullptr;

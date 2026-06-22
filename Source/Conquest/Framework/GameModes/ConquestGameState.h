@@ -6,6 +6,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
+#include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "ConquestGameState.generated.h"
 
 class UConquestContentManager;
@@ -16,6 +17,7 @@ class UConquestTechManager;
 class UConquestBuildingData;
 class UConquestTechData;
 class FHexGridModel;
+struct FConquestGameSetupSettings;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnConquestStateChanged);
 
 UCLASS()
@@ -64,6 +66,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	TObjectPtr<UConquestCivilisationData> HumanCivilisation = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
+	TMap<int32, TObjectPtr<UConquestCivilisationData>> PlayerCivilisations;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
+	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	FConquestPlayerEmpireState HumanPlayer;
 
@@ -84,6 +92,12 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	const FConquestPlayerEmpireState& GetHumanPlayer() const;
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Players")
+	UConquestCivilisationData* GetCivilisationForPlayer(int32 PlayerId) const;
 	
 	UPROPERTY(BlueprintReadWrite, Category="Conquest|Map")
 	TObjectPtr<AModularHexGridActor> ActiveGridActor;

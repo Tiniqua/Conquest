@@ -612,9 +612,9 @@ bool AConquestHUD::SelectUnitAtTile(int32 Q, int32 R)
 	ConquestGS->SelectedUnitInstanceId = UnitToSelect->UnitInstanceId;
 
 	UMaterialInterface* SelectionMaterial = nullptr;
-	if (ConquestGS->HumanCivilisation)
+	if (const UConquestCivilisationData* Civilisation = ConquestGS->GetCivilisationForPlayer(Player.PlayerId))
 	{
-		SelectionMaterial = ConquestGS->HumanCivilisation->BorderMaterial;
+		SelectionMaterial = Civilisation->BorderMaterial;
 	}
 
 	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = ConquestGS->UnitActorsByInstanceId.Find(UnitToSelect->UnitInstanceId))
@@ -845,9 +845,9 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 	CurrentUnitMovementRemainingByTile.GetKeys(ReachableTiles);
 
 	UMaterialInterface* HighlightMaterial = nullptr;
-	if (ConquestGS->HumanCivilisation)
+	if (const UConquestCivilisationData* Civilisation = ConquestGS->GetCivilisationForPlayer(Player.PlayerId))
 	{
-		HighlightMaterial = ConquestGS->HumanCivilisation->BorderMaterial;
+		HighlightMaterial = Civilisation->BorderMaterial;
 	}
 
 	ConquestGS->ActiveGridActor->RebuildExpansionCandidateHighlights(ReachableTiles, HighlightMaterial);
@@ -1210,6 +1210,7 @@ void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSetti
 	if (AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>())
 	{
 		ConquestGS->ActiveGridActor = SpawnedHexGridActor;
+		ConquestGS->ApplyGameSetupSettings(SetupSettings);
 	}
 
 	if (AConquestGameMode* ConquestGM = World->GetAuthGameMode<AConquestGameMode>())

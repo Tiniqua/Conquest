@@ -1,4 +1,17 @@
-﻿#include "ConquestPlayerController.h"
+#include "ConquestPlayerController.h"
+
+#include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Net/UnrealNetwork.h"
+
+namespace
+{
+	AConquestGameMode* GetConquestGameMode(const AConquestPlayerController* PlayerController)
+	{
+		return PlayerController && PlayerController->GetWorld()
+			? PlayerController->GetWorld()->GetAuthGameMode<AConquestGameMode>()
+			: nullptr;
+	}
+}
 
 AConquestPlayerController::AConquestPlayerController()
 {
@@ -14,4 +27,183 @@ void AConquestPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	SetInputMode(FInputModeGameOnly());
+}
+
+void AConquestPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AConquestPlayerController, AssignedPlayerId);
+}
+
+void AConquestPlayerController::SetAssignedPlayerId(int32 NewPlayerId)
+{
+	if (HasAuthority())
+	{
+		AssignedPlayerId = NewPlayerId;
+	}
+}
+
+void AConquestPlayerController::RequestEndTurn()
+{
+	if (HasAuthority())
+	{
+		ServerRequestEndTurn_Implementation();
+	}
+	else
+	{
+		ServerRequestEndTurn();
+	}
+}
+
+void AConquestPlayerController::RequestSetCurrentResearch(FName TechId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestSetCurrentResearch_Implementation(TechId);
+	}
+	else
+	{
+		ServerRequestSetCurrentResearch(TechId);
+	}
+}
+
+void AConquestPlayerController::RequestSetCityProduction(int32 CityId, ECityProductionType ProductionType, FName ProductionId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestSetCityProduction_Implementation(CityId, ProductionType, ProductionId);
+	}
+	else
+	{
+		ServerRequestSetCityProduction(CityId, ProductionType, ProductionId);
+	}
+}
+
+void AConquestPlayerController::RequestClaimExpansionTile(int32 CityId, FIntPoint Coord)
+{
+	if (HasAuthority())
+	{
+		ServerRequestClaimExpansionTile_Implementation(CityId, Coord);
+	}
+	else
+	{
+		ServerRequestClaimExpansionTile(CityId, Coord);
+	}
+}
+
+void AConquestPlayerController::RequestPurchaseTileImprovement(FIntPoint Coord, FName ImprovementId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestPurchaseTileImprovement_Implementation(Coord, ImprovementId);
+	}
+	else
+	{
+		ServerRequestPurchaseTileImprovement(Coord, ImprovementId);
+	}
+}
+
+void AConquestPlayerController::RequestFoundStartingCity(FIntPoint Coord, FName CityName)
+{
+	if (HasAuthority())
+	{
+		ServerRequestFoundStartingCity_Implementation(Coord, CityName);
+	}
+	else
+	{
+		ServerRequestFoundStartingCity(Coord, CityName);
+	}
+}
+
+void AConquestPlayerController::RequestMoveUnit(int32 UnitInstanceId, FIntPoint TargetCoord)
+{
+	if (HasAuthority())
+	{
+		ServerRequestMoveUnit_Implementation(UnitInstanceId, TargetCoord);
+	}
+	else
+	{
+		ServerRequestMoveUnit(UnitInstanceId, TargetCoord);
+	}
+}
+
+void AConquestPlayerController::RequestUnitAction(int32 UnitInstanceId, FName ActionId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestUnitAction_Implementation(UnitInstanceId, ActionId);
+	}
+	else
+	{
+		ServerRequestUnitAction(UnitInstanceId, ActionId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestEndTurn_Implementation()
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->EndTurnForPlayer(AssignedPlayerId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestSetCurrentResearch_Implementation(FName TechId)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->SetCurrentResearchForPlayer(AssignedPlayerId, TechId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestSetCityProduction_Implementation(
+	int32 CityId,
+	ECityProductionType ProductionType,
+	FName ProductionId
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->SetCityProductionForPlayer(AssignedPlayerId, CityId, ProductionType, ProductionId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestClaimExpansionTile_Implementation(int32 CityId, FIntPoint Coord)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->ClaimExpansionTileForPlayer(AssignedPlayerId, CityId, Coord);
+	}
+}
+
+void AConquestPlayerController::ServerRequestPurchaseTileImprovement_Implementation(FIntPoint Coord, FName ImprovementId)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->PurchaseTileImprovementForPlayer(AssignedPlayerId, Coord, ImprovementId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestFoundStartingCity_Implementation(FIntPoint Coord, FName CityName)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->FoundStartingCityForPlayer(AssignedPlayerId, Coord, CityName);
+	}
+}
+
+void AConquestPlayerController::ServerRequestMoveUnit_Implementation(int32 UnitInstanceId, FIntPoint TargetCoord)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->MoveUnitForPlayer(AssignedPlayerId, UnitInstanceId, TargetCoord);
+	}
+}
+
+void AConquestPlayerController::ServerRequestUnitAction_Implementation(int32 UnitInstanceId, FName ActionId)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->ApplyUnitActionForPlayer(AssignedPlayerId, UnitInstanceId, ActionId);
+	}
 }

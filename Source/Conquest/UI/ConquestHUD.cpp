@@ -13,6 +13,7 @@
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
@@ -374,12 +375,11 @@ bool AConquestHUD::ConfirmSelectedExpansionTile()
 		return false;
 	}
 
-	const bool bClaimed = ConquestGS->CityManager->ClaimExpansionTileForCity(
-		ExpansionSelectionCityId,
-		PendingExpansionTileCoord
-	);
-
-	if (!bClaimed)
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestClaimExpansionTile(ExpansionSelectionCityId, PendingExpansionTileCoord);
+	}
+	else
 	{
 		return false;
 	}
@@ -453,7 +453,7 @@ bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
 
 	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
 	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
-	const int32 PlayerId = ConquestGS->HumanPlayer.PlayerId;
+	const int32 PlayerId = ConquestGS->GetHumanPlayer().PlayerId;
 	if (!GridModel || !Tile || Tile->Gameplay.OwnerPlayerId != PlayerId || !Tile->ImprovementId.IsNone())
 	{
 		ClearTileImprovementChoices();
@@ -481,7 +481,7 @@ bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
 		}
 
 		const int32 GoldCost = FMath::Max(0, Improvement->PurchaseGoldCost);
-		const bool bCanAfford = ConquestGS->HumanPlayer.StoredYields.Gold >= GoldCost;
+		const bool bCanAfford = ConquestGS->GetHumanPlayer().StoredYields.Gold >= GoldCost;
 
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
@@ -542,14 +542,12 @@ bool AConquestHUD::PurchaseSelectedTileImprovement(FName ImprovementId)
 		return false;
 	}
 
-	const int32 PlayerId = ConquestGS->HumanPlayer.PlayerId;
-	const bool bPurchased = ConquestGS->CityManager->PurchaseTileImprovementForPlayer(
-		PlayerId,
-		PendingImprovementTileCoord,
-		ImprovementId
-	);
-
-	if (!bPurchased)
+	const int32 PlayerId = ConquestGS->GetHumanPlayer().PlayerId;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestPurchaseTileImprovement(PendingImprovementTileCoord, ImprovementId);
+	}
+	else
 	{
 		return false;
 	}
@@ -889,36 +887,12 @@ bool AConquestHUD::TryMoveSelectedUnitToTile(int32 Q, int32 R)
 		return false;
 	}
 
-	SelectedUnit->TileCoord = TargetCoord;
-	SelectedUnit->CurrentMovementPoints = FMath::Clamp(
-		*NewRemainingMovement,
-		0,
-		SelectedUnit->CachedMovementPoints
-	);
-	SelectedUnit->bIsFortified = false;
-	SelectedUnit->bIsSleeping = false;
-
-	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
-		ConquestGS->UnitActorsByInstanceId.Find(SelectedUnit->UnitInstanceId))
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
 	{
-		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
-		{
-			UnitActor->MoveToTile(TargetCoord);
-		}
+		ConquestPC->RequestMoveUnit(SelectedUnit->UnitInstanceId, TargetCoord);
 	}
 
-	RefreshSelectedUnitWidget(*SelectedUnit);
-
-	if (SelectedUnit->CurrentMovementPoints > 0)
-	{
-		EnterSelectedUnitMoveMode();
-	}
-	else
-	{
-		ClearUnitMovementHighlights();
-	}
-
-	ConquestGS->BroadcastStateChanged();
+	ClearUnitMovementHighlights();
 	return true;
 }
 
@@ -950,12 +924,11 @@ bool AConquestHUD::FortifySelectedUnit()
 		return false;
 	}
 
-	SelectedUnit->bIsFortified = true;
-	SelectedUnit->bIsSleeping = false;
-	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Fortify")));
+	}
 	ClearUnitMovementHighlights();
-	RefreshSelectedUnitWidget(*SelectedUnit);
-	ConquestGS->BroadcastStateChanged();
 	return true;
 }
 
@@ -977,12 +950,11 @@ bool AConquestHUD::DoNothingSelectedUnit()
 		return false;
 	}
 
-	SelectedUnit->bIsFortified = false;
-	SelectedUnit->bIsSleeping = false;
-	SelectedUnit->CurrentMovementPoints = 0;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("DoNothing")));
+	}
 	ClearUnitMovementHighlights();
-	RefreshSelectedUnitWidget(*SelectedUnit);
-	ConquestGS->BroadcastStateChanged();
 	return true;
 }
 
@@ -1004,11 +976,11 @@ bool AConquestHUD::SleepSelectedUnit()
 		return false;
 	}
 
-	SelectedUnit->bIsSleeping = true;
-	SelectedUnit->bIsFortified = false;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Sleep")));
+	}
 	ClearUnitMovementHighlights();
-	RefreshSelectedUnitWidget(*SelectedUnit);
-	ConquestGS->BroadcastStateChanged();
 	return true;
 }
 
@@ -1023,33 +995,18 @@ bool AConquestHUD::DisbandSelectedUnit()
 		return false;
 	}
 
-	const int32 UnitInstanceId = ConquestGS->SelectedUnitInstanceId;
-
-	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
-		ConquestGS->UnitActorsByInstanceId.Find(UnitInstanceId))
-	{
-		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
-		{
-			UnitActor->Destroy();
-		}
-
-		ConquestGS->UnitActorsByInstanceId.Remove(UnitInstanceId);
-	}
-
 	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
-	Player.Units.RemoveAll([UnitInstanceId](const FConquestUnitState& Unit)
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
 	{
-		return Unit.UnitInstanceId == UnitInstanceId;
-	});
-
-	ClearUnitSelection();
-
-	if (ConquestGS->YieldManager)
-	{
-		ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(Player.PlayerId);
+		return false;
 	}
 
-	ConquestGS->BroadcastStateChanged();
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Disband")));
+	}
+	ClearUnitSelection();
 	return true;
 }
 
@@ -1089,30 +1046,12 @@ bool AConquestHUD::SettleSelectedUnit()
 
 	SelectedUnit->bIsSleeping = false;
 
-	const int32 UnitInstanceId = SelectedUnit->UnitInstanceId;
-	const int32 OwnerPlayerId = SelectedUnit->OwnerPlayerId;
 	const FIntPoint CityCoord = SelectedUnit->TileCoord;
-
-	if (!ConquestGS->CityManager->FoundCity(OwnerPlayerId, CityCoord, NAME_None))
+	const int32 UnitInstanceId = SelectedUnit->UnitInstanceId;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
 	{
-		return false;
+		ConquestPC->RequestUnitAction(UnitInstanceId, FName(TEXT("Settle")));
 	}
-
-	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
-		ConquestGS->UnitActorsByInstanceId.Find(UnitInstanceId))
-	{
-		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
-		{
-			UnitActor->Destroy();
-		}
-
-		ConquestGS->UnitActorsByInstanceId.Remove(UnitInstanceId);
-	}
-
-	Player.Units.RemoveAll([UnitInstanceId](const FConquestUnitState& Unit)
-	{
-		return Unit.UnitInstanceId == UnitInstanceId;
-	});
 
 	const int32 NewCityId = ConquestGS->CityManager->FindCityAtTile(CityCoord);
 	ClearUnitSelection();
@@ -1122,12 +1061,6 @@ bool AConquestHUD::SettleSelectedUnit()
 		ShowCityPanel(NewCityId);
 	}
 
-	if (ConquestGS->YieldManager)
-	{
-		ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(Player.PlayerId);
-	}
-
-	ConquestGS->BroadcastStateChanged();
 	return true;
 }
 

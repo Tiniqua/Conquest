@@ -19,9 +19,13 @@ public class Conquest : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"GameplayTags"
+			"GameplayTags",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
+
+		DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");
 	}
 }

@@ -67,7 +67,7 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 
 	Cities.Add(NewCity);
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	Player.CityIds.Add(NewCity.CityId);
 
 	if (GameStateRef->ActiveGridActor)
@@ -485,7 +485,7 @@ void UConquestCityManager::RecalculateStrategicResourceEconomy(int32 PlayerId)
 		return;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return;
@@ -586,7 +586,7 @@ void UConquestCityManager::AccumulateStrategicResourceIncome(int32 PlayerId)
 		return;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return;
@@ -674,7 +674,7 @@ int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FNa
 		return INDEX_NONE;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(City.OwnerPlayerId);
 	if (Player.PlayerId != City.OwnerPlayerId)
 	{
 		return INDEX_NONE;
@@ -703,7 +703,7 @@ void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
 		return;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return;
@@ -1161,7 +1161,7 @@ bool UConquestCityManager::PurchaseTileImprovementForPlayer(int32 PlayerId, cons
 		return false;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return false;
@@ -1345,7 +1345,7 @@ bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
 		return false;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(City->OwnerPlayerId);
 	if (!UnitRow->RequiredTechId.IsNone() && !Player.HasResearched(UnitRow->RequiredTechId))
 	{
 		return false;
@@ -1416,7 +1416,7 @@ TArray<FName> UConquestCityManager::GetAvailableProductionBuildingIdsForCity(int
 	TArray<const FConquestBuildingRow*> BaseBuildings;
 	GameStateRef->ContentManager->GetAllBaseBuildings(BaseBuildings);
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(City->OwnerPlayerId);
 
 	for (const FConquestBuildingRow* BaseRow : BaseBuildings)
 	{
@@ -1484,7 +1484,7 @@ TArray<FName> UConquestCityManager::GetAvailableProductionUnitIdsForCity(int32 C
 	TArray<const FConquestUnitRow*> BaseUnits;
 	GameStateRef->ContentManager->GetAllBaseUnits(BaseUnits);
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(City->OwnerPlayerId);
 
 	for (const FConquestUnitRow* BaseRow : BaseUnits)
 	{

@@ -11,6 +11,7 @@
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
 #include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
@@ -616,32 +617,30 @@ void UConquestCityPanelWidget::HandleProductionChoiceClicked(
 		return;
 	}
 
-	bool bSelectedProduction = false;
+	ECityProductionType ProductionType = ECityProductionType::None;
 	if (ChoiceData.ChoiceType == EConquestChoiceType::ProductionBuilding)
 	{
-		bSelectedProduction = GS->CityManager->SetCityProductionBuildingById(
-			CityId,
-			ChoiceData.ChoiceId
-		);
+		ProductionType = ECityProductionType::Building;
 	}
 	else if (ChoiceData.ChoiceType == EConquestChoiceType::ProductionUnit)
 	{
-		bSelectedProduction = GS->CityManager->SetCityProductionUnitById(
-			CityId,
-			ChoiceData.ChoiceId
-		);
+		ProductionType = ECityProductionType::Unit;
 	}
 	else if (ChoiceData.ChoiceType == EConquestChoiceType::ProductionProject)
 	{
-		bSelectedProduction = GS->CityManager->SetCityProductionProjectById(
-			CityId,
-			ChoiceData.ChoiceId
-		);
+		ProductionType = ECityProductionType::Project;
 	}
 
 	Refresh();
 
-	if (bSelectedProduction)
+	bool bRequestedProduction = false;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestSetCityProduction(CityId, ProductionType, ChoiceData.ChoiceId);
+		bRequestedProduction = true;
+	}
+
+	if (bRequestedProduction)
 	{
 		if (APlayerController* PC = GetOwningPlayer())
 		{

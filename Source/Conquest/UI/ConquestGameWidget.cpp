@@ -14,6 +14,7 @@
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 
@@ -228,9 +229,9 @@ void UConquestGameWidget::NativeDestruct()
 
 void UConquestGameWidget::HandleEndTurnClicked()
 {
-	if (AConquestGameMode* ConquestGM = GetWorld() ? GetWorld()->GetAuthGameMode<AConquestGameMode>() : nullptr)
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 	{
-		ConquestGM->EndCurrentTurn();
+		ConquestPC->RequestEndTurn();
 	}
 
 	RefreshTurnInfo();
@@ -317,10 +318,11 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 		return Result;
 	}
 
-	Result.EmpireStoredYields = ConquestGS->HumanPlayer.StoredYields;
-	Result.EmpireYieldPerTurn = ConquestGS->HumanPlayer.CachedYieldPerTurn;
-	Result.Happiness = ConquestGS->HumanPlayer.CachedHappiness;
-	Result.bIsUnhappy = ConquestGS->HumanPlayer.CachedHappiness < 0;
+	const FConquestPlayerEmpireState& LocalPlayer = ConquestGS->GetHumanPlayer();
+	Result.EmpireStoredYields = LocalPlayer.StoredYields;
+	Result.EmpireYieldPerTurn = LocalPlayer.CachedYieldPerTurn;
+	Result.Happiness = LocalPlayer.CachedHappiness;
+	Result.bIsUnhappy = LocalPlayer.CachedHappiness < 0;
 	Result.SelectedCityId = SelectedCityYieldContextId;
 	Result.bShowSelectedCityLocalYields = SelectedCityYieldContextId != INDEX_NONE;
 
@@ -346,7 +348,7 @@ void UConquestGameWidget::RefreshTopBarYieldInfo()
 	{
 		if (ConquestGS->YieldManager)
 		{
-			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(ConquestGS->HumanPlayer.PlayerId);
+			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(ConquestGS->GetHumanPlayer().PlayerId);
 		}
 	}
 

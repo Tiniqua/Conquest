@@ -24,7 +24,7 @@ bool UConquestTechManager::SetCurrentResearchById(int32 PlayerId, FName TechId)
 		return false;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	Player.CurrentResearchId = TechId;
 	Player.CurrentResearchProgress = 0.0f;
 
@@ -41,7 +41,7 @@ void UConquestTechManager::ProcessResearchAtStartOfTurn(int32 PlayerId)
 		return;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 
 	if (Player.CurrentResearchId.IsNone())
 	{
@@ -118,7 +118,7 @@ int32 UConquestTechManager::EstimateTurnsToResearchById(int32 PlayerId, FName Te
 		return INDEX_NONE;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	const int32 SciencePerTurn = CalculateEmpireSciencePerTurn(PlayerId);
 
 	if (SciencePerTurn <= 0)
@@ -146,7 +146,7 @@ const FConquestTechRow* UConquestTechManager::GetCurrentResearchRow(int32 Player
 		return nullptr;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 
 	if (Player.CurrentResearchId.IsNone())
 	{
@@ -163,7 +163,7 @@ int32 UConquestTechManager::CalculateEmpireSciencePerTurn(int32 PlayerId) const
 		return 0;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return 0;
@@ -174,7 +174,7 @@ int32 UConquestTechManager::CalculateEmpireSciencePerTurn(int32 PlayerId) const
 		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
 	}
 
-	return GameStateRef->GetHumanPlayer().CachedYieldPerTurn.Science;
+	return GameStateRef->GetPlayerEmpire(PlayerId).CachedYieldPerTurn.Science;
 }
 
 bool UConquestTechManager::CanResearchTech(int32 PlayerId, FName TechId) const
@@ -192,7 +192,7 @@ bool UConquestTechManager::CanResearchTech(int32 PlayerId, FName TechId) const
 		return false;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 
 	if (Player.HasResearched(TechId))
 	{

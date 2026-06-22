@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
+#include "Conquest/Core/ConquestGameplayTypes.h"
 #include "Conquest/World/Generation/HexGridSettings.h"
 #include "ConquestGameSetupTypes.generated.h"
 
@@ -74,6 +75,9 @@ USTRUCT(BlueprintType)
 struct FConquestGameSetupSettings
 {
 	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Multiplayer")
+	EConquestTurnMode TurnMode = EConquestTurnMode::Simultaneous;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map")
 	EHexMapTypePreset MapTypePreset = EHexMapTypePreset::Continents;

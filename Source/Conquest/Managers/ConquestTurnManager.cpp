@@ -60,20 +60,29 @@ void UConquestTurnManager::StartTurnProcessing()
 		return;
 	}
 
-	if (GameStateRef->CityManager)
+	for (const FConquestPlayerEmpireState& PlayerEmpire : GameStateRef->PlayerEmpires)
 	{
-		GameStateRef->CityManager->ProcessCitiesAtStartOfTurn(0);
-		GameStateRef->CityManager->ProcessUnitsAtStartOfTurn(0);
-	}
+		const int32 PlayerId = PlayerEmpire.PlayerId;
+		if (PlayerId == INDEX_NONE)
+		{
+			continue;
+		}
 
-	if (GameStateRef->YieldManager)
-	{
-		GameStateRef->YieldManager->CollectGlobalYieldIncome(0);
-	}
+		if (GameStateRef->CityManager)
+		{
+			GameStateRef->CityManager->ProcessCitiesAtStartOfTurn(PlayerId);
+			GameStateRef->CityManager->ProcessUnitsAtStartOfTurn(PlayerId);
+		}
 
-	if (GameStateRef->TechManager)
-	{
-		GameStateRef->TechManager->ProcessResearchAtStartOfTurn(0);
+		if (GameStateRef->YieldManager)
+		{
+			GameStateRef->YieldManager->CollectGlobalYieldIncome(PlayerId);
+		}
+
+		if (GameStateRef->TechManager)
+		{
+			GameStateRef->TechManager->ProcessResearchAtStartOfTurn(PlayerId);
+		}
 	}
 
 	EnterPlayerActions();

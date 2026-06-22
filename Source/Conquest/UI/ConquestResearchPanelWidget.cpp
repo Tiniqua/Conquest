@@ -8,6 +8,7 @@
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestTechManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
 #include "Conquest/UI/ConquestHUD.h"
@@ -196,7 +197,12 @@ void UConquestResearchPanelWidget::HandleTechClicked(FName TechId)
 		return;
 	}
 
-	const bool bSelectedResearch = GS->TechManager->SetCurrentResearchById(0, TechId);
+	bool bSelectedResearch = false;
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestSetCurrentResearch(TechId);
+		bSelectedResearch = true;
+	}
 	RefreshResearchOptions();
 
 	if (bSelectedResearch)

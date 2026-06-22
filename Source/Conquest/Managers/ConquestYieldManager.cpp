@@ -154,7 +154,7 @@ FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurn(int32 PlayerId) con
 		}
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	if (Player.PlayerId == PlayerId)
 	{
 		for (const FConquestUnitState& Unit : Player.Units)
@@ -177,7 +177,7 @@ FHexYield UConquestYieldManager::RecalculateEmpireYieldPerTurn(int32 PlayerId) c
 		return Result;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId == PlayerId)
 	{
 		Player.CachedYieldPerTurn = Result;
@@ -250,7 +250,7 @@ int32 UConquestYieldManager::CalculateEmpireHappiness(int32 PlayerId) const
 		}
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	return Player.BaseHappiness + LuxuryHappiness + BuildingHappiness - (CityCount * 2) - Population;
 }
 
@@ -261,7 +261,7 @@ int32 UConquestYieldManager::RecalculateEmpireHappiness(int32 PlayerId) const
 		return 0;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return 0;
@@ -348,7 +348,7 @@ bool UConquestYieldManager::IsEmpireUnhappy(int32 PlayerId) const
 		return false;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	return Player.PlayerId == PlayerId && Player.CachedHappiness < 0;
 }
 
@@ -359,7 +359,7 @@ FHexYield UConquestYieldManager::ApplyUnhappyYieldPenalty(const FHexYield& Yield
 		return Yield;
 	}
 
-	const FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayer();
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
 	if (Player.PlayerId != PlayerId || Player.CachedHappiness >= 0)
 	{
 		return Yield;
@@ -382,7 +382,7 @@ void UConquestYieldManager::CollectGlobalYieldIncome(int32 PlayerId) const
 		return;
 	}
 
-	FConquestPlayerEmpireState& Player = GameStateRef->GetHumanPlayerMutable();
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
 	if (Player.PlayerId != PlayerId)
 	{
 		return;

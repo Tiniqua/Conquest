@@ -8,6 +8,7 @@
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
@@ -431,9 +432,8 @@ void AConquestPawn::HandlePrimaryClick()
 	}
 
 	AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>();
-	AConquestGameMode* ConquestGM = World->GetAuthGameMode<AConquestGameMode>();
 
-	if (!ConquestGS || !ConquestGM || !ConquestGS->TurnManager)
+	if (!ConquestGS || !ConquestGS->TurnManager)
 	{
 		return;
 	}
@@ -448,14 +448,9 @@ void AConquestPawn::HandlePrimaryClick()
 	// First click: found capital.
 	if (ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
 	{
-		const bool bFounded = ConquestGM->FoundStartingCity(
-			ClickedCoord,
-			NAME_None
-		);
-
-		if (bFounded)
+		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetController()))
 		{
-			TryOpenCityPanelAtTile(ClickedCoord);
+			ConquestPC->RequestFoundStartingCity(ClickedCoord, NAME_None);
 		}
 
 		return;

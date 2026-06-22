@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
@@ -17,8 +17,38 @@ class UConquestTechManager;
 class UConquestBuildingData;
 class UConquestTechData;
 class FHexGridModel;
+class FLifetimeProperty;
 struct FConquestGameSetupSettings;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnConquestStateChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnConquestUnitMoved, int32, UnitInstanceId, int32, PlayerId, FIntPoint, FromCoord, FIntPoint, ToCoord);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnConquestUnitAction, int32, UnitInstanceId, int32, PlayerId, FName, ActionId);
+
+USTRUCT(BlueprintType)
+struct FConquestReplicatedGameState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentTurn = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EConquestTurnPhase CurrentPhase = EConquestTurnPhase::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EConquestTurnMode TurnMode = EConquestTurnMode::Simultaneous;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestPlayerEmpireState> PlayerEmpires;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FCityState> Cities;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<int32> ReadyPlayerIds;
+};
 
 UCLASS()
 class CONQUEST_API AConquestGameState : public AGameStateBase
@@ -29,9 +59,16 @@ public:
 	AConquestGameState();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UPROPERTY(BlueprintAssignable)
 	FOnConquestStateChanged OnConquestStateChanged;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnConquestUnitMoved OnConquestUnitMoved;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnConquestUnitAction OnConquestUnitAction;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UConquestTurnManager> TurnManager;
@@ -75,6 +112,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	FConquestPlayerEmpireState HumanPlayer;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
+	TArray<FConquestPlayerEmpireState> PlayerEmpires;
+
+	UPROPERTY(ReplicatedUsing=OnRep_ReplicatedConquestState, BlueprintReadOnly, Category="Conquest|Replication")
+	FConquestReplicatedGameState ReplicatedConquestState;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Units")
 	TSubclassOf<AConquestUnitActor> UnitActorClass;
 
@@ -87,6 +130,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void BroadcastStateChanged();
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Replication")
+	void PushReplicatedState();
+
+	UFUNCTION()
+	void OnRep_ReplicatedConquestState();
+
 	UFUNCTION(BlueprintCallable)
 	FConquestPlayerEmpireState& GetHumanPlayerMutable();
 
@@ -94,10 +143,28 @@ public:
 	const FConquestPlayerEmpireState& GetHumanPlayer() const;
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	FConquestPlayerEmpireState& GetPlayerEmpireMutable(int32 PlayerId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	const FConquestPlayerEmpireState& GetPlayerEmpire(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Players")
+	int32 GetLocalPlayerId() const;
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	void EnsurePlayerEmpire(int32 PlayerId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	UConquestCivilisationData* GetCivilisationForPlayer(int32 PlayerId) const;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastNotifyUnitMoved(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastNotifyUnitAction(int32 UnitInstanceId, int32 PlayerId, FName ActionId);
 	
 	UPROPERTY(BlueprintReadWrite, Category="Conquest|Map")
 	TObjectPtr<AModularHexGridActor> ActiveGridActor;

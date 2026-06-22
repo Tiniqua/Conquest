@@ -20,6 +20,13 @@ enum class EConquestTurnPhase : uint8
 };
 
 UENUM(BlueprintType)
+enum class EConquestTurnMode : uint8
+{
+	Simultaneous UMETA(DisplayName = "Simultaneous"),
+	Sequential UMETA(DisplayName = "Sequential")
+};
+
+UENUM(BlueprintType)
 enum class ECityProductionType : uint8
 {
 	None,

@@ -408,6 +408,76 @@ UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 Pl
 	return nullptr;
 }
 
+bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEndTurnBlocker& OutBlocker) const
+{
+	OutBlocker = FConquestEndTurnBlocker();
+
+	if (!TurnManager)
+	{
+		OutBlocker.Type = EConquestEndTurnBlockType::GameNotReady;
+		OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedNoGameState", "Game is not ready");
+		return true;
+	}
+
+	if (TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions)
+	{
+		OutBlocker.Type = EConquestEndTurnBlockType::WrongPhase;
+		OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedWrongPhase", "It is not currently the player action phase");
+		return true;
+	}
+
+	const FConquestPlayerEmpireState& Player = GetPlayerEmpire(PlayerId);
+	if (Player.CurrentResearchId.IsNone())
+	{
+		OutBlocker.Type = EConquestEndTurnBlockType::Research;
+		OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedResearch", "Select research");
+		return true;
+	}
+
+	if (CityManager)
+	{
+		for (const FCityState& City : CityManager->Cities)
+		{
+			if (City.OwnerPlayerId == PlayerId && !City.CurrentProduction.IsValid())
+			{
+				OutBlocker.Type = EConquestEndTurnBlockType::CityProduction;
+				OutBlocker.CityId = City.CityId;
+				OutBlocker.Message = FText::Format(
+					NSLOCTEXT("Conquest", "EndTurnBlockedCityProduction", "{0} needs production"),
+					FText::FromName(City.CityName)
+				);
+				return true;
+			}
+		}
+	}
+
+	for (const FConquestUnitState& Unit : Player.Units)
+	{
+		if (Unit.OwnerPlayerId == PlayerId && !Unit.bIsSleeping && Unit.CurrentMovementPoints > 0)
+		{
+			OutBlocker.Type = EConquestEndTurnBlockType::UnitOrders;
+			OutBlocker.UnitInstanceId = Unit.UnitInstanceId;
+			OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedUnitOrders", "Unit pending orders");
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AConquestGameState::CanPlayerEndTurnFromState(int32 PlayerId, FText& OutBlockReason) const
+{
+	FConquestEndTurnBlocker Blocker;
+	if (GetEndTurnBlockerForPlayer(PlayerId, Blocker))
+	{
+		OutBlockReason = Blocker.Message;
+		return false;
+	}
+
+	OutBlockReason = FText::GetEmpty();
+	return true;
+}
+
 void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 {
 	if (!ActiveGridActor || !CityManager)

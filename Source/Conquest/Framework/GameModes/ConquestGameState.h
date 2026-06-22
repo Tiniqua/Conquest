@@ -23,6 +23,35 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnConquestStateChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnConquestUnitMoved, int32, UnitInstanceId, int32, PlayerId, FIntPoint, FromCoord, FIntPoint, ToCoord);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnConquestUnitAction, int32, UnitInstanceId, int32, PlayerId, FName, ActionId);
 
+UENUM(BlueprintType)
+enum class EConquestEndTurnBlockType : uint8
+{
+	None,
+	GameNotReady,
+	WrongPhase,
+	Research,
+	CityProduction,
+	UnitOrders
+};
+
+USTRUCT(BlueprintType)
+struct FConquestEndTurnBlocker
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EConquestEndTurnBlockType Type = EConquestEndTurnBlockType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FText Message;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CityId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 UnitInstanceId = INDEX_NONE;
+};
+
 USTRUCT(BlueprintType)
 struct FConquestReplicatedGameState
 {
@@ -183,6 +212,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	UConquestCivilisationData* GetCivilisationForPlayer(int32 PlayerId) const;
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Turn")
+	bool GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEndTurnBlocker& OutBlocker) const;
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Turn")
+	bool CanPlayerEndTurnFromState(int32 PlayerId, UPARAM(ref) FText& OutBlockReason) const;
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyUnitMoved(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord);

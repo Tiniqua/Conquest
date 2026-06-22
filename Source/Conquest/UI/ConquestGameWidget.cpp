@@ -229,6 +229,12 @@ void UConquestGameWidget::NativeDestruct()
 
 void UConquestGameWidget::HandleEndTurnClicked()
 {
+	if (FocusNextRequiredEndTurnAction())
+	{
+		RefreshTurnInfo();
+		return;
+	}
+
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 	{
 		ConquestPC->RequestEndTurn();
@@ -288,24 +294,24 @@ void UConquestGameWidget::RefreshTurnInfo()
 
 FText UConquestGameWidget::GetEndTurnButtonText() const
 {
-	const AConquestGameMode* ConquestGM = GetWorld()
-		? GetWorld()->GetAuthGameMode<AConquestGameMode>()
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
 		: nullptr;
 
-	if (!ConquestGM)
+	if (!ConquestGS)
 	{
 		return NSLOCTEXT("Conquest", "EndTurnButtonDefault", "Next Turn");
 	}
 
-	FText BlockReason;
-	if (ConquestGM->CanEndCurrentTurn(BlockReason))
+	FConquestEndTurnBlocker Blocker;
+	if (!ConquestGS->GetEndTurnBlockerForPlayer(ConquestGS->GetLocalPlayerId(), Blocker))
 	{
 		return NSLOCTEXT("Conquest", "EndTurnButtonReady", "Next Turn");
 	}
 
-	return BlockReason.IsEmpty()
+	return Blocker.Message.IsEmpty()
 		? NSLOCTEXT("Conquest", "EndTurnButtonNeedsActions", "Actions Required")
-		: BlockReason;
+		: Blocker.Message;
 }
 
 FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
@@ -399,6 +405,7 @@ void UConquestGameWidget::RefreshSelectedUnitInfoFromGameState()
 	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
 	if (!ConquestGS || !ConquestGS->ContentManager || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
 	{
+		ClearSelectedUnitInfo();
 		return;
 	}
 
@@ -423,6 +430,8 @@ void UConquestGameWidget::RefreshSelectedUnitInfoFromGameState()
 		? UnitRow->DisplayName
 		: FText::FromName(SelectedUnit->UnitId);
 	UnitWidgetData.bCanFoundCity = UnitRow && UnitRow->bCanFoundCity;
+	UnitWidgetData.CurrentMovementPoints = SelectedUnit->CurrentMovementPoints;
+	UnitWidgetData.bIsSleeping = SelectedUnit->bIsSleeping;
 	UnitWidgetData.HealthText = FText::Format(
 		NSLOCTEXT("Conquest", "SelectedUnitHealthMovementFormat", "{0}/{1} HP | {2}/{3} Move"),
 		FText::AsNumber(SelectedUnit->CurrentHealth),
@@ -430,6 +439,12 @@ void UConquestGameWidget::RefreshSelectedUnitInfoFromGameState()
 		FText::AsNumber(SelectedUnit->CurrentMovementPoints),
 		FText::AsNumber(SelectedUnit->CachedMovementPoints)
 	);
+
+	if (SelectedUnit->bIsSleeping || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearSelectedUnitInfo();
+		return;
+	}
 
 	ShowSelectedUnitInfo(UnitWidgetData);
 }
@@ -491,6 +506,7 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 				}
 
 				ActionButton->SetupUnitActionButton(ActionDefinition.ActionId, ActionDefinition.Title);
+				ActionButton->SetActionEnabled(IsUnitActionEnabled(ActionDefinition.ActionId, UnitData));
 				ActionButton->OnUnitActionClicked.RemoveDynamic(
 					this,
 					&UConquestGameWidget::HandleUnitActionClicked
@@ -514,6 +530,81 @@ void UConquestGameWidget::ClearSelectedUnitInfo()
 	{
 		UnitActionButtonBox->ClearChildren();
 	}
+}
+
+bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS)
+	{
+		return false;
+	}
+
+	FConquestEndTurnBlocker Blocker;
+	if (!ConquestGS->GetEndTurnBlockerForPlayer(ConquestGS->GetLocalPlayerId(), Blocker))
+	{
+		return false;
+	}
+
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (!ConquestHUD)
+	{
+		return true;
+	}
+
+	switch (Blocker.Type)
+	{
+	case EConquestEndTurnBlockType::Research:
+		ConquestHUD->ShowResearchPanel();
+		return true;
+	case EConquestEndTurnBlockType::CityProduction:
+		if (Blocker.CityId != INDEX_NONE)
+		{
+			ConquestHUD->ShowCityPanel(Blocker.CityId);
+		}
+		return true;
+	case EConquestEndTurnBlockType::UnitOrders:
+		{
+			const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+			const FConquestUnitState* UnitToSelect = Player.Units.FindByPredicate([&Blocker](const FConquestUnitState& Unit)
+			{
+				return Unit.UnitInstanceId == Blocker.UnitInstanceId;
+			});
+
+			if (UnitToSelect)
+			{
+				ConquestHUD->SelectUnitAtTile(UnitToSelect->TileCoord.X, UnitToSelect->TileCoord.Y);
+			}
+			return true;
+		}
+	default:
+		return true;
+	}
+}
+
+bool UConquestGameWidget::IsUnitActionEnabled(FName ActionId, const FConquestSelectedUnitWidgetData& UnitData) const
+{
+	if (!UnitData.bIsValid)
+	{
+		return false;
+	}
+
+	if (ActionId == FName(TEXT("Move")) ||
+		ActionId == FName(TEXT("Fortify")) ||
+		ActionId == FName(TEXT("DoNothing")))
+	{
+		return UnitData.CurrentMovementPoints > 0;
+	}
+
+	if (ActionId == FName(TEXT("Settle")))
+	{
+		return UnitData.bCanFoundCity && UnitData.CurrentMovementPoints > 0;
+	}
+
+	return true;
 }
 
 void UConquestGameWidget::SetSelectedCityYieldContext(int32 CityId)

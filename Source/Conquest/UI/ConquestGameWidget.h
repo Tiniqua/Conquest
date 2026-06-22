@@ -32,6 +32,12 @@ struct FConquestSelectedUnitWidgetData
 	bool bCanFoundCity = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	int32 CurrentMovementPoints = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
+	bool bIsSleeping = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Unit")
 	bool bIsValid = false;
 };
 
@@ -372,6 +378,8 @@ private:
 	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn);
 	void ClearTileTexts();
 	void RefreshSelectedUnitInfoFromGameState();
+	bool FocusNextRequiredEndTurnAction();
+	bool IsUnitActionEnabled(FName ActionId, const FConquestSelectedUnitWidgetData& UnitData) const;
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;

@@ -24,6 +24,15 @@ void UConquestUnitActionButtonWidget::SetupUnitActionButton(FName InActionId, co
 	}
 }
 
+void UConquestUnitActionButtonWidget::SetActionEnabled(bool bEnabled)
+{
+	SetIsEnabled(bEnabled);
+	if (Button)
+	{
+		Button->SetIsEnabled(bEnabled);
+	}
+}
+
 void UConquestUnitActionButtonWidget::HandleClicked()
 {
 	OnUnitActionClicked.Broadcast(ActionId);

@@ -711,6 +711,8 @@ void AConquestHUD::RefreshSelectedUnitWidget(const FConquestUnitState& UnitState
 			? UnitRow->DisplayName
 			: FText::FromName(UnitState.UnitId);
 		UnitWidgetData.bCanFoundCity = UnitRow && UnitRow->bCanFoundCity;
+		UnitWidgetData.CurrentMovementPoints = UnitState.CurrentMovementPoints;
+		UnitWidgetData.bIsSleeping = UnitState.bIsSleeping;
 		UnitWidgetData.HealthText = FText::Format(
 			NSLOCTEXT("Conquest", "SelectedUnitHealthMovementFormat", "{0}/{1} HP | {2}/{3} Move"),
 			FText::AsNumber(UnitState.CurrentHealth),
@@ -918,6 +920,15 @@ bool AConquestHUD::TryMoveSelectedUnitToTile(int32 Q, int32 R)
 	}
 
 	ClearUnitMovementHighlights();
+	if (*NewRemainingMovement <= 0)
+	{
+		ClearUnitSelection();
+	}
+	else
+	{
+		SelectedUnit->CurrentMovementPoints = *NewRemainingMovement;
+		RefreshSelectedUnitWidget(*SelectedUnit);
+	}
 	return true;
 }
 
@@ -954,6 +965,15 @@ bool AConquestHUD::FortifySelectedUnit()
 		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Fortify")));
 	}
 	ClearUnitMovementHighlights();
+	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+	if (SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearUnitSelection();
+	}
+	else
+	{
+		RefreshSelectedUnitWidget(*SelectedUnit);
+	}
 	return true;
 }
 
@@ -980,6 +1000,7 @@ bool AConquestHUD::DoNothingSelectedUnit()
 		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("DoNothing")));
 	}
 	ClearUnitMovementHighlights();
+	ClearUnitSelection();
 	return true;
 }
 
@@ -1006,6 +1027,7 @@ bool AConquestHUD::SleepSelectedUnit()
 		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Sleep")));
 	}
 	ClearUnitMovementHighlights();
+	ClearUnitSelection();
 	return true;
 }
 

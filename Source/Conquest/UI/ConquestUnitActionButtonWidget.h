@@ -23,6 +23,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void SetupUnitActionButton(FName InActionId, const FText& InTitle);
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void SetActionEnabled(bool bEnabled);
+
 protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button = nullptr;

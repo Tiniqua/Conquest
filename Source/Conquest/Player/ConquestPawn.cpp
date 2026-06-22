@@ -478,6 +478,7 @@ void AConquestPawn::HandlePrimaryClick()
 
 			if (ConquestHUD->ShowTileImprovementChoicesForTile(Q, R))
 			{
+				ConquestHUD->ClearUnitSelection();
 				return;
 			}
 
@@ -485,6 +486,8 @@ void AConquestPawn::HandlePrimaryClick()
 			{
 				return;
 			}
+
+			ConquestHUD->ClearUnitSelection();
 		}
 	}
 

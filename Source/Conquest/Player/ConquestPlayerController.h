@@ -6,6 +6,7 @@
 #include "ConquestPlayerController.generated.h"
 
 class FLifetimeProperty;
+class UConquestCivilisationData;
 
 UCLASS()
 class CONQUEST_API AConquestPlayerController : public APlayerController
@@ -45,6 +46,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
 	void RequestUnitAction(int32 UnitInstanceId, FName ActionId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Lobby")
+	void RequestSetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Lobby")
+	void RequestSetLobbyReady(bool bReady);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -74,6 +81,12 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestUnitAction(int32 UnitInstanceId, FName ActionId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSetLobbyReady(bool bReady);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

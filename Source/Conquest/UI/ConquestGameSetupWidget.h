@@ -49,6 +49,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup|Lobby")
 	TArray<UConquestCivilisationData*> GetAvailableCivilisations() const;
 
+	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup|Lobby")
+	FText GetLobbySlotDisplayText(int32 SlotIndex) const;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Conquest|Game Setup|Lobby")
 	void OnLobbySlotsChanged(const TArray<FConquestLobbyPlayerSlot>& PlayerSlots);
 
@@ -57,6 +60,7 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UComboBoxString> MapPresetComboBox = nullptr;
@@ -187,6 +191,15 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PlayButton = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ReadyButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReadyStatusText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ReadyButtonText = nullptr;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UConquestHUDWidget> ParentHUDWidget = nullptr;
 
@@ -254,6 +267,12 @@ protected:
 	void HandlePlayButtonClicked();
 
 	UFUNCTION()
+	void HandleReadyButtonClicked();
+
+	UFUNCTION()
+	void HandleConquestStateChanged();
+
+	UFUNCTION()
 	void HandleRandomSeedButtonClicked();
 
 	UFUNCTION()
@@ -269,6 +288,9 @@ private:
 	void BindCivilisationComboBoxes();
 	void RefreshCivilisationComboBox(UComboBoxString* ComboBox, int32 SlotIndex);
 	void HandleCivilisationSelectionChanged(int32 SlotIndex, const FString& SelectedItem);
+	bool CanLocalPlayerEditSlot(int32 SlotIndex) const;
+	void PushLobbySlotsToServerIfAuthority();
+	void RefreshReadyStatus();
 	TArray<UComboBoxString*> GetCivilisationComboBoxes() const;
 	FString GetCivilisationOptionName(const UConquestCivilisationData* Civilisation, int32 OptionIndex) const;
 
@@ -280,4 +302,10 @@ private:
 
 	UPROPERTY(Transient)
 	bool bUpdatingRandomSeedSpinBox = false;
+
+	UPROPERTY(Transient)
+	bool bUpdatingCivilisationComboBoxes = false;
+
+	UPROPERTY(Transient)
+	bool bForceRebuildLobbySlots = false;
 };

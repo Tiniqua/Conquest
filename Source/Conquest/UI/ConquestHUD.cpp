@@ -191,6 +191,17 @@ void AConquestHUD::ShowCityPanel(int32 CityId)
 		return;
 	}
 
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	const FCityState* City = ConquestGS && ConquestGS->CityManager
+		? ConquestGS->CityManager->GetCity(CityId)
+		: nullptr;
+	if (!ConquestGS || !City || City->OwnerPlayerId != ConquestGS->GetLocalPlayerId())
+	{
+		return;
+	}
+
 	ClearTileImprovementChoices();
 	CityPanelWidget->SetCity(CityId);
 	CityPanelWidget->SetVisibility(ESlateVisibility::Visible);
@@ -284,7 +295,7 @@ void AConquestHUD::BeginCityTileExpansionSelection(int32 CityId)
 	}
 
 	const FCityState* City = ConquestGS->CityManager->GetCity(CityId);
-	if (!City || City->PendingBorderExpansions <= 0)
+	if (!City || City->OwnerPlayerId != ConquestGS->GetLocalPlayerId() || City->PendingBorderExpansions <= 0)
 	{
 		ClearCityTileExpansionSelection();
 		return;
@@ -1158,7 +1169,10 @@ void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSetti
 	{
 		ConquestGS->ActiveGridActor = SpawnedHexGridActor;
 		ConquestGS->ApplyGameSetupSettings(SetupSettings);
+		ConquestGS->ForceNetUpdate();
 	}
+
+	NewGridActor->ForceNetUpdate();
 
 	if (AConquestGameMode* ConquestGM = World->GetAuthGameMode<AConquestGameMode>())
 	{

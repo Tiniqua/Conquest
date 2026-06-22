@@ -398,6 +398,12 @@ void AConquestPawn::TryOpenCityPanelAtTile(const FIntPoint& Coord)
 		return;
 	}
 
+	const FCityState* City = ConquestGS->CityManager->GetCity(CityId);
+	if (!City || City->OwnerPlayerId != ConquestGS->GetLocalPlayerId())
+	{
+		return;
+	}
+
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	if (!PlayerController)
 	{

@@ -6,6 +6,7 @@
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Player/ConquestPlayerController.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
@@ -78,6 +79,7 @@ void AConquestGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AConquestGameState, ReplicatedConquestState);
+	DOREPLIFETIME(AConquestGameState, ActiveGridActor);
 }
 
 void AConquestGameState::BroadcastStateChanged()
@@ -99,6 +101,7 @@ void AConquestGameState::PushReplicatedState()
 
 	ReplicatedConquestState.PlayerEmpires = PlayerEmpires;
 	ReplicatedConquestState.LobbyPlayerSlots = LobbyPlayerSlots;
+	ReplicatedConquestState.AvailableCivilisations = AvailableCivilisations;
 
 	if (TurnManager)
 	{
@@ -116,6 +119,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 {
 	PlayerEmpires = ReplicatedConquestState.PlayerEmpires;
 	LobbyPlayerSlots = ReplicatedConquestState.LobbyPlayerSlots;
+	AvailableCivilisations = ReplicatedConquestState.AvailableCivilisations;
 	PlayerCivilisations.Reset();
 
 	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
@@ -146,6 +150,16 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 		CityManager->Cities = ReplicatedConquestState.Cities;
 	}
 
+	RebuildCityVisualsFromReplicatedState();
+	RebuildUnitVisualsFromReplicatedState();
+
+	OnConquestStateChanged.Broadcast();
+}
+
+void AConquestGameState::OnRep_ActiveGridActor()
+{
+	RebuildCityVisualsFromReplicatedState();
+	RebuildUnitVisualsFromReplicatedState();
 	OnConquestStateChanged.Broadcast();
 }
 
@@ -256,6 +270,129 @@ void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings
 	BroadcastStateChanged();
 }
 
+void AConquestGameState::SetAvailableCivilisations(const TArray<UConquestCivilisationData*>& InAvailableCivilisations)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	AvailableCivilisations.Reset();
+	for (UConquestCivilisationData* Civilisation : InAvailableCivilisations)
+	{
+		if (Civilisation)
+		{
+			AvailableCivilisations.Add(Civilisation);
+		}
+	}
+
+	BroadcastStateChanged();
+}
+
+void AConquestGameState::SetLobbyPlayerSlots(const TArray<FConquestLobbyPlayerSlot>& InLobbyPlayerSlots)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	LobbyPlayerSlots = InLobbyPlayerSlots;
+	BroadcastStateChanged();
+}
+
+bool AConquestGameState::SetLobbySlotCivilisationForPlayer(
+	int32 RequestingPlayerId,
+	int32 SlotIndex,
+	UConquestCivilisationData* Civilisation
+)
+{
+	if (!HasAuthority() || !LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	FConquestLobbyPlayerSlot& Slot = LobbyPlayerSlots[SlotIndex];
+	const bool bRequesterIsHost = RequestingPlayerId == 0;
+	const bool bRequesterOwnsSlot =
+		Slot.SlotType == EConquestLobbySlotType::Human &&
+		Slot.PlayerId == RequestingPlayerId;
+	const bool bHostCanEditSlot =
+		bRequesterIsHost &&
+		(
+			Slot.SlotType != EConquestLobbySlotType::Human ||
+			Slot.PlayerId == RequestingPlayerId
+		);
+
+	if (!bRequesterOwnsSlot && !bHostCanEditSlot)
+	{
+		return false;
+	}
+
+	Slot.Civilisation = Civilisation;
+	Slot.bIsReady = false;
+	ReplicatedConquestState.ReadyPlayerIds.Remove(Slot.PlayerId);
+	BroadcastStateChanged();
+	return true;
+}
+
+void AConquestGameState::SetLobbyPlayerReady(int32 PlayerId, bool bReady)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	for (FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.SlotType == EConquestLobbySlotType::Human && Slot.PlayerId == PlayerId)
+		{
+			if (bReady && !Slot.Civilisation)
+			{
+				return;
+			}
+			Slot.bIsReady = bReady;
+			break;
+		}
+	}
+
+	if (bReady)
+	{
+		ReplicatedConquestState.ReadyPlayerIds.AddUnique(PlayerId);
+	}
+	else
+	{
+		ReplicatedConquestState.ReadyPlayerIds.Remove(PlayerId);
+	}
+
+	BroadcastStateChanged();
+}
+
+int32 AConquestGameState::GetReadyHumanPlayerCount() const
+{
+	int32 ReadyCount = 0;
+	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.SlotType == EConquestLobbySlotType::Human && Slot.bIsReady)
+		{
+			++ReadyCount;
+		}
+	}
+	return ReadyCount;
+}
+
+int32 AConquestGameState::GetRequiredReadyHumanPlayerCount() const
+{
+	int32 RequiredCount = 0;
+	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.SlotType == EConquestLobbySlotType::Human)
+		{
+			++RequiredCount;
+		}
+	}
+	return RequiredCount;
+}
+
 UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 PlayerId) const
 {
 	if (const TObjectPtr<UConquestCivilisationData>* FoundCivilisation = PlayerCivilisations.Find(PlayerId))
@@ -269,6 +406,200 @@ UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 Pl
 	}
 
 	return nullptr;
+}
+
+void AConquestGameState::RebuildCityVisualsFromReplicatedState()
+{
+	if (!ActiveGridActor || !CityManager)
+	{
+		return;
+	}
+
+	ActiveGridActor->ClearCityPlaceholders();
+	ActiveGridActor->ClearCivilisationBorders();
+
+	FHexGridModel* GridModel = GetHexGridModelMutable();
+	if (GridModel)
+	{
+		for (FHexTileData& Tile : GridModel->GetMutableTiles())
+		{
+			Tile.Gameplay.OwnerPlayerId = INDEX_NONE;
+			Tile.Gameplay.OwningCityId = INDEX_NONE;
+			Tile.Gameplay.bIsWorked = false;
+			Tile.Gameplay.WorkedByCityId = INDEX_NONE;
+		}
+	}
+
+	for (const FCityState& City : CityManager->Cities)
+	{
+		if (GridModel)
+		{
+			for (const FIntPoint& Coord : City.OwnedTiles)
+			{
+				if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+				{
+					Tile->Gameplay.OwnerPlayerId = City.OwnerPlayerId;
+					Tile->Gameplay.OwningCityId = City.CityId;
+				}
+			}
+
+			for (const FIntPoint& Coord : City.WorkedTiles)
+			{
+				if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+				{
+					Tile->Gameplay.bIsWorked = true;
+					Tile->Gameplay.WorkedByCityId = City.CityId;
+				}
+			}
+		}
+
+		UStaticMesh* CityMesh = nullptr;
+		UMaterialInterface* CityMaterial = nullptr;
+		UMaterialInterface* CivilisationThemeMaterial = nullptr;
+		FLinearColor CivilisationThemeColor = FLinearColor::White;
+		bool bOverrideCityScale = false;
+		FVector CityScale = FVector::OneVector;
+		if (const UConquestCivilisationData* Civilisation = GetCivilisationForPlayer(City.OwnerPlayerId))
+		{
+			CityMesh = Civilisation->CityMesh;
+			CityMaterial = Civilisation->CityMeshMaterialOverride;
+			CivilisationThemeMaterial = Civilisation->CityLabelMaterial
+				? Civilisation->CityLabelMaterial
+				: Civilisation->BorderMaterial;
+			CivilisationThemeColor = Civilisation->ThemeColor;
+			bOverrideCityScale = Civilisation->bOverrideCityMeshScale;
+			CityScale = Civilisation->CityMeshScaleOverride;
+		}
+
+		ActiveGridActor->AddCityPlaceholder(
+			City.CityId,
+			City.CenterTile,
+			CityMesh,
+			CityMaterial,
+			bOverrideCityScale,
+			CityScale
+		);
+		ActiveGridActor->AddOrUpdateCityWorldLabel(
+			City.CityId,
+			City.CenterTile,
+			City.CityName,
+			City.Population,
+			CivilisationThemeMaterial,
+			CivilisationThemeColor
+		);
+	}
+
+	for (const TPair<int32, TObjectPtr<UConquestCivilisationData>>& Pair : PlayerCivilisations)
+	{
+		if (Pair.Value)
+		{
+			TArray<FIntPoint> OwnedTiles;
+			for (const FCityState& City : CityManager->Cities)
+			{
+				if (City.OwnerPlayerId == Pair.Key)
+				{
+					OwnedTiles.Append(City.OwnedTiles);
+				}
+			}
+
+			ActiveGridActor->RebuildCivilisationBordersForTiles(
+				OwnedTiles,
+				Pair.Value->BorderMaterial,
+				Pair.Value->BorderFillMaterial
+			);
+		}
+	}
+}
+
+void AConquestGameState::RebuildUnitVisualsFromReplicatedState()
+{
+	if (!ActiveGridActor || !ContentManager)
+	{
+		return;
+	}
+
+	TSet<int32> ReplicatedUnitIds;
+
+	for (const FConquestPlayerEmpireState& PlayerEmpire : PlayerEmpires)
+	{
+		for (const FConquestUnitState& UnitState : PlayerEmpire.Units)
+		{
+			if (UnitState.UnitInstanceId == INDEX_NONE)
+			{
+				continue;
+			}
+
+			const FConquestUnitRow* UnitRow = ContentManager->FindUnit(UnitState.UnitId);
+			if (!UnitRow)
+			{
+				continue;
+			}
+
+			ReplicatedUnitIds.Add(UnitState.UnitInstanceId);
+
+			AConquestUnitActor* UnitActor = nullptr;
+			if (TObjectPtr<AConquestUnitActor>* ExistingActorPtr = UnitActorsByInstanceId.Find(UnitState.UnitInstanceId))
+			{
+				UnitActor = ExistingActorPtr->Get();
+			}
+
+			if (!UnitActor)
+			{
+				TSubclassOf<AConquestUnitActor> ActorClass = UnitActorClass;
+				if (!ActorClass)
+				{
+					ActorClass = AConquestUnitActor::StaticClass();
+				}
+
+				UnitActor = GetWorld()
+					? GetWorld()->SpawnActor<AConquestUnitActor>(ActorClass, ActiveGridActor->GetActorTransform())
+					: nullptr;
+				if (!UnitActor)
+				{
+					continue;
+				}
+
+				UnitActorsByInstanceId.Add(UnitState.UnitInstanceId, UnitActor);
+			}
+
+			const FText UnitName = !UnitRow->DisplayName.IsEmpty()
+				? UnitRow->DisplayName
+				: FText::FromName(UnitState.UnitId);
+			FText CivilisationName = FText::GetEmpty();
+			FLinearColor UnitDisplayColor = FLinearColor::White;
+			UMaterialInterface* UnitIconMaterial = nullptr;
+			if (const UConquestCivilisationData* Civilisation = GetCivilisationForPlayer(UnitState.OwnerPlayerId))
+			{
+				CivilisationName = Civilisation->CivilisationName;
+				UnitDisplayColor = Civilisation->ThemeColor;
+				UnitIconMaterial = Civilisation->CityLabelMaterial
+					? Civilisation->CityLabelMaterial.Get()
+					: Civilisation->BorderMaterial.Get();
+			}
+
+			UnitActor->InitializeUnit(
+				UnitState,
+				*UnitRow,
+				ActiveGridActor,
+				UnitName,
+				CivilisationName,
+				UnitDisplayColor,
+				UnitIconMaterial
+			);
+		}
+	}
+
+	for (auto It = UnitActorsByInstanceId.CreateIterator(); It; ++It)
+	{
+		if (!ReplicatedUnitIds.Contains(It.Key()))
+		{
+			if (AConquestUnitActor* UnitActor = It.Value().Get())
+			{
+				UnitActor->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
 }
 
 FHexGridModel* AConquestGameState::GetHexGridModelMutable()

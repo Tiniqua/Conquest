@@ -1,4 +1,4 @@
-﻿#include "ConquestGameWidget.h"
+#include "ConquestGameWidget.h"
 
 #include "ConquestHUD.h"
 #include "Components/Button.h"
@@ -36,7 +36,7 @@ void UConquestGameWidget::ClearText(UTextBlock* TextBlock)
 	SetText(TextBlock, FText::GetEmpty());
 }
 
-void UConquestGameWidget::SetVisibility(UWidget* Widget, ESlateVisibility Visibility)
+void UConquestGameWidget::SetWidgetVisibility(UWidget* Widget, ESlateVisibility Visibility)
 {
 	if (Widget)
 	{
@@ -75,8 +75,8 @@ FText UConquestGameWidget::FormatPerTurnYieldText(const FText& Label, int32 PerT
 
 void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData)
 {
-	SetVisibility(TopBarYieldPanel, ESlateVisibility::Visible);
-	SetVisibility(
+	SetWidgetVisibility(TopBarYieldPanel, ESlateVisibility::Visible);
+	SetWidgetVisibility(
 		TopBarLocalYieldPanel,
 		YieldData.bShowSelectedCityLocalYields ? ESlateVisibility::Visible : ESlateVisibility::Collapsed
 	);
@@ -442,7 +442,7 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 		return;
 	}
 
-	SetVisibility(UnitActionPanel, ESlateVisibility::Visible);
+	SetWidgetVisibility(UnitActionPanel, ESlateVisibility::Visible);
 	SetText(
 		SelectedUnitText,
 		FText::Format(
@@ -507,7 +507,7 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 
 void UConquestGameWidget::ClearSelectedUnitInfo()
 {
-	SetVisibility(UnitActionPanel, ESlateVisibility::Collapsed);
+	SetWidgetVisibility(UnitActionPanel, ESlateVisibility::Collapsed);
 	ClearText(SelectedUnitText);
 
 	if (UnitActionButtonBox)
@@ -538,7 +538,7 @@ void UConquestGameWidget::ShowTileExpansionConfirmation(const FConquestTileExpan
 		return;
 	}
 
-	SetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Visible);
+	SetWidgetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Visible);
 
 	SetText(
 		TileExpansionTitleText,
@@ -570,7 +570,7 @@ void UConquestGameWidget::ShowTileExpansionConfirmation(const FConquestTileExpan
 void UConquestGameWidget::ClearTileExpansionConfirmation()
 {
 	PendingTileExpansionChoice = FConquestTileExpansionChoiceData();
-	SetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Collapsed);
+	SetWidgetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Collapsed);
 	ClearText(TileExpansionTitleText);
 	ClearText(TileExpansionDetailText);
 	ClearText(TileExpansionYieldText);
@@ -589,7 +589,7 @@ void UConquestGameWidget::ShowTileImprovementChoices(
 		return;
 	}
 
-	SetVisibility(TileImprovementChoicePanel, ESlateVisibility::Visible);
+	SetWidgetVisibility(TileImprovementChoicePanel, ESlateVisibility::Visible);
 	SetText(
 		TileImprovementTitleText,
 		FString::Printf(TEXT("Upgrade Tile [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
@@ -639,7 +639,7 @@ void UConquestGameWidget::ShowTileImprovementChoices(
 void UConquestGameWidget::ClearTileImprovementChoices()
 {
 	PendingTileImprovementChoice = FConquestTileImprovementChoiceData();
-	SetVisibility(TileImprovementChoicePanel, ESlateVisibility::Collapsed);
+	SetWidgetVisibility(TileImprovementChoicePanel, ESlateVisibility::Collapsed);
 	ClearText(TileImprovementTitleText);
 
 	if (TileImprovementButtonBox)
@@ -738,9 +738,9 @@ void UConquestGameWidget::HandleUnitActionClicked(FName ActionId)
 
 void UConquestGameWidget::UpdateHoveredTileInfo(const FHoveredHexTileWidgetData& HoveredTileData)
 {
-	SetVisibility(HoveredTileInfoPanel, ESlateVisibility::Visible);
-	SetVisibility(TileDetailsBox, ESlateVisibility::Visible);
-	SetVisibility(TileYieldsBox, ESlateVisibility::Visible);
+	SetWidgetVisibility(HoveredTileInfoPanel, ESlateVisibility::Visible);
+	SetWidgetVisibility(TileDetailsBox, ESlateVisibility::Visible);
+	SetWidgetVisibility(TileYieldsBox, ESlateVisibility::Visible);
 
 	SetText(TileCoordText, FString::Printf(TEXT("Tile [%d, %d]"), HoveredTileData.Q, HoveredTileData.R));
 	SetText(TileTypeText, FString::Printf(TEXT("Type: %s"), *HoveredTileData.TileType));
@@ -756,6 +756,6 @@ void UConquestGameWidget::UpdateHoveredTileInfo(const FHoveredHexTileWidgetData&
 
 void UConquestGameWidget::ClearHoveredTileInfo()
 {
-	SetVisibility(HoveredTileInfoPanel, ESlateVisibility::Collapsed);
+	SetWidgetVisibility(HoveredTileInfoPanel, ESlateVisibility::Collapsed);
 	ClearTileTexts();
 }

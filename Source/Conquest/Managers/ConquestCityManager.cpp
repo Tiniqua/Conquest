@@ -736,7 +736,29 @@ void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
 			{
 				if (const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(Unit.UnitId))
 				{
-					UnitActor->RefreshUnitVisuals(Unit, *UnitRow);
+					const FText UnitName = !UnitRow->DisplayName.IsEmpty()
+						? UnitRow->DisplayName
+						: FText::FromName(Unit.UnitId);
+					FText CivilisationName = FText::GetEmpty();
+					FLinearColor UnitDisplayColor = FLinearColor::White;
+					UMaterialInterface* UnitIconMaterial = nullptr;
+					if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(Unit.OwnerPlayerId))
+					{
+						CivilisationName = Civilisation->CivilisationName;
+						UnitDisplayColor = Civilisation->ThemeColor;
+						UnitIconMaterial = Civilisation->CityLabelMaterial
+							? Civilisation->CityLabelMaterial.Get()
+							: Civilisation->BorderMaterial.Get();
+					}
+
+					UnitActor->RefreshUnitVisuals(
+						Unit,
+						*UnitRow,
+						UnitName,
+						CivilisationName,
+						UnitDisplayColor,
+						UnitIconMaterial
+					);
 				}
 			}
 		}
@@ -778,7 +800,30 @@ void UConquestCityManager::SpawnUnitActorForState(const FConquestUnitState& Unit
 		return;
 	}
 
-	UnitActor->InitializeUnit(UnitState, *UnitRow, GameStateRef->ActiveGridActor);
+	const FText UnitName = !UnitRow->DisplayName.IsEmpty()
+		? UnitRow->DisplayName
+		: FText::FromName(UnitState.UnitId);
+	FText CivilisationName = FText::GetEmpty();
+	FLinearColor UnitDisplayColor = FLinearColor::White;
+	UMaterialInterface* UnitIconMaterial = nullptr;
+	if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(UnitState.OwnerPlayerId))
+	{
+		CivilisationName = Civilisation->CivilisationName;
+		UnitDisplayColor = Civilisation->ThemeColor;
+		UnitIconMaterial = Civilisation->CityLabelMaterial
+			? Civilisation->CityLabelMaterial.Get()
+			: Civilisation->BorderMaterial.Get();
+	}
+
+	UnitActor->InitializeUnit(
+		UnitState,
+		*UnitRow,
+		GameStateRef->ActiveGridActor,
+		UnitName,
+		CivilisationName,
+		UnitDisplayColor,
+		UnitIconMaterial
+	);
 	GameStateRef->UnitActorsByInstanceId.Add(UnitState.UnitInstanceId, UnitActor);
 }
 
@@ -789,29 +834,12 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 		return;
 	}
 
-	UMaterialInterface* BorderMaterial = nullptr;
-	UMaterialInterface* BorderFillMaterial = nullptr;
-	if (const UConquestCivilisationData* Civilisation = GameStateRef->GetCivilisationForPlayer(PlayerId))
+	if (PlayerId == INDEX_NONE)
 	{
-		BorderMaterial = Civilisation->BorderMaterial;
-		BorderFillMaterial = Civilisation->BorderFillMaterial;
+		return;
 	}
 
-	TArray<FIntPoint> PlayerOwnedTiles;
-	for (const FCityState& City : Cities)
-	{
-		if (City.OwnerPlayerId != PlayerId)
-		{
-			continue;
-		}
-
-		for (const FIntPoint& Coord : City.OwnedTiles)
-		{
-			PlayerOwnedTiles.AddUnique(Coord);
-		}
-	}
-
-	GameStateRef->ActiveGridActor->RebuildCivilisationBordersForTiles(PlayerOwnedTiles, BorderMaterial, BorderFillMaterial);
+	GameStateRef->RebuildCityVisualsFromReplicatedState();
 }
 
 void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)

@@ -140,6 +140,33 @@ void AConquestPlayerController::RequestUnitAction(int32 UnitInstanceId, FName Ac
 	}
 }
 
+void AConquestPlayerController::RequestSetLobbySlotCivilisation(
+	int32 SlotIndex,
+	UConquestCivilisationData* Civilisation
+)
+{
+	if (HasAuthority())
+	{
+		ServerRequestSetLobbySlotCivilisation_Implementation(SlotIndex, Civilisation);
+	}
+	else
+	{
+		ServerRequestSetLobbySlotCivilisation(SlotIndex, Civilisation);
+	}
+}
+
+void AConquestPlayerController::RequestSetLobbyReady(bool bReady)
+{
+	if (HasAuthority())
+	{
+		ServerRequestSetLobbyReady_Implementation(bReady);
+	}
+	else
+	{
+		ServerRequestSetLobbyReady(bReady);
+	}
+}
+
 void AConquestPlayerController::ServerRequestEndTurn_Implementation()
 {
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
@@ -205,5 +232,24 @@ void AConquestPlayerController::ServerRequestUnitAction_Implementation(int32 Uni
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->ApplyUnitActionForPlayer(AssignedPlayerId, UnitInstanceId, ActionId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestSetLobbySlotCivilisation_Implementation(
+	int32 SlotIndex,
+	UConquestCivilisationData* Civilisation
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->SetLobbySlotCivilisationForPlayer(AssignedPlayerId, SlotIndex, Civilisation);
+	}
+}
+
+void AConquestPlayerController::ServerRequestSetLobbyReady_Implementation(bool bReady)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->SetLobbyReadyForPlayer(AssignedPlayerId, bReady);
 	}
 }

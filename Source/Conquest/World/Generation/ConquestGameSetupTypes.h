@@ -68,6 +68,12 @@ struct FConquestLobbyPlayerSlot
 	bool bIsHost = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	FString PlayerName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	bool bIsReady = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
 	TObjectPtr<UConquestCivilisationData> Civilisation = nullptr;
 };
 

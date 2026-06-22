@@ -12,6 +12,7 @@
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
+#include "GameFramework/PlayerState.h"
 
 namespace
 {
@@ -64,6 +65,7 @@ AConquestGameMode::AConquestGameMode()
 void AConquestGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+	SyncAvailableCivilisationsToGameState();
 }
 
 void AConquestGameMode::PostLogin(APlayerController* NewPlayer)
@@ -82,6 +84,8 @@ void AConquestGameMode::PostLogin(APlayerController* NewPlayer)
 
 	if (AConquestGameState* ConquestGS = GetGameState<AConquestGameState>())
 	{
+		SyncAvailableCivilisationsToGameState();
+		AssignPlayerToLobbySlot(PlayerId, NewPlayer->PlayerState ? NewPlayer->PlayerState->GetPlayerName() : FString());
 		ConquestGS->EnsurePlayerEmpire(PlayerId);
 		ConquestGS->PushReplicatedState();
 	}
@@ -91,11 +95,110 @@ void AConquestGameMode::Logout(AController* Exiting)
 {
 	if (const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(Exiting))
 	{
-		ConnectedHumanPlayerIds.Remove(ConquestPC->GetAssignedPlayerId());
-		ReadyPlayerIds.Remove(ConquestPC->GetAssignedPlayerId());
+		const int32 ExitingPlayerId = ConquestPC->GetAssignedPlayerId();
+		ConnectedHumanPlayerIds.Remove(ExitingPlayerId);
+		ReadyPlayerIds.Remove(ExitingPlayerId);
+
+		if (AConquestGameState* ConquestGS = GetGameState<AConquestGameState>())
+		{
+			for (FConquestLobbyPlayerSlot& Slot : ConquestGS->LobbyPlayerSlots)
+			{
+				if (Slot.PlayerId == ExitingPlayerId && ExitingPlayerId != 0)
+				{
+					Slot.PlayerId = INDEX_NONE;
+					Slot.SlotType = EConquestLobbySlotType::AI;
+					Slot.bIsHost = false;
+					Slot.PlayerName.Reset();
+					Slot.bIsReady = false;
+					Slot.Civilisation = nullptr;
+					break;
+				}
+			}
+			ConquestGS->BroadcastStateChanged();
+		}
 	}
 
 	Super::Logout(Exiting);
+}
+
+void AConquestGameMode::SyncAvailableCivilisationsToGameState()
+{
+	if (AConquestGameState* ConquestGS = GetGameState<AConquestGameState>())
+	{
+		TArray<UConquestCivilisationData*> Civilisations;
+		for (UConquestCivilisationData* Civilisation : AvailableCivilisations)
+		{
+			if (Civilisation)
+			{
+				Civilisations.Add(Civilisation);
+			}
+		}
+		ConquestGS->SetAvailableCivilisations(Civilisations);
+	}
+}
+
+void AConquestGameMode::AssignPlayerToLobbySlot(int32 PlayerId, const FString& PlayerName)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS)
+	{
+		return;
+	}
+
+	if (ConquestGS->LobbyPlayerSlots.Num() <= 0)
+	{
+		FConquestMapSizePresetDefinition SizePreset;
+		const int32 PlayerCount = FConquestMapSizePresets::GetPreset(EConquestMapSizePreset::Standard, SizePreset)
+			? FMath::Max(1, SizePreset.PlayerCount)
+			: 1;
+
+		ConquestGS->LobbyPlayerSlots.Reset(PlayerCount);
+		for (int32 SlotIndex = 0; SlotIndex < PlayerCount; ++SlotIndex)
+		{
+			FConquestLobbyPlayerSlot Slot;
+			Slot.SlotIndex = SlotIndex;
+			Slot.PlayerId = INDEX_NONE;
+			Slot.SlotType = EConquestLobbySlotType::AI;
+			ConquestGS->LobbyPlayerSlots.Add(Slot);
+		}
+	}
+
+	int32 TargetSlotIndex = INDEX_NONE;
+	if (PlayerId == 0)
+	{
+		TargetSlotIndex = 0;
+	}
+	else
+	{
+		for (int32 SlotIndex = 1; SlotIndex < ConquestGS->LobbyPlayerSlots.Num(); ++SlotIndex)
+		{
+			if (ConquestGS->LobbyPlayerSlots[SlotIndex].SlotType != EConquestLobbySlotType::Human)
+			{
+				TargetSlotIndex = SlotIndex;
+				break;
+			}
+		}
+	}
+
+	if (!ConquestGS->LobbyPlayerSlots.IsValidIndex(TargetSlotIndex))
+	{
+		return;
+	}
+
+	FConquestLobbyPlayerSlot& Slot = ConquestGS->LobbyPlayerSlots[TargetSlotIndex];
+	Slot.PlayerId = PlayerId;
+	Slot.SlotType = EConquestLobbySlotType::Human;
+	Slot.bIsHost = PlayerId == 0;
+	Slot.PlayerName = PlayerName.IsEmpty()
+		? FString::Printf(TEXT("Player %d"), PlayerId + 1)
+		: PlayerName;
+	Slot.bIsReady = false;
+	if (PlayerId != 0)
+	{
+		Slot.Civilisation = nullptr;
+	}
+
+	ConquestGS->BroadcastStateChanged();
 }
 
 TArray<UConquestCivilisationData*> AConquestGameMode::GetAvailableCivilisations() const
@@ -112,6 +215,34 @@ TArray<UConquestCivilisationData*> AConquestGameMode::GetAvailableCivilisations(
 	}
 
 	return Result;
+}
+
+bool AConquestGameMode::SetLobbySlotCivilisationForPlayer(
+	int32 PlayerId,
+	int32 SlotIndex,
+	UConquestCivilisationData* Civilisation
+)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	return ConquestGS && ConquestGS->SetLobbySlotCivilisationForPlayer(PlayerId, SlotIndex, Civilisation);
+}
+
+void AConquestGameMode::SetLobbyReadyForPlayer(int32 PlayerId, bool bReady)
+{
+	if (AConquestGameState* ConquestGS = GetGameState<AConquestGameState>())
+	{
+		ConquestGS->SetLobbyPlayerReady(PlayerId, bReady);
+	}
+}
+
+bool AConquestGameMode::AreAllLobbyHumanPlayersReady() const
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	return ConquestGS &&
+		ConquestGS->GetRequiredReadyHumanPlayerCount() > 0 &&
+		ConquestGS->GetReadyHumanPlayerCount() >= ConquestGS->GetRequiredReadyHumanPlayerCount();
 }
 
 void AConquestGameMode::StartSinglePlayerGame()
@@ -496,12 +627,43 @@ bool AConquestGameMode::FoundStartingCityForPlayer(int32 PlayerId, const FIntPoi
 
 	const bool bFounded = ConquestGS->CityManager->FoundCity(PlayerId, TileCoord, CityName);
 
-	if (bFounded)
+	if (bFounded && HaveAllHumanPlayersFoundedStartingCities(*ConquestGS))
 	{
 		ConquestGS->TurnManager->BeginFirstTurn();
 	}
 
 	return bFounded;
+}
+
+bool AConquestGameMode::HaveAllHumanPlayersFoundedStartingCities(const AConquestGameState& ConquestGS) const
+{
+	if (!ConquestGS.CityManager)
+	{
+		return false;
+	}
+
+	const TArray<int32> HumanPlayerIds = GetHumanPlayerIds(ConquestGS);
+	if (HumanPlayerIds.Num() <= 0)
+	{
+		return ConquestGS.CityManager->Cities.Num() > 0;
+	}
+
+	for (const int32 PlayerId : HumanPlayerIds)
+	{
+		const bool bHasCity = ConquestGS.CityManager->Cities.ContainsByPredicate(
+			[PlayerId](const FCityState& City)
+			{
+				return City.OwnerPlayerId == PlayerId;
+			}
+		);
+
+		if (!bHasCity)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void AConquestGameMode::InitializeEmpiresFromLobby()

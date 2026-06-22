@@ -24,6 +24,7 @@ class UConquestCityWorldLabelWidget;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UHexImprovementSetData;
+class FLifetimeProperty;
 
 UCLASS()
 class CONQUEST_API AModularHexGridActor : public AActor
@@ -32,6 +33,8 @@ class CONQUEST_API AModularHexGridActor : public AActor
 
 public:
 	AModularHexGridActor();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UInstancedStaticMeshComponent* EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh = nullptr, UMaterialInterface* OverrideMaterial = nullptr);
 	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord, bool bOverrideScale = false, const FVector& OverrideScale = FVector::OneVector) const;
 	FTransform BuildCityWorldLabelTransform(const FIntPoint& Coord) const;
@@ -60,6 +63,7 @@ public:
 	);
 	void SetCityWorldLabelVisible(int32 CityId, bool bVisible);
 	void ClearCityPlaceholders();
+	void ClearCivilisationBorders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
 	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
 	void RebuildExpansionCandidateHighlights(const TArray<FIntPoint>& CandidateCoords, UMaterialInterface* HighlightMaterial = nullptr);
@@ -239,6 +243,12 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	UFUNCTION()
+	void OnRep_ReplicatedSetupSettings();
+
+	UPROPERTY(ReplicatedUsing=OnRep_ReplicatedSetupSettings)
+	FConquestGameSetupSettings ReplicatedSetupSettings;
+
 	UPROPERTY(EditAnywhere, Category = "Hex Grid")
 	bool bGenerateOnBeginPlay = true;
 

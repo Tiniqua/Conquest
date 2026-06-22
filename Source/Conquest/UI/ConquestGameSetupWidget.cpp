@@ -9,6 +9,9 @@
 #include "Components/TextBlock.h"
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestTurnManager.h"
+#include "Conquest/Player/ConquestPlayerController.h"
 #include "ConquestHUDWidget.h"
 #include "Misc/Guid.h"
 
@@ -46,6 +49,12 @@ void UConquestGameSetupWidget::NativeConstruct()
 		PlayButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandlePlayButtonClicked);
 	}
 
+	if (ReadyButton)
+	{
+		ReadyButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleReadyButtonClicked);
+		ReadyButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandleReadyButtonClicked);
+	}
+
 	if (RandomSeedButton)
 	{
 		RandomSeedButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleRandomSeedButtonClicked);
@@ -61,6 +70,23 @@ void UConquestGameSetupWidget::NativeConstruct()
 	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
 	UpdateMapSizeTooltip();
+	RefreshReadyStatus();
+
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
+		ConquestGS->OnConquestStateChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
+	}
+}
+
+void UConquestGameSetupWidget::NativeDestruct()
+{
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
+	}
+
+	Super::NativeDestruct();
 }
 
 void UConquestGameSetupWidget::RefreshMapPresetOptions()
@@ -521,6 +547,19 @@ void UConquestGameSetupWidget::HandleRandomSeedValueChanged(float NewValue)
 
 void UConquestGameSetupWidget::HandlePlayButtonClicked()
 {
+	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+	const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (
+		!ConquestPC ||
+		ConquestPC->GetAssignedPlayerId() != 0 ||
+		!ConquestGS ||
+		ConquestGS->GetRequiredReadyHumanPlayerCount() <= 0 ||
+		ConquestGS->GetReadyHumanPlayerCount() < ConquestGS->GetRequiredReadyHumanPlayerCount()
+	)
+	{
+		return;
+	}
+
 	if (ParentHUDWidget)
 	{
 		ParentHUDWidget->RequestStartGame(GetSelectedGameSetupSettings());
@@ -533,6 +572,7 @@ void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedIte
 	{
 		SelectedMapSizePreset = *FoundPreset;
 		UpdateMapSizeTooltip();
+		bForceRebuildLobbySlots = true;
 		RefreshLobbySlots();
 	}
 }
@@ -565,6 +605,26 @@ void UConquestGameSetupWidget::ConfigureRandomSeedSpinBox()
 
 void UConquestGameSetupWidget::RefreshLobbySlots()
 {
+	if (!bForceRebuildLobbySlots)
+	{
+		if (const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+		{
+			if (ConquestGS->LobbyPlayerSlots.Num() > 0)
+			{
+				LobbyPlayerSlots = ConquestGS->LobbyPlayerSlots;
+				const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
+				for (int32 SlotIndex = 0; SlotIndex < ComboBoxes.Num(); ++SlotIndex)
+				{
+					RefreshCivilisationComboBox(ComboBoxes[SlotIndex], SlotIndex);
+				}
+				OnLobbySlotsChanged(LobbyPlayerSlots);
+				RefreshReadyStatus();
+				return;
+			}
+		}
+	}
+	bForceRebuildLobbySlots = false;
+
 	FConquestMapSizePresetDefinition SizePreset;
 	const int32 PlayerCount = FConquestMapSizePresets::GetPreset(SelectedMapSizePreset, SizePreset)
 		? FMath::Max(1, SizePreset.PlayerCount)
@@ -577,8 +637,8 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 	{
 		FConquestLobbyPlayerSlot LobbySlot;
 		LobbySlot.SlotIndex = SlotIndex;
-		LobbySlot.PlayerId = SlotIndex;
-		LobbySlot.SlotType = SlotIndex == 0 ? EConquestLobbySlotType::Human : EConquestLobbySlotType::AI;
+		LobbySlot.PlayerId = INDEX_NONE;
+		LobbySlot.SlotType = EConquestLobbySlotType::AI;
 		LobbySlot.bIsHost = SlotIndex == 0;
 
 		if (const FConquestLobbyPlayerSlot* PreviousSlot = PreviousSlots.FindByPredicate(
@@ -588,11 +648,19 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 			}))
 		{
 			LobbySlot.Civilisation = PreviousSlot->Civilisation;
+			LobbySlot.PlayerId = PreviousSlot->PlayerId;
+			LobbySlot.SlotType = PreviousSlot->SlotType;
+			LobbySlot.bIsHost = PreviousSlot->bIsHost;
+			LobbySlot.PlayerName = PreviousSlot->PlayerName;
+			LobbySlot.bIsReady = PreviousSlot->bIsReady;
 		}
 
-		if (!LobbySlot.Civilisation && AvailableCivilisations.Num() > 0)
+		if (SlotIndex == 0 && LobbySlot.PlayerId == INDEX_NONE)
 		{
-			LobbySlot.Civilisation = AvailableCivilisations[SlotIndex % AvailableCivilisations.Num()];
+			LobbySlot.PlayerId = 0;
+			LobbySlot.SlotType = EConquestLobbySlotType::Human;
+			LobbySlot.bIsHost = true;
+			LobbySlot.PlayerName = TEXT("Host");
 		}
 
 		LobbyPlayerSlots.Add(LobbySlot);
@@ -605,6 +673,8 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 	}
 
 	OnLobbySlotsChanged(LobbyPlayerSlots);
+	PushLobbySlotsToServerIfAuthority();
+	RefreshReadyStatus();
 }
 
 void UConquestGameSetupWidget::RefreshCivilisationOptions()
@@ -614,7 +684,18 @@ void UConquestGameSetupWidget::RefreshCivilisationOptions()
 
 	if (UWorld* World = GetWorld())
 	{
-		if (const AConquestGameMode* ConquestGameMode = World->GetAuthGameMode<AConquestGameMode>())
+		if (const AConquestGameState* ConquestGS = World->GetGameState<AConquestGameState>();
+			ConquestGS && ConquestGS->AvailableCivilisations.Num() > 0)
+		{
+			for (UConquestCivilisationData* Civilisation : ConquestGS->AvailableCivilisations)
+			{
+				if (Civilisation)
+				{
+					AvailableCivilisations.Add(Civilisation);
+				}
+			}
+		}
+		else if (const AConquestGameMode* ConquestGameMode = World->GetAuthGameMode<AConquestGameMode>())
 		{
 			const TArray<UConquestCivilisationData*> GameModeCivilisations = ConquestGameMode->GetAvailableCivilisations();
 			for (UConquestCivilisationData* Civilisation : GameModeCivilisations)
@@ -654,6 +735,10 @@ bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConque
 	LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation;
 	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
 	RefreshCivilisationComboBox(ComboBoxes.IsValidIndex(SlotIndex) ? ComboBoxes[SlotIndex] : nullptr, SlotIndex);
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestSetLobbySlotCivilisation(SlotIndex, Civilisation);
+	}
 	return true;
 }
 
@@ -676,6 +761,45 @@ TArray<UConquestCivilisationData*> UConquestGameSetupWidget::GetAvailableCivilis
 	}
 
 	return Result;
+}
+
+FText UConquestGameSetupWidget::GetLobbySlotDisplayText(int32 SlotIndex) const
+{
+	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return FText::GetEmpty();
+	}
+
+	const FConquestLobbyPlayerSlot& LobbySlot = LobbyPlayerSlots[SlotIndex];
+	FString PlayerLabel;
+	if (LobbySlot.SlotType == EConquestLobbySlotType::Human)
+	{
+		PlayerLabel = LobbySlot.PlayerName.IsEmpty()
+			? FString::Printf(TEXT("Player %d"), LobbySlot.PlayerId + 1)
+			: LobbySlot.PlayerName;
+		if (LobbySlot.bIsHost)
+		{
+			PlayerLabel += TEXT(" [HOST]");
+		}
+	}
+	else if (LobbySlot.SlotType == EConquestLobbySlotType::AI)
+	{
+		PlayerLabel = TEXT("AI");
+	}
+	else
+	{
+		PlayerLabel = TEXT("Closed");
+	}
+
+	const FString CivilisationLabel = LobbySlot.Civilisation
+		? (
+			LobbySlot.Civilisation->CivilisationName.IsEmpty()
+				? LobbySlot.Civilisation->GetName()
+				: LobbySlot.Civilisation->CivilisationName.ToString()
+		)
+		: TEXT("No civilisation");
+
+	return FText::FromString(FString::Printf(TEXT("%s - %s"), *PlayerLabel, *CivilisationLabel));
 }
 
 void UConquestGameSetupWidget::BindCivilisationComboBoxes()
@@ -749,11 +873,13 @@ void UConquestGameSetupWidget::RefreshCivilisationComboBox(UComboBoxString* Comb
 		return;
 	}
 
+	bUpdatingCivilisationComboBoxes = true;
 	ComboBox->ClearOptions();
-	ComboBox->SetIsEnabled(LobbyPlayerSlots.IsValidIndex(SlotIndex));
+	ComboBox->SetIsEnabled(LobbyPlayerSlots.IsValidIndex(SlotIndex) && CanLocalPlayerEditSlot(SlotIndex));
 
 	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
 	{
+		bUpdatingCivilisationComboBoxes = false;
 		return;
 	}
 
@@ -772,14 +898,22 @@ void UConquestGameSetupWidget::RefreshCivilisationComboBox(UComboBoxString* Comb
 			if (AvailableCivilisations[CivIndex] == SelectedCivilisation)
 			{
 				ComboBox->SetSelectedOption(GetCivilisationOptionName(SelectedCivilisation, CivIndex));
+				bUpdatingCivilisationComboBoxes = false;
 				return;
 			}
 		}
 	}
+
+	bUpdatingCivilisationComboBoxes = false;
 }
 
 void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotIndex, const FString& SelectedItem)
 {
+	if (bUpdatingCivilisationComboBoxes)
+	{
+		return;
+	}
+
 	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
 	{
 		return;
@@ -788,7 +922,124 @@ void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotInde
 	if (TObjectPtr<UConquestCivilisationData>* Civilisation = OptionToCivilisation.Find(SelectedItem))
 	{
 		LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation->Get();
+		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+		{
+			ConquestPC->RequestSetLobbySlotCivilisation(SlotIndex, Civilisation->Get());
+		}
 	}
+}
+
+bool UConquestGameSetupWidget::CanLocalPlayerEditSlot(int32 SlotIndex) const
+{
+	if (!LobbyPlayerSlots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+	const int32 LocalPlayerId = ConquestPC ? ConquestPC->GetAssignedPlayerId() : 0;
+	const FConquestLobbyPlayerSlot& LobbySlot = LobbyPlayerSlots[SlotIndex];
+	const bool bLocalPlayerIsHost = LocalPlayerId == 0;
+
+	return
+		(LobbySlot.SlotType == EConquestLobbySlotType::Human && LobbySlot.PlayerId == LocalPlayerId) ||
+		(
+			bLocalPlayerIsHost &&
+			(
+				LobbySlot.SlotType != EConquestLobbySlotType::Human ||
+				LobbySlot.PlayerId == LocalPlayerId
+			)
+		);
+}
+
+void UConquestGameSetupWidget::PushLobbySlotsToServerIfAuthority()
+{
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->HasAuthority())
+		{
+			ConquestGS->SetLobbyPlayerSlots(LobbyPlayerSlots);
+		}
+	}
+}
+
+void UConquestGameSetupWidget::RefreshReadyStatus()
+{
+	const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	const int32 ReadyCount = ConquestGS ? ConquestGS->GetReadyHumanPlayerCount() : 0;
+	const int32 RequiredCount = ConquestGS ? ConquestGS->GetRequiredReadyHumanPlayerCount() : 0;
+
+	const FText ReadyText = FText::Format(
+		NSLOCTEXT("Conquest", "LobbyReadyStatusFormat", "Ready {0}/{1}"),
+		FText::AsNumber(ReadyCount),
+		FText::AsNumber(RequiredCount)
+	);
+
+	if (ReadyStatusText)
+	{
+		ReadyStatusText->SetText(ReadyText);
+	}
+
+	if (ReadyButtonText)
+	{
+		ReadyButtonText->SetText(ReadyText);
+	}
+
+	if (ReadyButton)
+	{
+		const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+		const int32 LocalPlayerId = ConquestPC ? ConquestPC->GetAssignedPlayerId() : INDEX_NONE;
+		const FConquestLobbyPlayerSlot* LocalSlot = LobbyPlayerSlots.FindByPredicate(
+			[LocalPlayerId](const FConquestLobbyPlayerSlot& CandidateSlot)
+			{
+				return CandidateSlot.SlotType == EConquestLobbySlotType::Human && CandidateSlot.PlayerId == LocalPlayerId;
+			}
+		);
+
+		ReadyButton->SetIsEnabled(LocalSlot && LocalSlot->Civilisation && !LocalSlot->bIsReady);
+	}
+
+	if (PlayButton)
+	{
+		const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+		PlayButton->SetIsEnabled(
+			ConquestPC &&
+			ConquestPC->GetAssignedPlayerId() == 0 &&
+			RequiredCount > 0 &&
+			ReadyCount >= RequiredCount
+		);
+	}
+}
+
+void UConquestGameSetupWidget::HandleReadyButtonClicked()
+{
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestSetLobbyReady(true);
+	}
+}
+
+void UConquestGameSetupWidget::HandleConquestStateChanged()
+{
+	if (const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (
+			ConquestGS->TurnManager &&
+			ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::None &&
+			ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::GameSetup
+		)
+		{
+			if (ParentHUDWidget)
+			{
+				ParentHUDWidget->ShowGame();
+			}
+			return;
+		}
+	}
+
+	RefreshCivilisationOptions();
+	RefreshLobbySlots();
+	RefreshReadyStatus();
 }
 
 TArray<UComboBoxString*> UConquestGameSetupWidget::GetCivilisationComboBoxes() const

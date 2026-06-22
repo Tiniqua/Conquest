@@ -2,6 +2,8 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "ProceduralMeshComponent.h"
@@ -34,19 +36,51 @@ AConquestUnitActor::AConquestUnitActor()
 	SelectionMesh->bCastStaticShadow = false;
 	SelectionMesh->CastShadow = false;
 	SelectionMesh->SetVisibility(false);
+
+	UnitWorldIconWidgetClass = UConquestUnitWorldIconWidget::StaticClass();
+	UnitWorldIconComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("UnitWorldIcon"));
+	UnitWorldIconComponent->SetupAttachment(SceneRoot);
+	UnitWorldIconComponent->SetWidgetSpace(EWidgetSpace::World);
+	UnitWorldIconComponent->SetWidgetClass(UnitWorldIconWidgetClass);
+	UnitWorldIconComponent->SetDrawSize(UnitWorldIconDrawSize);
+	UnitWorldIconComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UnitWorldIconComponent->SetGenerateOverlapEvents(false);
+	UnitWorldIconComponent->SetCastShadow(false);
+	UnitWorldIconComponent->bCastDynamicShadow = false;
+	UnitWorldIconComponent->bCastStaticShadow = false;
+	UnitWorldIconComponent->CastShadow = false;
+	UnitWorldIconComponent->SetTwoSided(true);
+	UnitWorldIconComponent->SetPivot(FVector2D(0.5f, 0.5f));
+	UnitWorldIconComponent->SetTickWhenOffscreen(true);
+	UnitWorldIconComponent->SetRelativeTransform(FTransform(
+		UnitWorldIconRotation,
+		UnitWorldIconOffset,
+		FVector(UnitWorldIconScale, UnitWorldIconScale, UnitWorldIconScale)
+	));
 }
 
 void AConquestUnitActor::InitializeUnit(
 	const FConquestUnitState& InUnitState,
 	const FConquestUnitRow& InUnitRow,
-	AModularHexGridActor* InGridActor
+	AModularHexGridActor* InGridActor,
+	const FText& UnitName,
+	const FText& CivilisationName,
+	FLinearColor UnitDisplayColor,
+	UMaterialInterface* UnitIconMaterial
 )
 {
 	GridActor = InGridActor;
-	RefreshUnitVisuals(InUnitState, InUnitRow);
+	RefreshUnitVisuals(InUnitState, InUnitRow, UnitName, CivilisationName, UnitDisplayColor, UnitIconMaterial);
 }
 
-void AConquestUnitActor::RefreshUnitVisuals(const FConquestUnitState& InUnitState, const FConquestUnitRow& InUnitRow)
+void AConquestUnitActor::RefreshUnitVisuals(
+	const FConquestUnitState& InUnitState,
+	const FConquestUnitRow& InUnitRow,
+	const FText& UnitName,
+	const FText& CivilisationName,
+	FLinearColor UnitDisplayColor,
+	UMaterialInterface* UnitIconMaterial
+)
 {
 	UnitInstanceId = InUnitState.UnitInstanceId;
 	OwnerPlayerId = InUnitState.OwnerPlayerId;
@@ -63,7 +97,7 @@ void AConquestUnitActor::RefreshUnitVisuals(const FConquestUnitState& InUnitStat
 	{
 		UnitMeshInstances->SetStaticMesh(InUnitRow.UnitMesh);
 
-		if (InUnitRow.UnitMeshMaterialOverride && InUnitRow.UnitMesh)
+		if (InUnitRow.UnitMesh)
 		{
 			const int32 MaterialSlotCount = FMath::Max(1, InUnitRow.UnitMesh->GetStaticMaterials().Num());
 			for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotCount; ++MaterialIndex)
@@ -79,6 +113,7 @@ void AConquestUnitActor::RefreshUnitVisuals(const FConquestUnitState& InUnitStat
 	}
 
 	RebuildMeshInstances();
+	UpdateUnitWorldIcon(UnitName, CivilisationName, UnitDisplayColor, UnitIconMaterial);
 }
 
 void AConquestUnitActor::SetSelected(bool bSelected, UMaterialInterface* SelectionMaterial)
@@ -98,6 +133,7 @@ void AConquestUnitActor::MoveToTile(const FIntPoint& NewCoord)
 	TileCoord = NewCoord;
 	UpdateActorTransformForTile();
 	RebuildMeshInstances();
+	UpdateUnitWorldIconTransform();
 	if (SelectionMesh && SelectionMesh->IsVisible())
 	{
 		RebuildSelectionMesh(SelectionMesh->GetMaterial(0));
@@ -145,6 +181,64 @@ void AConquestUnitActor::RebuildMeshInstances()
 	}
 
 	UnitMeshInstances->MarkRenderStateDirty();
+}
+
+void AConquestUnitActor::ConfigureUnitWorldIconComponent()
+{
+	if (!UnitWorldIconComponent || !UnitWorldIconWidgetClass)
+	{
+		return;
+	}
+
+	UnitWorldIconComponent->SetWidgetClass(UnitWorldIconWidgetClass);
+	UnitWorldIconComponent->SetWidgetSpace(EWidgetSpace::World);
+	UnitWorldIconComponent->SetDrawSize(UnitWorldIconDrawSize);
+	UnitWorldIconComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UnitWorldIconComponent->SetGenerateOverlapEvents(false);
+	UnitWorldIconComponent->SetCastShadow(false);
+	UnitWorldIconComponent->bCastDynamicShadow = false;
+	UnitWorldIconComponent->bCastStaticShadow = false;
+	UnitWorldIconComponent->CastShadow = false;
+	UnitWorldIconComponent->SetTwoSided(true);
+	UnitWorldIconComponent->SetPivot(FVector2D(0.5f, 0.5f));
+	UnitWorldIconComponent->SetTickWhenOffscreen(true);
+	UpdateUnitWorldIconTransform();
+}
+
+void AConquestUnitActor::UpdateUnitWorldIconTransform()
+{
+	if (!UnitWorldIconComponent)
+	{
+		return;
+	}
+
+	UnitWorldIconComponent->SetRelativeTransform(FTransform(
+		UnitWorldIconRotation,
+		UnitWorldIconOffset,
+		FVector(UnitWorldIconScale, UnitWorldIconScale, UnitWorldIconScale)
+	));
+}
+
+void AConquestUnitActor::UpdateUnitWorldIcon(
+	const FText& UnitName,
+	const FText& CivilisationName,
+	FLinearColor UnitDisplayColor,
+	UMaterialInterface* UnitIconMaterial
+)
+{
+	if (!UnitWorldIconComponent || !UnitWorldIconWidgetClass)
+	{
+		return;
+	}
+
+	ConfigureUnitWorldIconComponent();
+	UnitWorldIconComponent->InitWidget();
+	UnitWorldIconComponent->SetVisibility(true);
+
+	if (UConquestUnitWorldIconWidget* IconWidget = Cast<UConquestUnitWorldIconWidget>(UnitWorldIconComponent->GetWidget()))
+	{
+		IconWidget->SetUnitIcon(UnitName, CivilisationName, UnitDisplayColor, UnitIconMaterial);
+	}
 }
 
 void AConquestUnitActor::RebuildSelectionMesh(UMaterialInterface* SelectionMaterial)

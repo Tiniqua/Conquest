@@ -9,10 +9,13 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Conquest/UI/ConquestCityWorldLabelWidget.h"
+#include "Net/UnrealNetwork.h"
 
 AModularHexGridActor::AModularHexGridActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	SetReplicates(true);
+	bAlwaysRelevant = true;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
@@ -396,6 +399,8 @@ void AModularHexGridActor::ClearCityPlaceholders()
 
 void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)
 {
+	ClearCivilisationBorders();
+
 	TArray<FIntPoint> OwnedTiles;
 
 	if (OwnerPlayerId != INDEX_NONE)
@@ -416,6 +421,21 @@ void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMate
 	RebuildCivilisationBordersForTiles(OwnedTiles, BorderMaterial, BorderFillMaterial);
 }
 
+void AModularHexGridActor::ClearCivilisationBorders()
+{
+	if (CivilisationBorderMesh)
+	{
+		CivilisationBorderMesh->ClearAllMeshSections();
+		CivilisationBorderMesh->SetVisibility(false);
+	}
+
+	if (CivilisationBorderFillMesh)
+	{
+		CivilisationBorderFillMesh->ClearAllMeshSections();
+		CivilisationBorderFillMesh->SetVisibility(false);
+	}
+}
+
 void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)
 {
 	if (!CivilisationBorderMesh)
@@ -423,19 +443,8 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 		return;
 	}
 
-	CivilisationBorderMesh->ClearAllMeshSections();
-	if (CivilisationBorderFillMesh)
-	{
-		CivilisationBorderFillMesh->ClearAllMeshSections();
-	}
-
 	if (OwnedTiles.Num() <= 0)
 	{
-		CivilisationBorderMesh->SetVisibility(false);
-		if (CivilisationBorderFillMesh)
-		{
-			CivilisationBorderFillMesh->SetVisibility(false);
-		}
 		return;
 	}
 
@@ -764,8 +773,9 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 	{
 		if (FillVertices.Num() > 0)
 		{
+			const int32 FillSectionIndex = CivilisationBorderFillMesh->GetNumSections();
 			CivilisationBorderFillMesh->CreateMeshSection(
-				0,
+				FillSectionIndex,
 				FillVertices,
 				FillTriangles,
 				FillNormals,
@@ -778,25 +788,21 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 			UMaterialInterface* EffectiveFillMaterial = BorderFillMaterial ? BorderFillMaterial : DefaultCivilisationBorderFillMaterial.Get();
 			if (EffectiveFillMaterial)
 			{
-				CivilisationBorderFillMesh->SetMaterial(0, EffectiveFillMaterial);
+				CivilisationBorderFillMesh->SetMaterial(FillSectionIndex, EffectiveFillMaterial);
 			}
 
 			CivilisationBorderFillMesh->SetVisibility(true);
-		}
-		else
-		{
-			CivilisationBorderFillMesh->SetVisibility(false);
 		}
 	}
 
 	if (Vertices.Num() <= 0)
 	{
-		CivilisationBorderMesh->SetVisibility(false);
 		return;
 	}
 
+	const int32 BorderSectionIndex = CivilisationBorderMesh->GetNumSections();
 	CivilisationBorderMesh->CreateMeshSection(
-		0,
+		BorderSectionIndex,
 		Vertices,
 		Triangles,
 		Normals,
@@ -809,7 +815,7 @@ void AModularHexGridActor::RebuildCivilisationBordersForTiles(const TArray<FIntP
 	UMaterialInterface* EffectiveMaterial = BorderMaterial ? BorderMaterial : DefaultCivilisationBorderMaterial.Get();
 	if (EffectiveMaterial)
 	{
-		CivilisationBorderMesh->SetMaterial(0, EffectiveMaterial);
+		CivilisationBorderMesh->SetMaterial(BorderSectionIndex, EffectiveMaterial);
 	}
 
 	CivilisationBorderMesh->SetVisibility(true);
@@ -953,8 +959,17 @@ void AModularHexGridActor::ClearExpansionCandidateHighlights()
 	}
 }
 
+void AModularHexGridActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AModularHexGridActor, ReplicatedSetupSettings);
+}
+
 void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
 {
+	ReplicatedSetupSettings = SetupSettings;
+
 	SizeSettings = SetupSettings.SizeSettings;
 
 	SetMapTypePreset(SetupSettings.MapTypePreset);
@@ -985,6 +1000,21 @@ void AModularHexGridActor::ApplyGameSetupSettings(const FConquestGameSetupSettin
 	if (HasActorBegunPlay() && bGenerateOnBeginPlay)
 	{
 		RebuildGrid();
+	}
+}
+
+void AModularHexGridActor::OnRep_ReplicatedSetupSettings()
+{
+	ApplyGameSetupSettings(ReplicatedSetupSettings);
+
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->ActiveGridActor == this)
+		{
+			ConquestGS->RebuildCityVisualsFromReplicatedState();
+			ConquestGS->RebuildUnitVisualsFromReplicatedState();
+			ConquestGS->OnConquestStateChanged.Broadcast();
+		}
 	}
 }
 

@@ -68,10 +68,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|City")
 	bool FoundStartingCityForPlayer(int32 PlayerId, const FIntPoint& TileCoord, FName CityName);
 
+	bool SetLobbySlotCivilisationForPlayer(int32 PlayerId, int32 SlotIndex, UConquestCivilisationData* Civilisation);
+	void SetLobbyReadyForPlayer(int32 PlayerId, bool bReady);
+	bool AreAllLobbyHumanPlayersReady() const;
+
 private:
 	int32 NextAssignedPlayerId = 0;
 
+	void SyncAvailableCivilisationsToGameState();
+	void AssignPlayerToLobbySlot(int32 PlayerId, const FString& PlayerName);
 	void InitializeEmpiresFromLobby();
+	bool HaveAllHumanPlayersFoundedStartingCities(const AConquestGameState& ConquestGS) const;
 	bool AreAllHumanPlayersReady(const AConquestGameState& ConquestGS) const;
 	TArray<int32> GetHumanPlayerIds(const AConquestGameState& ConquestGS) const;
 	bool DoesPlayerOwnCity(const AConquestGameState& ConquestGS, int32 PlayerId, int32 CityId) const;

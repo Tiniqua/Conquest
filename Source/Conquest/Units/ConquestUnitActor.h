@@ -7,10 +7,12 @@
 #include "ConquestUnitActor.generated.h"
 
 class AModularHexGridActor;
+class UConquestUnitWorldIconWidget;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
+class UWidgetComponent;
 
 UCLASS()
 class CONQUEST_API AConquestUnitActor : public AActor
@@ -23,10 +25,21 @@ public:
 	void InitializeUnit(
 		const FConquestUnitState& InUnitState,
 		const FConquestUnitRow& InUnitRow,
-		AModularHexGridActor* InGridActor
+		AModularHexGridActor* InGridActor,
+		const FText& UnitName = FText::GetEmpty(),
+		const FText& CivilisationName = FText::GetEmpty(),
+		FLinearColor UnitDisplayColor = FLinearColor::White,
+		UMaterialInterface* UnitIconMaterial = nullptr
 	);
 
-	void RefreshUnitVisuals(const FConquestUnitState& InUnitState, const FConquestUnitRow& InUnitRow);
+	void RefreshUnitVisuals(
+		const FConquestUnitState& InUnitState,
+		const FConquestUnitRow& InUnitRow,
+		const FText& UnitName = FText::GetEmpty(),
+		const FText& CivilisationName = FText::GetEmpty(),
+		FLinearColor UnitDisplayColor = FLinearColor::White,
+		UMaterialInterface* UnitIconMaterial = nullptr
+	);
 	void SetSelected(bool bSelected, UMaterialInterface* SelectionMaterial = nullptr);
 	void MoveToTile(const FIntPoint& NewCoord);
 
@@ -49,6 +62,24 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UProceduralMeshComponent> SelectionMesh = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UWidgetComponent> UnitWorldIconComponent = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
+	TSubclassOf<UConquestUnitWorldIconWidget> UnitWorldIconWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
+	FVector UnitWorldIconOffset = FVector(0.0f, 0.0f, 125.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
+	FRotator UnitWorldIconRotation = FRotator(60.0f, 0.0f, 90.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
+	FVector2D UnitWorldIconDrawSize = FVector2D(180.0f, 64.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
+	float UnitWorldIconScale = 1.0f;
+
 private:
 	UPROPERTY()
 	TObjectPtr<AModularHexGridActor> GridActor = nullptr;
@@ -65,6 +96,14 @@ private:
 	FRotator UnitMeshRotation = FRotator::ZeroRotator;
 
 	void RebuildMeshInstances();
+	void ConfigureUnitWorldIconComponent();
+	void UpdateUnitWorldIconTransform();
+	void UpdateUnitWorldIcon(
+		const FText& UnitName,
+		const FText& CivilisationName,
+		FLinearColor UnitDisplayColor,
+		UMaterialInterface* UnitIconMaterial
+	);
 	void RebuildSelectionMesh(UMaterialInterface* SelectionMaterial);
 	void ClearSelectionMesh();
 

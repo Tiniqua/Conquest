@@ -48,6 +48,9 @@ struct FConquestReplicatedGameState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<int32> ReadyPlayerIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
 };
 
 UCLASS()
@@ -109,6 +112,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
 	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
+	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	FConquestPlayerEmpireState HumanPlayer;
 
@@ -157,6 +163,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	void SetAvailableCivilisations(const TArray<UConquestCivilisationData*>& InAvailableCivilisations);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	void SetLobbyPlayerSlots(const TArray<FConquestLobbyPlayerSlot>& InLobbyPlayerSlots);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	bool SetLobbySlotCivilisationForPlayer(int32 RequestingPlayerId, int32 SlotIndex, UConquestCivilisationData* Civilisation);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
+	void SetLobbyPlayerReady(int32 PlayerId, bool bReady);
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Players")
+	int32 GetReadyHumanPlayerCount() const;
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Players")
+	int32 GetRequiredReadyHumanPlayerCount() const;
+
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	UConquestCivilisationData* GetCivilisationForPlayer(int32 PlayerId) const;
 
@@ -166,8 +190,14 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyUnitAction(int32 UnitInstanceId, int32 PlayerId, FName ActionId);
 	
-	UPROPERTY(BlueprintReadWrite, Category="Conquest|Map")
+	UPROPERTY(ReplicatedUsing=OnRep_ActiveGridActor, BlueprintReadWrite, Category="Conquest|Map")
 	TObjectPtr<AModularHexGridActor> ActiveGridActor;
+
+	UFUNCTION()
+	void OnRep_ActiveGridActor();
+
+	void RebuildCityVisualsFromReplicatedState();
+	void RebuildUnitVisualsFromReplicatedState();
 
 	FHexGridModel* GetHexGridModelMutable();
 	const FHexGridModel* GetHexGridModel() const;

@@ -26,6 +26,10 @@ public class Conquest : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
-		DynamicallyLoadedModuleNames.Add("OnlineSubsystemSteam");
+		DynamicallyLoadedModuleNames.AddRange(new string[]
+		{
+			"OnlineSubsystemNull",
+			"OnlineSubsystemSteam"
+		});
 	}
 }

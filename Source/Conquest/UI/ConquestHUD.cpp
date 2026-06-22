@@ -157,7 +157,21 @@ void AConquestHUD::BeginPlay()
 		}
 	}
 
-	ShowMainMenu();
+	if (
+		UWorld* World = GetWorld();
+		World &&
+		(
+			World->URL.HasOption(TEXT("ConquestHostSetup")) ||
+			World->URL.HasOption(TEXT("ConquestJoinSetup"))
+		)
+	)
+	{
+		ShowGameSetup();
+	}
+	else
+	{
+		ShowMainMenu();
+	}
 }
 
 void AConquestHUD::ShowMainMenu()

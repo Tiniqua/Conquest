@@ -682,6 +682,8 @@ void AConquestHUD::ClearUnitSelection()
 
 	ConquestGS->SelectedUnitInstanceId = INDEX_NONE;
 	ClearUnitMovementHighlights();
+	ClearUnitAttackHighlights();
+	ClearUnitAugmentChoices();
 
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
@@ -739,6 +741,20 @@ void AConquestHUD::ClearUnitMovementHighlights()
 	}
 }
 
+void AConquestHUD::ClearUnitAttackHighlights()
+{
+	CurrentUnitAttackTiles.Reset();
+
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (ConquestGS && ConquestGS->ActiveGridActor)
+	{
+		ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+	}
+}
+
 bool AConquestHUD::EnterSelectedUnitMoveMode()
 {
 	AConquestGameState* ConquestGS = GetWorld()
@@ -749,6 +765,9 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 	{
 		return false;
 	}
+
+	ClearUnitAttackHighlights();
+	ClearUnitAugmentChoices();
 
 	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
 	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
@@ -879,6 +898,61 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 	return ReachableTiles.Num() > 0;
 }
 
+bool AConquestHUD::EnterSelectedUnitAttackMode()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ActiveGridActor || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	ClearUnitMovementHighlights();
+	ClearUnitAugmentChoices();
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearUnitAttackHighlights();
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	if (!GridModel || !GridModel->IsValidTile(SelectedUnit->TileCoord.X, SelectedUnit->TileCoord.Y))
+	{
+		ClearUnitAttackHighlights();
+		return false;
+	}
+
+	CurrentUnitAttackTiles.Reset();
+	const int32 AttackRange = FMath::Max(1, SelectedUnit->CachedAttackRange);
+	const TArray<FIntPoint> CoordsInRange = GridModel->GetCoordsInRange(SelectedUnit->TileCoord, AttackRange);
+	for (const FIntPoint& Coord : CoordsInRange)
+	{
+		if (Coord != SelectedUnit->TileCoord && GridModel->IsValidTile(Coord.X, Coord.Y))
+		{
+			CurrentUnitAttackTiles.Add(Coord);
+		}
+	}
+
+	TArray<FIntPoint> AttackTiles = CurrentUnitAttackTiles.Array();
+	UMaterialInterface* HighlightMaterial = nullptr;
+	if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =
+		ConquestGS->UnitActorsByInstanceId.Find(SelectedUnit->UnitInstanceId))
+	{
+		if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+		{
+			HighlightMaterial = UnitActor->GetAttackRangeMaterial();
+		}
+	}
+
+	ConquestGS->ActiveGridActor->RebuildExpansionCandidateHighlights(AttackTiles, HighlightMaterial);
+	return AttackTiles.Num() > 0;
+}
+
 bool AConquestHUD::TryMoveSelectedUnitToTile(int32 Q, int32 R)
 {
 	AConquestGameState* ConquestGS = GetWorld()
@@ -932,9 +1006,228 @@ bool AConquestHUD::TryMoveSelectedUnitToTile(int32 Q, int32 R)
 	return true;
 }
 
+bool AConquestHUD::TryAttackSelectedUnitAtTile(int32 Q, int32 R)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FIntPoint TargetCoord(Q, R);
+	if (!CurrentUnitAttackTiles.Contains(TargetCoord))
+	{
+		EnterSelectedUnitAttackMode();
+	}
+
+	if (!CurrentUnitAttackTiles.Contains(TargetCoord))
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	int32 DefenderUnitInstanceId = INDEX_NONE;
+	for (const FConquestPlayerEmpireState& OtherPlayer : ConquestGS->PlayerEmpires)
+	{
+		if (OtherPlayer.PlayerId == Player.PlayerId)
+		{
+			continue;
+		}
+
+		for (const FConquestUnitState& OtherUnit : OtherPlayer.Units)
+		{
+			if (OtherUnit.TileCoord == TargetCoord)
+			{
+				DefenderUnitInstanceId = OtherUnit.UnitInstanceId;
+				break;
+			}
+		}
+
+		if (DefenderUnitInstanceId != INDEX_NONE)
+		{
+			break;
+		}
+	}
+
+	if (DefenderUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestAttackUnit(SelectedUnit->UnitInstanceId, DefenderUnitInstanceId);
+	}
+
+	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+	ClearUnitAttackHighlights();
+	if (SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearUnitSelection();
+	}
+	else
+	{
+		RefreshSelectedUnitWidget(*SelectedUnit);
+	}
+
+	return true;
+}
+
 bool AConquestHUD::IsSelectedUnitMovementTile(int32 Q, int32 R) const
 {
 	return CurrentUnitMovementRemainingByTile.Contains(FIntPoint(Q, R));
+}
+
+bool AConquestHUD::IsSelectedUnitAttackTile(int32 Q, int32 R) const
+{
+	return CurrentUnitAttackTiles.Contains(FIntPoint(Q, R));
+}
+
+bool AConquestHUD::ShowAugmentChoicesForSelectedUnit()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ContentManager || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	ClearUnitMovementHighlights();
+	ClearUnitAttackHighlights();
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayerMutable();
+	FConquestUnitState* SelectedUnit = ConquestHUDFindUnitMutable(Player, ConquestGS->SelectedUnitInstanceId);
+	if (!SelectedUnit)
+	{
+		return false;
+	}
+
+	if (ConquestGS->CityManager)
+	{
+		ConquestGS->CityManager->RecalculateStrategicResourceEconomy(Player.PlayerId);
+	}
+
+	const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(SelectedUnit->UnitId);
+	if (!UnitRow)
+	{
+		return false;
+	}
+
+	TArray<const FConquestUnitAugmentRow*> AugmentRows;
+	ConquestGS->ContentManager->GetAllUnitAugments(AugmentRows);
+
+	TArray<FConquestChoiceButtonData> AugmentChoices;
+	for (const FConquestUnitAugmentRow* AugmentRow : AugmentRows)
+	{
+		if (!AugmentRow || AugmentRow->AugmentId.IsNone())
+		{
+			continue;
+		}
+
+		if (UnitRow->AllowedAugmentIds.Num() > 0 && !UnitRow->AllowedAugmentIds.Contains(AugmentRow->AugmentId))
+		{
+			continue;
+		}
+
+		const bool bAlreadyApplied = SelectedUnit->Augments.ContainsByPredicate([AugmentRow](const FConquestUnitAugmentState& Augment)
+		{
+			return Augment.AugmentId == AugmentRow->AugmentId;
+		});
+
+		TArray<FString> CostParts;
+		bool bCanAfford = !bAlreadyApplied;
+		for (const FConquestStrategicResourceCost& Cost : AugmentRow->ResourceCosts)
+		{
+			if (Cost.ResourceId.IsNone() || Cost.Amount <= 0)
+			{
+				continue;
+			}
+
+			const FConquestStrategicResourceStockpile* Stockpile = Player.FindStrategicResource(Cost.ResourceId);
+			const int32 Stored = Stockpile ? Stockpile->Stored : 0;
+			CostParts.Add(FString::Printf(TEXT("%s %d/%d"), *Cost.ResourceId.ToString(), Stored, Cost.Amount));
+			if (Stored < Cost.Amount)
+			{
+				bCanAfford = false;
+			}
+		}
+
+		FConquestChoiceButtonData ChoiceData;
+		ChoiceData.ChoiceType = EConquestChoiceType::UnitAugment;
+		ChoiceData.ChoiceId = AugmentRow->AugmentId;
+		ChoiceData.Title = !AugmentRow->DisplayName.IsEmpty()
+			? AugmentRow->DisplayName
+			: FText::FromName(AugmentRow->AugmentId);
+		ChoiceData.Subtitle = FText::FromString(CostParts.Num() > 0 ? FString::Join(CostParts, TEXT(" | ")) : TEXT("No strategic cost"));
+		ChoiceData.DetailText = AugmentRow->Description;
+		ChoiceData.bEnabled = bCanAfford;
+
+		if (bAlreadyApplied)
+		{
+			ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "UnitAugmentAlreadyApplied", "Already applied");
+			ChoiceData.DetailText = ChoiceData.DisabledReason;
+		}
+		else if (!bCanAfford)
+		{
+			ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "UnitAugmentCantAfford", "Not enough strategic resources");
+			ChoiceData.DetailText = ChoiceData.DisabledReason;
+		}
+
+		AugmentChoices.Add(ChoiceData);
+	}
+
+	PendingAugmentUnitInstanceId = SelectedUnit->UnitInstanceId;
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ShowUnitAugmentChoices(PendingAugmentUnitInstanceId, AugmentChoices);
+	}
+
+	return AugmentChoices.Num() > 0;
+}
+
+bool AConquestHUD::PurchaseSelectedUnitAugment(FName AugmentId)
+{
+	if (PendingAugmentUnitInstanceId == INDEX_NONE || AugmentId.IsNone())
+	{
+		return false;
+	}
+
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		ConquestPC->RequestApplyUnitAugment(PendingAugmentUnitInstanceId, AugmentId);
+	}
+	else
+	{
+		return false;
+	}
+
+	ClearUnitAugmentChoices();
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->RefreshTopBarYieldInfo();
+	}
+	return true;
+}
+
+void AConquestHUD::ClearUnitAugmentChoices()
+{
+	PendingAugmentUnitInstanceId = INDEX_NONE;
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearUnitAugmentChoices();
+	}
 }
 
 bool AConquestHUD::FortifySelectedUnit()

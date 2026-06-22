@@ -36,6 +36,9 @@ struct FConquestUnitAugmentState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 FlatBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MultiplierBonus = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -72,6 +75,9 @@ struct FConquestUnitState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FConquestUnitAugmentState> Augments;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestUnitCombatModifier> CombatModifiers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CachedStrength = 0;

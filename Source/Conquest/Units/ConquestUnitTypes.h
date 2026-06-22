@@ -14,7 +14,34 @@ enum class EConquestUnitAugmentStat : uint8
 	AttackRange,
 	MaxHealth,
 	HealthRegen,
-	Movement
+	Movement,
+	AttackMultiplier,
+	DefenseMultiplier
+};
+
+UENUM(BlueprintType)
+enum class EConquestUnitCombatModifierType : uint8
+{
+	Attack,
+	Defense
+};
+
+USTRUCT(BlueprintType)
+struct FConquestUnitCombatModifier
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ModifierId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EConquestUnitCombatModifierType ModifierType = EConquestUnitCombatModifierType::Attack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Multiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 FlatBonus = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -48,6 +75,9 @@ struct FConquestUnitAugmentRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 FlatBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	float MultiplierBonus = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FConquestStrategicResourceCost> ResourceCosts;
@@ -105,6 +135,9 @@ struct FConquestUnitRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actions")
 	bool bCanFoundCity = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actions")
+	TArray<FName> AllowedAugmentIds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<UStaticMesh> UnitMesh = nullptr;

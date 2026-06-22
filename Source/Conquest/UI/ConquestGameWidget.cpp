@@ -126,6 +126,37 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 				FText::AsNumber(YieldData.Happiness)
 			)
 	);
+
+	auto FindStockpile = [&YieldData](FName ResourceId) -> const FConquestStrategicResourceStockpile*
+	{
+		return YieldData.StrategicResources.FindByPredicate([ResourceId](const FConquestStrategicResourceStockpile& Stockpile)
+		{
+			return Stockpile.ResourceId == ResourceId;
+		});
+	};
+
+	auto FormatStrategicResource = [&FindStockpile](const TCHAR* Label, FName ResourceId)
+	{
+		const FConquestStrategicResourceStockpile* Stockpile = FindStockpile(ResourceId);
+		const int32 Stored = Stockpile ? Stockpile->Stored : 0;
+		const int32 Cap = Stockpile ? Stockpile->Cap : 0;
+		return FText::FromString(FString::Printf(TEXT("%s: %d/%d"), Label, Stored, Cap));
+	};
+
+	SetText(TopBarHorsesText, FormatStrategicResource(TEXT("Horses"), FName(TEXT("Horses"))));
+	SetText(TopBarIronText, FormatStrategicResource(TEXT("Iron"), FName(TEXT("Iron"))));
+	SetText(TopBarCoalText, FormatStrategicResource(TEXT("Coal"), FName(TEXT("Coal"))));
+	SetText(TopBarAluminiumText, FormatStrategicResource(TEXT("Aluminium"), FName(TEXT("Aluminium"))));
+	SetText(
+		TopBarStrategicResourcesText,
+		FText::Format(
+			NSLOCTEXT("Conquest", "TopBarStrategicResourcesFormat", "Strategic: {0} | {1} | {2} | {3}"),
+			FormatStrategicResource(TEXT("Horses"), FName(TEXT("Horses"))),
+			FormatStrategicResource(TEXT("Iron"), FName(TEXT("Iron"))),
+			FormatStrategicResource(TEXT("Coal"), FName(TEXT("Coal"))),
+			FormatStrategicResource(TEXT("Aluminium"), FName(TEXT("Aluminium")))
+		)
+	);
 }
 
 void UConquestGameWidget::ClearTileTexts()
@@ -180,6 +211,12 @@ void UConquestGameWidget::NativeConstruct()
 		TileImprovementCloseButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleTileImprovementCloseClicked);
 	}
 
+	if (UnitAugmentCloseButton)
+	{
+		UnitAugmentCloseButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleUnitAugmentCloseClicked);
+		UnitAugmentCloseButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleUnitAugmentCloseClicked);
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
@@ -201,6 +238,7 @@ void UConquestGameWidget::NativeConstruct()
 	ClearHoveredTileInfo();
 	ClearTileExpansionConfirmation();
 	ClearTileImprovementChoices();
+	ClearUnitAugmentChoices();
 	ClearSelectedUnitInfo();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
@@ -329,6 +367,7 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 	Result.EmpireYieldPerTurn = LocalPlayer.CachedYieldPerTurn;
 	Result.Happiness = LocalPlayer.CachedHappiness;
 	Result.bIsUnhappy = LocalPlayer.CachedHappiness < 0;
+	Result.StrategicResources = LocalPlayer.StrategicResources;
 	Result.SelectedCityId = SelectedCityYieldContextId;
 	Result.bShowSelectedCityLocalYields = SelectedCityYieldContextId != INDEX_NONE;
 
@@ -355,6 +394,10 @@ void UConquestGameWidget::RefreshTopBarYieldInfo()
 		if (ConquestGS->YieldManager)
 		{
 			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(ConquestGS->GetHumanPlayer().PlayerId);
+		}
+		if (ConquestGS->CityManager)
+		{
+			ConquestGS->CityManager->RecalculateStrategicResourceEconomy(ConquestGS->GetHumanPlayer().PlayerId);
 		}
 	}
 
@@ -482,6 +525,8 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 			TArray<FUnitActionButtonDefinition> ActionDefinitions =
 			{
 				{ FName(TEXT("Move")), NSLOCTEXT("Conquest", "UnitActionMove", "Move") },
+				{ FName(TEXT("Attack")), NSLOCTEXT("Conquest", "UnitActionAttack", "Attack") },
+				{ FName(TEXT("Augment")), NSLOCTEXT("Conquest", "UnitActionAugment", "Augment") },
 				{ FName(TEXT("Fortify")), NSLOCTEXT("Conquest", "UnitActionFortify", "Fortify") },
 				{ FName(TEXT("DoNothing")), NSLOCTEXT("Conquest", "UnitActionDoNothing", "Do Nothing") },
 				{ FName(TEXT("Sleep")), NSLOCTEXT("Conquest", "UnitActionSleep", "Sleep") },
@@ -593,6 +638,7 @@ bool UConquestGameWidget::IsUnitActionEnabled(FName ActionId, const FConquestSel
 	}
 
 	if (ActionId == FName(TEXT("Move")) ||
+		ActionId == FName(TEXT("Attack")) ||
 		ActionId == FName(TEXT("Fortify")) ||
 		ActionId == FName(TEXT("DoNothing")))
 	{
@@ -739,6 +785,70 @@ void UConquestGameWidget::ClearTileImprovementChoices()
 	}
 }
 
+void UConquestGameWidget::ShowUnitAugmentChoices(
+	int32 UnitInstanceId,
+	const TArray<FConquestChoiceButtonData>& AugmentChoices
+)
+{
+	PendingUnitAugmentUnitInstanceId = UnitInstanceId;
+
+	if (UnitInstanceId == INDEX_NONE || AugmentChoices.Num() <= 0)
+	{
+		ClearUnitAugmentChoices();
+		return;
+	}
+
+	SetWidgetVisibility(UnitAugmentChoicePanel, ESlateVisibility::Visible);
+	SetText(UnitAugmentTitleText, NSLOCTEXT("Conquest", "UnitAugmentTitle", "Augment Unit"));
+
+	if (!UnitAugmentButtonBox)
+	{
+		return;
+	}
+
+	UnitAugmentButtonBox->ClearChildren();
+
+	if (!ChoiceButtonWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ConquestGameWidget: ChoiceButtonWidgetClass is not set for unit augments."));
+		return;
+	}
+
+	for (const FConquestChoiceButtonData& AugmentChoice : AugmentChoices)
+	{
+		UConquestChoiceButtonWidget* ChoiceButton =
+			CreateWidget<UConquestChoiceButtonWidget>(GetOwningPlayer(), ChoiceButtonWidgetClass);
+		if (!ChoiceButton)
+		{
+			continue;
+		}
+
+		ChoiceButton->SetupChoiceButton(AugmentChoice);
+		ChoiceButton->OnChoiceClicked.RemoveDynamic(
+			this,
+			&UConquestGameWidget::HandleUnitAugmentChoiceClicked
+		);
+		ChoiceButton->OnChoiceClicked.AddDynamic(
+			this,
+			&UConquestGameWidget::HandleUnitAugmentChoiceClicked
+		);
+
+		UnitAugmentButtonBox->AddChild(ChoiceButton);
+	}
+}
+
+void UConquestGameWidget::ClearUnitAugmentChoices()
+{
+	PendingUnitAugmentUnitInstanceId = INDEX_NONE;
+	SetWidgetVisibility(UnitAugmentChoicePanel, ESlateVisibility::Collapsed);
+	ClearText(UnitAugmentTitleText);
+
+	if (UnitAugmentButtonBox)
+	{
+		UnitAugmentButtonBox->ClearChildren();
+	}
+}
+
 void UConquestGameWidget::HandleTileExpansionConfirmClicked()
 {
 	APlayerController* PC = GetOwningPlayer();
@@ -792,6 +902,38 @@ void UConquestGameWidget::HandleTileImprovementCloseClicked()
 	}
 }
 
+void UConquestGameWidget::HandleUnitAugmentChoiceClicked(const FConquestChoiceButtonData& ChoiceData)
+{
+	if (
+		PendingUnitAugmentUnitInstanceId == INDEX_NONE ||
+		ChoiceData.ChoiceType != EConquestChoiceType::UnitAugment
+	)
+	{
+		return;
+	}
+
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->PurchaseSelectedUnitAugment(ChoiceData.ChoiceId);
+	}
+}
+
+void UConquestGameWidget::HandleUnitAugmentCloseClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->ClearUnitAugmentChoices();
+	}
+	else
+	{
+		ClearUnitAugmentChoices();
+	}
+}
+
 void UConquestGameWidget::HandleUnitActionClicked(FName ActionId)
 {
 	APlayerController* PC = GetOwningPlayer();
@@ -804,6 +946,14 @@ void UConquestGameWidget::HandleUnitActionClicked(FName ActionId)
 	if (ActionId == FName(TEXT("Move")))
 	{
 		ConquestHUD->EnterSelectedUnitMoveMode();
+	}
+	else if (ActionId == FName(TEXT("Attack")))
+	{
+		ConquestHUD->EnterSelectedUnitAttackMode();
+	}
+	else if (ActionId == FName(TEXT("Augment")))
+	{
+		ConquestHUD->ShowAugmentChoicesForSelectedUnit();
 	}
 	else if (ActionId == FName(TEXT("Fortify")))
 	{

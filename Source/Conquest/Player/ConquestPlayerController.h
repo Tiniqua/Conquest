@@ -46,6 +46,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
 	void RequestUnitAction(int32 UnitInstanceId, FName ActionId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	void RequestApplyUnitAugment(int32 UnitInstanceId, FName AugmentId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	void RequestAttackUnit(int32 AttackerUnitInstanceId, int32 DefenderUnitInstanceId);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|Lobby")
 	void RequestSetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation);
 
@@ -81,6 +87,12 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestUnitAction(int32 UnitInstanceId, FName ActionId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestApplyUnitAugment(int32 UnitInstanceId, FName AugmentId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestAttackUnit(int32 AttackerUnitInstanceId, int32 DefenderUnitInstanceId);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation);

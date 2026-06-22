@@ -109,8 +109,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	bool TryMoveSelectedUnitToTile(int32 Q, int32 R);
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool EnterSelectedUnitAttackMode();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool TryAttackSelectedUnitAtTile(int32 Q, int32 R);
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
 	bool IsSelectedUnitMovementTile(int32 Q, int32 R) const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
+	bool IsSelectedUnitAttackTile(int32 Q, int32 R) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool ShowAugmentChoicesForSelectedUnit();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	bool PurchaseSelectedUnitAugment(FName AugmentId);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearUnitAugmentChoices();
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	bool FortifySelectedUnit();
@@ -129,6 +147,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void ClearUnitMovementHighlights();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearUnitAttackHighlights();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
@@ -160,6 +181,8 @@ protected:
 	FIntPoint PendingImprovementTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 	int32 HiddenCityWorldLabelId = INDEX_NONE;
 	TMap<FIntPoint, int32> CurrentUnitMovementRemainingByTile;
+	TSet<FIntPoint> CurrentUnitAttackTiles;
+	int32 PendingAugmentUnitInstanceId = INDEX_NONE;
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();

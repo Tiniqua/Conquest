@@ -140,6 +140,30 @@ void AConquestPlayerController::RequestUnitAction(int32 UnitInstanceId, FName Ac
 	}
 }
 
+void AConquestPlayerController::RequestApplyUnitAugment(int32 UnitInstanceId, FName AugmentId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestApplyUnitAugment_Implementation(UnitInstanceId, AugmentId);
+	}
+	else
+	{
+		ServerRequestApplyUnitAugment(UnitInstanceId, AugmentId);
+	}
+}
+
+void AConquestPlayerController::RequestAttackUnit(int32 AttackerUnitInstanceId, int32 DefenderUnitInstanceId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestAttackUnit_Implementation(AttackerUnitInstanceId, DefenderUnitInstanceId);
+	}
+	else
+	{
+		ServerRequestAttackUnit(AttackerUnitInstanceId, DefenderUnitInstanceId);
+	}
+}
+
 void AConquestPlayerController::RequestSetLobbySlotCivilisation(
 	int32 SlotIndex,
 	UConquestCivilisationData* Civilisation
@@ -232,6 +256,25 @@ void AConquestPlayerController::ServerRequestUnitAction_Implementation(int32 Uni
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->ApplyUnitActionForPlayer(AssignedPlayerId, UnitInstanceId, ActionId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestApplyUnitAugment_Implementation(int32 UnitInstanceId, FName AugmentId)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->ApplyUnitAugmentForPlayer(AssignedPlayerId, UnitInstanceId, AugmentId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestAttackUnit_Implementation(
+	int32 AttackerUnitInstanceId,
+	int32 DefenderUnitInstanceId
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->AttackUnitForPlayer(AssignedPlayerId, AttackerUnitInstanceId, DefenderUnitInstanceId);
 	}
 }
 

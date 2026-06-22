@@ -476,6 +476,11 @@ void AConquestPawn::HandlePrimaryClick()
 				return;
 			}
 
+			if (ConquestHUD->IsSelectedUnitAttackTile(Q, R) && ConquestHUD->TryAttackSelectedUnitAtTile(Q, R))
+			{
+				return;
+			}
+
 			if (ConquestHUD->ShowTileImprovementChoicesForTile(Q, R))
 			{
 				ConquestHUD->ClearUnitSelection();
@@ -514,6 +519,11 @@ void AConquestPawn::HandleSecondaryClick()
 	{
 		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
 		{
+			if (ConquestHUD->TryAttackSelectedUnitAtTile(Q, R))
+			{
+				return;
+			}
+
 			if (ConquestHUD->TryMoveSelectedUnitToTile(Q, R))
 			{
 				return;

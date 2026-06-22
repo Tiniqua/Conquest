@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Conquest/UI/ConquestChoiceTypes.h"
@@ -114,6 +115,9 @@ struct FConquestTopBarYieldData
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
 	bool bIsUnhappy = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	TArray<FConquestStrategicResourceStockpile> StrategicResources;
 };
 
 USTRUCT(BlueprintType)
@@ -214,6 +218,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Improvement")
 	void ClearTileImprovementChoices();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ShowUnitAugmentChoices(int32 UnitInstanceId, const TArray<FConquestChoiceButtonData>& AugmentChoices);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
+	void ClearUnitAugmentChoices();
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	FConquestTopBarYieldData GetTopBarYieldData() const;
@@ -319,6 +329,21 @@ protected:
 	TObjectPtr<UTextBlock> TopBarHappinessText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarStrategicResourcesText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarHorsesText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarIronText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarCoalText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TopBarAluminiumText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CurrentResearchText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -350,6 +375,18 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> TileImprovementCloseButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> UnitAugmentChoicePanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> UnitAugmentTitleText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> UnitAugmentButtonBox = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> UnitAugmentCloseButton = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
 	TSubclassOf<UConquestChoiceButtonWidget> ChoiceButtonWidgetClass;
@@ -384,6 +421,7 @@ private:
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
 	FConquestTileImprovementChoiceData PendingTileImprovementChoice;
+	int32 PendingUnitAugmentUnitInstanceId = INDEX_NONE;
 
 	UFUNCTION()
 	void HandleTileExpansionConfirmClicked();
@@ -396,6 +434,12 @@ private:
 
 	UFUNCTION()
 	void HandleTileImprovementCloseClicked();
+
+	UFUNCTION()
+	void HandleUnitAugmentChoiceClicked(const FConquestChoiceButtonData& ChoiceData);
+
+	UFUNCTION()
+	void HandleUnitAugmentCloseClicked();
 
 	UFUNCTION()
 	void HandleUnitActionClicked(FName ActionId);

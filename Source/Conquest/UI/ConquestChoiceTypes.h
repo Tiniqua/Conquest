@@ -16,6 +16,7 @@ enum class EConquestChoiceType : uint8
 	ResearchTech,
 	PolicyTenet,
 	TileImprovement,
+	UnitAugment,
 
 	GenericAction
 };

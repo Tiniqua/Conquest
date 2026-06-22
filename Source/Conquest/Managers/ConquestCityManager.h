@@ -78,6 +78,12 @@ public:
 	bool PurchaseTileImprovementForPlayer(int32 PlayerId, const FIntPoint& Coord, FName ImprovementId);
 
 	UFUNCTION(BlueprintCallable)
+	void RecalculateStrategicResourceEconomy(int32 PlayerId);
+
+	UFUNCTION(BlueprintCallable)
+	void RecalculateUnitStats(FConquestUnitState& Unit) const;
+
+	UFUNCTION(BlueprintCallable)
 	bool RefreshCityYields(int32 CityId);
 
 	UFUNCTION(BlueprintPure)
@@ -119,9 +125,7 @@ private:
 	void RecalculateCityYields(FCityState& City);
 	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
 	void RecalculateEmpireYields(int32 PlayerId);
-	void RecalculateStrategicResourceEconomy(int32 PlayerId);
 	void AccumulateStrategicResourceIncome(int32 PlayerId);
-	void RecalculateUnitStats(FConquestUnitState& Unit) const;
 	int32 CreateUnitFromProduction(const FCityState& City, FName UnitId);
 	void SpawnUnitActorForState(const FConquestUnitState& UnitState);
 	void UpdateOwnedTileVisuals(int32 PlayerId);

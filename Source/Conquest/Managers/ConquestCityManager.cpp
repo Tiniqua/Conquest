@@ -643,6 +643,9 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 		case EConquestUnitAugmentStat::Movement:
 			Unit.CachedMovementPoints += Augment.FlatBonus;
 			break;
+		case EConquestUnitAugmentStat::AttackMultiplier:
+		case EConquestUnitAugmentStat::DefenseMultiplier:
+			break;
 		default:
 			break;
 		}

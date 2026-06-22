@@ -24,6 +24,115 @@ namespace
 		});
 	}
 
+	FConquestUnitState* FindUnitMutableById(
+		TArray<FConquestPlayerEmpireState>& Players,
+		int32 UnitInstanceId,
+		int32* OutOwnerPlayerId = nullptr
+	)
+	{
+		for (FConquestPlayerEmpireState& Player : Players)
+		{
+			if (FConquestUnitState* Unit = FindUnitMutable(Player, UnitInstanceId))
+			{
+				if (OutOwnerPlayerId)
+				{
+					*OutOwnerPlayerId = Player.PlayerId;
+				}
+				return Unit;
+			}
+		}
+
+		return nullptr;
+	}
+
+	float GetUnitHealthCombatMultiplier(const FConquestUnitState& Unit)
+	{
+		return FMath::Clamp(
+			static_cast<float>(FMath::Max(1, Unit.CurrentHealth)) /
+			static_cast<float>(FMath::Max(1, Unit.CachedMaxHealth)),
+			0.01f,
+			1.0f
+		);
+	}
+
+	float GetUnitCombatValue(const FConquestUnitState& Unit, EConquestUnitCombatModifierType ModifierType)
+	{
+		float Value = static_cast<float>(FMath::Max(1, Unit.CachedStrength));
+		float Multiplier = GetUnitHealthCombatMultiplier(Unit);
+
+		for (const FConquestUnitCombatModifier& Modifier : Unit.CombatModifiers)
+		{
+			if (Modifier.ModifierType != ModifierType)
+			{
+				continue;
+			}
+
+			Value += static_cast<float>(Modifier.FlatBonus);
+			Multiplier *= FMath::Max(0.0f, Modifier.Multiplier);
+		}
+
+		return FMath::Max(1.0f, Value * Multiplier);
+	}
+
+	int32 CalculateDeterministicCombatDamage(float AttackerValue, float DefenderValue, float EqualStrengthDamage)
+	{
+		const float Ratio = AttackerValue / FMath::Max(1.0f, DefenderValue);
+		return FMath::Clamp(FMath::RoundToInt(EqualStrengthDamage * Ratio), 1, 100);
+	}
+
+	void DestroyUnitActor(AConquestGameState& GameState, int32 UnitInstanceId)
+	{
+		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = GameState.UnitActorsByInstanceId.Find(UnitInstanceId))
+		{
+			if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+			{
+				UnitActor->Destroy();
+			}
+			GameState.UnitActorsByInstanceId.Remove(UnitInstanceId);
+		}
+	}
+
+	bool CanPayStrategicResourceCosts(
+		const FConquestPlayerEmpireState& Player,
+		const TArray<FConquestStrategicResourceCost>& Costs
+	)
+	{
+		for (const FConquestStrategicResourceCost& Cost : Costs)
+		{
+			if (Cost.ResourceId.IsNone() || Cost.Amount <= 0)
+			{
+				continue;
+			}
+
+			const FConquestStrategicResourceStockpile* Stockpile = Player.FindStrategicResource(Cost.ResourceId);
+			if (!Stockpile || Stockpile->Stored < Cost.Amount)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	void PayStrategicResourceCosts(
+		FConquestPlayerEmpireState& Player,
+		const TArray<FConquestStrategicResourceCost>& Costs
+	)
+	{
+		for (const FConquestStrategicResourceCost& Cost : Costs)
+		{
+			if (Cost.ResourceId.IsNone() || Cost.Amount <= 0)
+			{
+				continue;
+			}
+
+			if (FConquestStrategicResourceStockpile* Stockpile = Player.FindStrategicResource(Cost.ResourceId))
+			{
+				Stockpile->Stored = FMath::Max(0, Stockpile->Stored - Cost.Amount);
+			}
+		}
+	}
+
 	bool HasDifficultFeature(const FHexTileData& TileData)
 	{
 		return
@@ -555,6 +664,163 @@ bool AConquestGameMode::ApplyUnitActionForPlayer(int32 PlayerId, int32 UnitInsta
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(UnitInstanceId, PlayerId, ActionId);
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestGameMode::ApplyUnitAugmentForPlayer(int32 PlayerId, int32 UnitInstanceId, FName AugmentId)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS || !ConquestGS->ContentManager || !ConquestGS->CityManager || AugmentId.IsNone())
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& Player = ConquestGS->GetPlayerEmpireMutable(PlayerId);
+	FConquestUnitState* Unit = FindUnitMutable(Player, UnitInstanceId);
+	if (!Unit || Unit->OwnerPlayerId != PlayerId)
+	{
+		return false;
+	}
+
+	const FConquestUnitRow* UnitRow = ConquestGS->ContentManager->FindUnit(Unit->UnitId);
+	const FConquestUnitAugmentRow* AugmentRow = ConquestGS->ContentManager->FindUnitAugment(AugmentId);
+	if (!UnitRow || !AugmentRow)
+	{
+		return false;
+	}
+
+	if (UnitRow->AllowedAugmentIds.Num() > 0 && !UnitRow->AllowedAugmentIds.Contains(AugmentId))
+	{
+		return false;
+	}
+
+	if (Unit->Augments.ContainsByPredicate([AugmentId](const FConquestUnitAugmentState& Augment)
+	{
+		return Augment.AugmentId == AugmentId;
+	}))
+	{
+		return false;
+	}
+
+	ConquestGS->CityManager->RecalculateStrategicResourceEconomy(PlayerId);
+	if (!CanPayStrategicResourceCosts(Player, AugmentRow->ResourceCosts))
+	{
+		return false;
+	}
+
+	PayStrategicResourceCosts(Player, AugmentRow->ResourceCosts);
+
+	FConquestUnitAugmentState NewAugment;
+	NewAugment.AugmentId = AugmentId;
+	NewAugment.ModifiedStat = AugmentRow->ModifiedStat;
+	NewAugment.FlatBonus = AugmentRow->FlatBonus;
+	NewAugment.MultiplierBonus = AugmentRow->MultiplierBonus;
+	Unit->Augments.Add(NewAugment);
+
+	if (AugmentRow->ModifiedStat == EConquestUnitAugmentStat::AttackMultiplier ||
+		AugmentRow->ModifiedStat == EConquestUnitAugmentStat::DefenseMultiplier)
+	{
+		FConquestUnitCombatModifier CombatModifier;
+		CombatModifier.ModifierId = AugmentId;
+		CombatModifier.ModifierType = AugmentRow->ModifiedStat == EConquestUnitAugmentStat::AttackMultiplier
+			? EConquestUnitCombatModifierType::Attack
+			: EConquestUnitCombatModifierType::Defense;
+		CombatModifier.Multiplier = FMath::Max(0.0f, 1.0f + AugmentRow->MultiplierBonus);
+		Unit->CombatModifiers.Add(CombatModifier);
+	}
+
+	const int32 PreviousMaxHealth = FMath::Max(1, Unit->CachedMaxHealth);
+	ConquestGS->CityManager->RecalculateUnitStats(*Unit);
+	if (Unit->CachedMaxHealth > PreviousMaxHealth)
+	{
+		Unit->CurrentHealth = FMath::Clamp(
+			Unit->CurrentHealth + (Unit->CachedMaxHealth - PreviousMaxHealth),
+			1,
+			Unit->CachedMaxHealth
+		);
+	}
+
+	ConquestGS->MulticastNotifyUnitAction(UnitInstanceId, PlayerId, FName(TEXT("Augment")));
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestGameMode::AttackUnitForPlayer(
+	int32 PlayerId,
+	int32 AttackerUnitInstanceId,
+	int32 DefenderUnitInstanceId
+)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS || !ConquestGS->GetHexGridModel())
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& AttackerPlayer = ConquestGS->GetPlayerEmpireMutable(PlayerId);
+	FConquestUnitState* Attacker = FindUnitMutable(AttackerPlayer, AttackerUnitInstanceId);
+	if (!Attacker || Attacker->OwnerPlayerId != PlayerId || Attacker->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	int32 DefenderOwnerPlayerId = INDEX_NONE;
+	FConquestUnitState* Defender = FindUnitMutableById(
+		ConquestGS->PlayerEmpires,
+		DefenderUnitInstanceId,
+		&DefenderOwnerPlayerId
+	);
+	if (!Defender || DefenderOwnerPlayerId == PlayerId || Defender->OwnerPlayerId == PlayerId)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const int32 AttackDistance = GridModel->GetHexDistance(Attacker->TileCoord, Defender->TileCoord);
+	if (AttackDistance <= 0 || AttackDistance > FMath::Max(1, Attacker->CachedAttackRange))
+	{
+		return false;
+	}
+
+	const float AttackerCombatValue = GetUnitCombatValue(*Attacker, EConquestUnitCombatModifierType::Attack);
+	const float DefenderDefenseValue = GetUnitCombatValue(*Defender, EConquestUnitCombatModifierType::Defense);
+	const int32 DefenderDamage = CalculateDeterministicCombatDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
+
+	Defender->CurrentHealth = FMath::Clamp(Defender->CurrentHealth - DefenderDamage, 0, Defender->CachedMaxHealth);
+	Attacker->CurrentMovementPoints = FMath::Max(0, Attacker->CurrentMovementPoints - 1);
+	Attacker->bIsFortified = false;
+	Attacker->bIsSleeping = false;
+
+	const bool bDefenderKilled = Defender->CurrentHealth <= 0;
+	if (!bDefenderKilled && AttackDistance <= 1)
+	{
+		const float DefenderCounterValue = GetUnitCombatValue(*Defender, EConquestUnitCombatModifierType::Attack);
+		const int32 AttackerDamage = CalculateDeterministicCombatDamage(DefenderCounterValue, AttackerCombatValue, 25.0f);
+		Attacker->CurrentHealth = FMath::Clamp(Attacker->CurrentHealth - AttackerDamage, 0, Attacker->CachedMaxHealth);
+	}
+
+	const bool bAttackerKilled = Attacker->CurrentHealth <= 0;
+	if (bDefenderKilled)
+	{
+		FConquestPlayerEmpireState& DefenderPlayer = ConquestGS->GetPlayerEmpireMutable(DefenderOwnerPlayerId);
+		DefenderPlayer.Units.RemoveAll([DefenderUnitInstanceId](const FConquestUnitState& Candidate)
+		{
+			return Candidate.UnitInstanceId == DefenderUnitInstanceId;
+		});
+		DestroyUnitActor(*ConquestGS, DefenderUnitInstanceId);
+	}
+
+	if (bAttackerKilled)
+	{
+		AttackerPlayer.Units.RemoveAll([AttackerUnitInstanceId](const FConquestUnitState& Candidate)
+		{
+			return Candidate.UnitInstanceId == AttackerUnitInstanceId;
+		});
+		DestroyUnitActor(*ConquestGS, AttackerUnitInstanceId);
+	}
+
+	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("Attack")));
 	ConquestGS->BroadcastStateChanged();
 	return true;
 }

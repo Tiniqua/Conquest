@@ -53,6 +53,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
 	FIntPoint GetTileCoord() const { return TileCoord; }
 
+	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
+	UMaterialInterface* GetAttackRangeMaterial() const { return AttackRangeMaterial; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> SceneRoot = nullptr;
@@ -80,6 +83,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
 	float UnitWorldIconScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Combat")
+	TObjectPtr<UMaterialInterface> AttackRangeMaterial = nullptr;
 
 private:
 	UPROPERTY()

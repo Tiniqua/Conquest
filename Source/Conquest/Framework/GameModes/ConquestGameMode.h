@@ -59,6 +59,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
 	bool ApplyUnitActionForPlayer(int32 PlayerId, int32 UnitInstanceId, FName ActionId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	bool ApplyUnitAugmentForPlayer(int32 PlayerId, int32 UnitInstanceId, FName AugmentId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	bool AttackUnitForPlayer(int32 PlayerId, int32 AttackerUnitInstanceId, int32 DefenderUnitInstanceId);
+
 	UFUNCTION(BlueprintCallable)
 	bool CanEndCurrentTurn(UPARAM(ref) FText& OutBlockReason) const;
 

@@ -614,6 +614,13 @@ UConquestGameWidget* AConquestPawn::GetActiveGameWidget() const
 
 void AConquestPawn::ClearHoveredTileInfoWidget() const
 {
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	AConquestHUD* ConquestHUD = PlayerController ? Cast<AConquestHUD>(PlayerController->GetHUD()) : nullptr;
+	if (ConquestHUD)
+	{
+		ConquestHUD->ClearCombatPreview();
+	}
+
 	if (UConquestGameWidget* GameWidget = GetActiveGameWidget())
 	{
 		GameWidget->ClearHoveredTileInfo();
@@ -641,6 +648,12 @@ void AConquestPawn::UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTile
 	WidgetData.Yield = TileData.FinalYield;
 
 	GameWidget->UpdateHoveredTileInfo(WidgetData);
+
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (AConquestHUD* ConquestHUD = PlayerController ? Cast<AConquestHUD>(PlayerController->GetHUD()) : nullptr)
+	{
+		ConquestHUD->UpdateSelectedUnitCombatPreviewForTile(Q, R);
+	}
 }
 
 void AConquestPawn::MoveForward(float Value)

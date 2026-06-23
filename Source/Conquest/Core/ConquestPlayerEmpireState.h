@@ -175,3 +175,15 @@ struct FConquestPlayerEmpireState
 		});
 	}
 };
+
+namespace ConquestUnitCombat
+{
+	CONQUEST_API float GetHealthCombatMultiplier(const FConquestUnitState& Unit);
+	CONQUEST_API float GetCombatValue(const FConquestUnitState& Unit, EConquestUnitCombatModifierType ModifierType);
+	CONQUEST_API int32 CalculateDeterministicDamage(float AttackerValue, float DefenderValue, float EqualStrengthDamage);
+	CONQUEST_API FConquestCombatPreviewData CalculatePreview(
+		const FConquestUnitState& Attacker,
+		const FConquestUnitState& Defender,
+		int32 AttackDistance
+	);
+}

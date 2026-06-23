@@ -26,6 +26,15 @@ enum class EConquestUnitCombatModifierType : uint8
 	Defense
 };
 
+UENUM(BlueprintType)
+enum class EConquestCombatPreviewRating : uint8
+{
+	Invalid,
+	Safe,
+	Neutral,
+	Costly
+};
+
 USTRUCT(BlueprintType)
 struct FConquestUnitCombatModifier
 {
@@ -159,4 +168,73 @@ struct FConquestUnitRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	FRotator UnitMeshRotation = FRotator::ZeroRotator;
+};
+
+USTRUCT(BlueprintType)
+struct FConquestCombatPreviewData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackerUnitInstanceId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DefenderUnitInstanceId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	FText AttackerName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	FText DefenderName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DamageDealt = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DamageTaken = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackerCurrentHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackerProjectedHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackerMaxHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DefenderCurrentHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DefenderProjectedHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DefenderMaxHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackDistance = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	bool bCanAttack = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	bool bHasCounterAttack = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	bool bAttackerKilled = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	bool bDefenderKilled = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	EConquestCombatPreviewRating Rating = EConquestCombatPreviewRating::Invalid;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	FText RatingText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	FText InvalidReason;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	bool bIsValid = false;
 };

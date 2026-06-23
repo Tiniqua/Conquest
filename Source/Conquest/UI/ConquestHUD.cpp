@@ -98,6 +98,23 @@ namespace
 			return Unit.UnitInstanceId == UnitInstanceId;
 		});
 	}
+
+	FText ConquestHUDGetUnitDisplayName(
+		const AConquestGameState& GameState,
+		const FConquestUnitState& UnitState
+	)
+	{
+		if (GameState.ContentManager)
+		{
+			const FConquestUnitRow* UnitRow = GameState.ContentManager->FindUnit(UnitState.UnitId);
+			if (UnitRow && !UnitRow->DisplayName.IsEmpty())
+			{
+				return UnitRow->DisplayName;
+			}
+		}
+
+		return FText::FromName(UnitState.UnitId);
+	}
 }
 
 AConquestHUD::AConquestHUD()
@@ -744,6 +761,7 @@ void AConquestHUD::ClearUnitMovementHighlights()
 void AConquestHUD::ClearUnitAttackHighlights()
 {
 	CurrentUnitAttackTiles.Reset();
+	ClearCombatPreview();
 
 	AConquestGameState* ConquestGS = GetWorld()
 		? GetWorld()->GetGameState<AConquestGameState>()
@@ -1090,6 +1108,91 @@ bool AConquestHUD::IsSelectedUnitMovementTile(int32 Q, int32 R) const
 bool AConquestHUD::IsSelectedUnitAttackTile(int32 Q, int32 R) const
 {
 	return CurrentUnitAttackTiles.Contains(FIntPoint(Q, R));
+}
+
+bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->GetHexGridModel() || ConquestGS->SelectedUnitInstanceId == INDEX_NONE)
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	const FIntPoint TargetCoord(Q, R);
+	if (!CurrentUnitAttackTiles.Contains(TargetCoord))
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+	const FConquestUnitState* SelectedUnit = Player.Units.FindByPredicate([ConquestGS](const FConquestUnitState& Unit)
+	{
+		return Unit.UnitInstanceId == ConquestGS->SelectedUnitInstanceId;
+	});
+	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	const FConquestUnitState* DefenderUnit = nullptr;
+	for (const FConquestPlayerEmpireState& OtherPlayer : ConquestGS->PlayerEmpires)
+	{
+		if (OtherPlayer.PlayerId == Player.PlayerId)
+		{
+			continue;
+		}
+
+		DefenderUnit = OtherPlayer.Units.FindByPredicate([TargetCoord](const FConquestUnitState& Unit)
+		{
+			return Unit.TileCoord == TargetCoord;
+		});
+		if (DefenderUnit)
+		{
+			break;
+		}
+	}
+
+	if (!DefenderUnit)
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	const int32 AttackDistance = ConquestGS->GetHexGridModel()->GetHexDistance(
+		SelectedUnit->TileCoord,
+		DefenderUnit->TileCoord
+	);
+	FConquestCombatPreviewData PreviewData =
+		ConquestUnitCombat::CalculatePreview(*SelectedUnit, *DefenderUnit, AttackDistance);
+	PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
+	PreviewData.DefenderName = ConquestHUDGetUnitDisplayName(*ConquestGS, *DefenderUnit);
+
+	if (!PreviewData.bIsValid)
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ShowCombatPreview(PreviewData);
+		return true;
+	}
+
+	return false;
+}
+
+void AConquestHUD::ClearCombatPreview()
+{
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearCombatPreview();
+	}
 }
 
 bool AConquestHUD::ShowAugmentChoicesForSelectedUnit()

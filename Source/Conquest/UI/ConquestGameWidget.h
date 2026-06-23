@@ -225,6 +225,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void ClearUnitAugmentChoices();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Combat Preview")
+	void ShowCombatPreview(const FConquestCombatPreviewData& PreviewData);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Combat Preview")
+	void ClearCombatPreview();
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Combat Preview")
+	FConquestCombatPreviewData GetCombatPreviewData() const { return CurrentCombatPreviewData; }
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Yields")
 	FConquestTopBarYieldData GetTopBarYieldData() const;
 
@@ -403,6 +412,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
 	TSubclassOf<UConquestUnitActionButtonWidget> UnitActionButtonWidgetClass;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> CombatPreviewPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CombatPreviewTitleText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CombatPreviewRatingText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CombatPreviewDamageText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CombatPreviewHealthText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CombatPreviewDetailText = nullptr;
+
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
@@ -421,6 +448,7 @@ private:
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
 	FConquestTileImprovementChoiceData PendingTileImprovementChoice;
+	FConquestCombatPreviewData CurrentCombatPreviewData;
 	int32 PendingUnitAugmentUnitInstanceId = INDEX_NONE;
 
 	UFUNCTION()

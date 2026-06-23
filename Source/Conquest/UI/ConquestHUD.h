@@ -121,6 +121,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Conquest|Unit")
 	bool IsSelectedUnitAttackTile(int32 Q, int32 R) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Combat Preview")
+	bool UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Combat Preview")
+	void ClearCombatPreview();
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	bool ShowAugmentChoicesForSelectedUnit();
 

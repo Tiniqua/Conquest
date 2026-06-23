@@ -239,6 +239,7 @@ void UConquestGameWidget::NativeConstruct()
 	ClearTileExpansionConfirmation();
 	ClearTileImprovementChoices();
 	ClearUnitAugmentChoices();
+	ClearCombatPreview();
 	ClearSelectedUnitInfo();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
@@ -847,6 +848,67 @@ void UConquestGameWidget::ClearUnitAugmentChoices()
 	{
 		UnitAugmentButtonBox->ClearChildren();
 	}
+}
+
+void UConquestGameWidget::ShowCombatPreview(const FConquestCombatPreviewData& PreviewData)
+{
+	CurrentCombatPreviewData = PreviewData;
+
+	if (!PreviewData.bIsValid)
+	{
+		ClearCombatPreview();
+		return;
+	}
+
+	SetWidgetVisibility(CombatPreviewPanel, ESlateVisibility::Visible);
+	SetText(
+		CombatPreviewTitleText,
+		FText::Format(
+			NSLOCTEXT("Conquest", "CombatPreviewTitleFormat", "{0} vs {1}"),
+			PreviewData.AttackerName.IsEmpty() ? FText::FromString(TEXT("Attacker")) : PreviewData.AttackerName,
+			PreviewData.DefenderName.IsEmpty() ? FText::FromString(TEXT("Defender")) : PreviewData.DefenderName
+		)
+	);
+	SetText(CombatPreviewRatingText, PreviewData.RatingText);
+	SetText(
+		CombatPreviewDamageText,
+		FText::Format(
+			NSLOCTEXT("Conquest", "CombatPreviewDamageFormat", "Deal {0} damage | Take {1} damage"),
+			FText::AsNumber(PreviewData.DamageDealt),
+			FText::AsNumber(PreviewData.DamageTaken)
+		)
+	);
+	SetText(
+		CombatPreviewHealthText,
+		FText::Format(
+			NSLOCTEXT("Conquest", "CombatPreviewHealthFormat", "{0} HP: {1}/{2} -> {3}/{2} | {4} HP: {5}/{6} -> {7}/{6}"),
+			PreviewData.AttackerName.IsEmpty() ? FText::FromString(TEXT("Attacker")) : PreviewData.AttackerName,
+			FText::AsNumber(PreviewData.AttackerCurrentHealth),
+			FText::AsNumber(PreviewData.AttackerMaxHealth),
+			FText::AsNumber(PreviewData.AttackerProjectedHealth),
+			PreviewData.DefenderName.IsEmpty() ? FText::FromString(TEXT("Defender")) : PreviewData.DefenderName,
+			FText::AsNumber(PreviewData.DefenderCurrentHealth),
+			FText::AsNumber(PreviewData.DefenderMaxHealth),
+			FText::AsNumber(PreviewData.DefenderProjectedHealth)
+		)
+	);
+	SetText(
+		CombatPreviewDetailText,
+		PreviewData.bHasCounterAttack
+			? NSLOCTEXT("Conquest", "CombatPreviewCounterAttack", "Melee counterattack expected")
+			: NSLOCTEXT("Conquest", "CombatPreviewNoCounterAttack", "No counterattack expected")
+	);
+}
+
+void UConquestGameWidget::ClearCombatPreview()
+{
+	CurrentCombatPreviewData = FConquestCombatPreviewData();
+	SetWidgetVisibility(CombatPreviewPanel, ESlateVisibility::Collapsed);
+	ClearText(CombatPreviewTitleText);
+	ClearText(CombatPreviewRatingText);
+	ClearText(CombatPreviewDamageText);
+	ClearText(CombatPreviewHealthText);
+	ClearText(CombatPreviewDetailText);
 }
 
 void UConquestGameWidget::HandleTileExpansionConfirmClicked()

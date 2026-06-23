@@ -45,41 +45,6 @@ namespace
 		return nullptr;
 	}
 
-	float GetUnitHealthCombatMultiplier(const FConquestUnitState& Unit)
-	{
-		return FMath::Clamp(
-			static_cast<float>(FMath::Max(1, Unit.CurrentHealth)) /
-			static_cast<float>(FMath::Max(1, Unit.CachedMaxHealth)),
-			0.01f,
-			1.0f
-		);
-	}
-
-	float GetUnitCombatValue(const FConquestUnitState& Unit, EConquestUnitCombatModifierType ModifierType)
-	{
-		float Value = static_cast<float>(FMath::Max(1, Unit.CachedStrength));
-		float Multiplier = GetUnitHealthCombatMultiplier(Unit);
-
-		for (const FConquestUnitCombatModifier& Modifier : Unit.CombatModifiers)
-		{
-			if (Modifier.ModifierType != ModifierType)
-			{
-				continue;
-			}
-
-			Value += static_cast<float>(Modifier.FlatBonus);
-			Multiplier *= FMath::Max(0.0f, Modifier.Multiplier);
-		}
-
-		return FMath::Max(1.0f, Value * Multiplier);
-	}
-
-	int32 CalculateDeterministicCombatDamage(float AttackerValue, float DefenderValue, float EqualStrengthDamage)
-	{
-		const float Ratio = AttackerValue / FMath::Max(1.0f, DefenderValue);
-		return FMath::Clamp(FMath::RoundToInt(EqualStrengthDamage * Ratio), 1, 100);
-	}
-
 	void DestroyUnitActor(AConquestGameState& GameState, int32 UnitInstanceId)
 	{
 		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = GameState.UnitActorsByInstanceId.Find(UnitInstanceId))
@@ -783,9 +748,9 @@ bool AConquestGameMode::AttackUnitForPlayer(
 		return false;
 	}
 
-	const float AttackerCombatValue = GetUnitCombatValue(*Attacker, EConquestUnitCombatModifierType::Attack);
-	const float DefenderDefenseValue = GetUnitCombatValue(*Defender, EConquestUnitCombatModifierType::Defense);
-	const int32 DefenderDamage = CalculateDeterministicCombatDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
+	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(*Attacker, EConquestUnitCombatModifierType::Attack);
+	const float DefenderDefenseValue = ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Defense);
+	const int32 DefenderDamage = ConquestUnitCombat::CalculateDeterministicDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
 
 	Defender->CurrentHealth = FMath::Clamp(Defender->CurrentHealth - DefenderDamage, 0, Defender->CachedMaxHealth);
 	Attacker->CurrentMovementPoints = FMath::Max(0, Attacker->CurrentMovementPoints - 1);
@@ -795,8 +760,8 @@ bool AConquestGameMode::AttackUnitForPlayer(
 	const bool bDefenderKilled = Defender->CurrentHealth <= 0;
 	if (!bDefenderKilled && AttackDistance <= 1)
 	{
-		const float DefenderCounterValue = GetUnitCombatValue(*Defender, EConquestUnitCombatModifierType::Attack);
-		const int32 AttackerDamage = CalculateDeterministicCombatDamage(DefenderCounterValue, AttackerCombatValue, 25.0f);
+		const float DefenderCounterValue = ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Attack);
+		const int32 AttackerDamage = ConquestUnitCombat::CalculateDeterministicDamage(DefenderCounterValue, AttackerCombatValue, 25.0f);
 		Attacker->CurrentHealth = FMath::Clamp(Attacker->CurrentHealth - AttackerDamage, 0, Attacker->CachedMaxHealth);
 	}
 

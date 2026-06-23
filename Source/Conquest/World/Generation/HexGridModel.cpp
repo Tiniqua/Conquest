@@ -407,16 +407,23 @@ TArray<FIntPoint> FHexGridModel::GetCoordsInRange(const FIntPoint& Center, int32
 {
 	TArray<FIntPoint> Result;
 
-	for (int32 Q = -Range; Q <= Range; ++Q)
+	if (Range < 0)
 	{
-		const int32 R1 = FMath::Max(-Range, -Q - Range);
-		const int32 R2 = FMath::Min(Range, -Q + Range);
+		return Result;
+	}
 
-		for (int32 R = R1; R <= R2; ++R)
+	const int32 MinQ = FMath::Max(0, Center.X - Range);
+	const int32 MaxQ = FMath::Min(Size.GridWidth - 1, Center.X + Range);
+	const int32 MinR = FMath::Max(0, Center.Y - Range);
+	const int32 MaxR = FMath::Min(Size.GridHeight - 1, Center.Y + Range);
+
+	for (int32 R = MinR; R <= MaxR; ++R)
+	{
+		for (int32 Q = MinQ; Q <= MaxQ; ++Q)
 		{
-			const FIntPoint Coord(Center.X + Q, Center.Y + R);
+			const FIntPoint Coord(Q, R);
 
-			if (IsValidTile(Coord.X, Coord.Y))
+			if (IsValidTile(Coord.X, Coord.Y) && GetHexDistance(Center, Coord) <= Range)
 			{
 				Result.Add(Coord);
 			}

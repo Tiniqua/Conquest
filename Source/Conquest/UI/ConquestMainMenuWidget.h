@@ -32,13 +32,16 @@ protected:
 	TObjectPtr<UTextBlock> LoadingStatusText = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "1"))
-	int32 MaxSessionSearchResults = 100;
+	int32 MaxSessionSearchResults = 1000;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "1"))
 	int32 PublicConnections = 8;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer")
-	bool bUseLanSessions = true;
+	// Local standalone/listen-server testing:
+	// bool bUseLanSessions = true;
+	// Packaged Steam multiplayer testing:
+	bool bUseLanSessions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "0"))
 	int32 JoinSessionResultIndex = 0;

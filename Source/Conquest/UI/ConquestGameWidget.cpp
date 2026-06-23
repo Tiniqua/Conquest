@@ -612,6 +612,12 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 			ConquestHUD->ShowCityPanel(Blocker.CityId);
 		}
 		return true;
+	case EConquestEndTurnBlockType::CityGrowth:
+		if (Blocker.CityId != INDEX_NONE)
+		{
+			ConquestHUD->ShowCityPanel(Blocker.CityId);
+		}
+		return true;
 	case EConquestEndTurnBlockType::UnitOrders:
 		{
 			const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();

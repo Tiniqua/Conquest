@@ -31,7 +31,8 @@ enum class EConquestEndTurnBlockType : uint8
 	WrongPhase,
 	Research,
 	CityProduction,
-	UnitOrders
+	UnitOrders,
+	CityGrowth
 };
 
 USTRUCT(BlueprintType)

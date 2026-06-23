@@ -87,6 +87,7 @@ void AConquestGameState::BroadcastStateChanged()
 	if (HasAuthority())
 	{
 		PushReplicatedState();
+		RebuildUnitVisualsFromReplicatedState();
 	}
 
 	OnConquestStateChanged.Broadcast();
@@ -113,6 +114,8 @@ void AConquestGameState::PushReplicatedState()
 	{
 		ReplicatedConquestState.Cities = CityManager->Cities;
 	}
+
+	ForceNetUpdate();
 }
 
 void AConquestGameState::OnRep_ReplicatedConquestState()

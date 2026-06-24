@@ -1,18 +1,20 @@
 #include "HexGridModel.h"
 
+#include "Engine/DataTable.h"
+
 void FHexGridModel::Initialize(
 	const FHexGridSizeSettings& InSize,
 	const FHexHeightSettings& InHeight,
 	const UHexTileResourceData* InTileData,
 	const UHexResourceSetData* InResourceSetData,
-	const UHexImprovementSetData* InImprovementSetData
+	const UDataTable* InImprovementTable
 )
 {
 	Size = InSize;
 	Height = InHeight;
 	TileData = InTileData;
 	ResourceSetData = InResourceSetData;
-	ImprovementSetData = InImprovementSetData;
+	ImprovementTable = InImprovementTable;
 
 	Tiles.Reset();
 	Tiles.SetNum(Size.GridWidth * Size.GridHeight);
@@ -203,7 +205,7 @@ void FHexGridModel::ResolveTileYields()
 {
 	const UHexTileResourceData* TerrainData = TileData.Get();
 	const UHexResourceSetData* ResourceData = ResourceSetData.Get();
-	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	const UDataTable* ImprovementData = ImprovementTable.Get();
 
 	for (FHexTileData& Tile : Tiles)
 	{
@@ -235,7 +237,7 @@ void FHexGridModel::ResolveTileYields()
 
 		if (ImprovementData)
 		{
-			if (const FHexImprovementDefinition* ImprovementDefinition = ImprovementData->FindImprovement(Tile.ImprovementId))
+			if (const FHexImprovementDefinition* ImprovementDefinition = FindImprovementDefinition(Tile.ImprovementId))
 			{
 				TotalYield += ImprovementDefinition->YieldModifier;
 			}
@@ -260,13 +262,13 @@ bool FHexGridModel::SetTileImprovement(int32 Q, int32 R, FName ImprovementId)
 		return true;
 	}
 
-	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	const UDataTable* ImprovementData = ImprovementTable.Get();
 	if (!ImprovementData)
 	{
 		return false;
 	}
 
-	const FHexImprovementDefinition* Improvement = ImprovementData->FindImprovement(ImprovementId);
+	const FHexImprovementDefinition* Improvement = FindImprovementDefinition(ImprovementId);
 	if (!Improvement || !Improvement->IsValidForTile(Tile, IsWaterTileType(Tile.TileType)))
 	{
 		return false;
@@ -293,8 +295,38 @@ const FHexResourceDefinition* FHexGridModel::FindResourceDefinition(FName Resour
 
 const FHexImprovementDefinition* FHexGridModel::FindImprovementDefinition(FName ImprovementId) const
 {
-	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
-	return ImprovementData ? ImprovementData->FindImprovement(ImprovementId) : nullptr;
+	if (ImprovementId.IsNone())
+	{
+		return nullptr;
+	}
+
+	const UDataTable* ImprovementData = ImprovementTable.Get();
+	if (!ImprovementData)
+	{
+		return nullptr;
+	}
+
+	static const FString ContextString(TEXT("HexImprovementLookup"));
+	if (const FHexImprovementDefinition* Row = ImprovementData->FindRow<FHexImprovementDefinition>(
+		ImprovementId,
+		ContextString,
+		false
+	))
+	{
+		return Row;
+	}
+
+	TArray<FHexImprovementDefinition*> Rows;
+	ImprovementData->GetAllRows(ContextString, Rows);
+	for (const FHexImprovementDefinition* Row : Rows)
+	{
+		if (Row && Row->ImprovementId == ImprovementId)
+		{
+			return Row;
+		}
+	}
+
+	return nullptr;
 }
 
 void FHexGridModel::GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const
@@ -305,14 +337,23 @@ void FHexGridModel::GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<cons
 		return;
 	}
 
-	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	const UDataTable* ImprovementData = ImprovementTable.Get();
 	if (!ImprovementData)
 	{
 		return;
 	}
 
 	const FHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
-	ImprovementData->GetPossibleImprovementsForTile(Tile, IsWaterTileType(Tile.TileType), OutImprovements);
+	static const FString ContextString(TEXT("HexImprovementCandidates"));
+	TArray<FHexImprovementDefinition*> Rows;
+	ImprovementData->GetAllRows(ContextString, Rows);
+	for (const FHexImprovementDefinition* Improvement : Rows)
+	{
+		if (Improvement && Improvement->IsValidForTile(Tile, IsWaterTileType(Tile.TileType)))
+		{
+			OutImprovements.Add(Improvement);
+		}
+	}
 }
 
 void FHexGridModel::GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const

@@ -5,7 +5,6 @@
 struct FHexImprovementDefinition;
 class AActor;
 class FHexGridModel;
-class UHexImprovementSetData;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class USceneComponent;
@@ -18,7 +17,6 @@ public:
 		AActor* Owner,
 		USceneComponent* AttachParent,
 		const FHexGridModel& GridModel,
-		const UHexImprovementSetData* ImprovementSetData,
 		TArray<TObjectPtr<UInstancedStaticMeshComponent>>& InOutImprovementMeshComponents
 	);
 

@@ -6,6 +6,7 @@
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
@@ -546,6 +547,72 @@ bool UConquestCityManager::AssignCitizenToTile(FCityState& City, const FIntPoint
 	City.WorkedTileAssignments.Add(NewAssignment);
 	SyncWorkedTilesFromAssignments(City);
 	return true;
+}
+
+bool UConquestCityManager::IsTileImprovementUnlockedForPlayer(int32 PlayerId, FName ImprovementId) const
+{
+	if (ImprovementId.IsNone() || !GameStateRef || !GameStateRef->ContentManager)
+	{
+		return false;
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
+	TSet<FName> GatedImprovementIds;
+	TSet<FName> UnlockedImprovementIds;
+
+	TArray<const FConquestTechRow*> TechRows;
+	GameStateRef->ContentManager->GetAllTechs(TechRows);
+	for (const FConquestTechRow* TechRow : TechRows)
+	{
+		if (!TechRow)
+		{
+			continue;
+		}
+
+		for (const FName UnlockedImprovementId : TechRow->UnlockedTileImprovementIds)
+		{
+			if (UnlockedImprovementId.IsNone())
+			{
+				continue;
+			}
+
+			GatedImprovementIds.Add(UnlockedImprovementId);
+			if (Player.HasResearched(TechRow->TechId))
+			{
+				UnlockedImprovementIds.Add(UnlockedImprovementId);
+			}
+		}
+	}
+
+	for (const FCityState& City : Cities)
+	{
+		if (City.OwnerPlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		for (const FName BuildingId : City.ConstructedBuildingIds)
+		{
+			const FConquestBuildingRow* BuildingRow = GameStateRef->ContentManager->FindBuilding(BuildingId);
+			if (!BuildingRow)
+			{
+				continue;
+			}
+
+			for (const FName UnlockedImprovementId : BuildingRow->UnlockedTileImprovementIds)
+			{
+				if (UnlockedImprovementId.IsNone())
+				{
+					continue;
+				}
+
+				GatedImprovementIds.Add(UnlockedImprovementId);
+				UnlockedImprovementIds.Add(UnlockedImprovementId);
+			}
+		}
+	}
+
+	return !GatedImprovementIds.Contains(ImprovementId) || UnlockedImprovementIds.Contains(ImprovementId);
 }
 
 int32 UConquestCityManager::GetCityStrength(const FCityState& City) const
@@ -1697,7 +1764,15 @@ TArray<FName> UConquestCityManager::GetAvailableTileImprovementIdsForPlayer(int3
 		return Result;
 	}
 
-	GridModel->GetPossibleImprovementIdsForTile(Coord.X, Coord.Y, Result);
+	TArray<FName> PossibleImprovementIds;
+	GridModel->GetPossibleImprovementIdsForTile(Coord.X, Coord.Y, PossibleImprovementIds);
+	for (const FName ImprovementId : PossibleImprovementIds)
+	{
+		if (IsTileImprovementUnlockedForPlayer(PlayerId, ImprovementId))
+		{
+			Result.Add(ImprovementId);
+		}
+	}
 	return Result;
 }
 
@@ -1734,6 +1809,11 @@ bool UConquestCityManager::PurchaseTileImprovementForPlayer(int32 PlayerId, cons
 	}
 
 	if (!ChosenImprovement)
+	{
+		return false;
+	}
+
+	if (!IsTileImprovementUnlockedForPlayer(PlayerId, ImprovementId))
 	{
 		return false;
 	}

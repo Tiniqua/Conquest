@@ -54,6 +54,9 @@ struct FConquestBuildingRow : public FTableRowBase
 	TArray<FConquestStrategicResourceCapBonus> StrategicResourceCapBonuses;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FName> UnlockedTileImprovementIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bGrantedOnCityFounding = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)

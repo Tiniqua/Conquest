@@ -1177,7 +1177,7 @@ void AModularHexGridActor::RebuildGrid()
 	EnsureDefaultGenerationRules();
 	LocallyRevealedFogTiles.Reset();
 
-	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData, ResourceSetData, ImprovementSetData);
+	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData, ResourceSetData, ImprovementTable);
 
 	FHexGenerationSettings EffectiveGenerationSettings = GenerationSettings;
 
@@ -1270,7 +1270,6 @@ void AModularHexGridActor::RebuildGrid()
 		this,
 		SceneRoot,
 		GridModel,
-		ImprovementSetData,
 		ImprovementMeshComponents
 	);
 	
@@ -1627,7 +1626,6 @@ void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
 		this,
 		SceneRoot,
 		GridModel,
-		ImprovementSetData,
 		ImprovementMeshComponents
 	);
 }

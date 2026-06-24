@@ -156,7 +156,7 @@ struct FHexFeatureDefinition
 };
 
 // This asset now represents terrain, features, and render materials only.
-// Resources live in UHexResourceSetData and improvements live in UHexImprovementSetData.
+// Resources live in UHexResourceSetData and improvements are authored in a FHexImprovementDefinition data table.
 UCLASS(BlueprintType)
 class CONQUEST_API UHexTileResourceData : public UDataAsset
 {

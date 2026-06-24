@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/DataAsset.h"
+#include "Engine/DataTable.h"
 #include "HexResourceTypes.h"
 #include "HexImprovementTypes.generated.h"
 
@@ -18,7 +18,7 @@ enum class EHexImprovementCategory : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FHexImprovementDefinition
+struct FHexImprovementDefinition : public FTableRowBase
 {
 	GENERATED_BODY()
 

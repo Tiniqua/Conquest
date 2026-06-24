@@ -7,7 +7,6 @@
 #include "Materials/MaterialInterface.h"
 
 #include "HexGridModel.h"
-#include "HexImprovementSetData.h"
 #include "HexImprovementTypes.h"
 #include "HexTileTypes.h"
 
@@ -15,13 +14,12 @@ void FHexImprovementMeshBuilder::BuildImprovementMeshes(
 	AActor* Owner,
 	USceneComponent* AttachParent,
 	const FHexGridModel& GridModel,
-	const UHexImprovementSetData* ImprovementSetData,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& InOutImprovementMeshComponents
 )
 {
 	ClearImprovementMeshes(InOutImprovementMeshComponents);
 
-	if (!Owner || !AttachParent || !ImprovementSetData)
+	if (!Owner || !AttachParent)
 	{
 		return;
 	}
@@ -38,7 +36,7 @@ void FHexImprovementMeshBuilder::BuildImprovementMeshes(
 		}
 
 		const FHexImprovementDefinition* ImprovementDefinition =
-			ImprovementSetData->FindImprovement(Tile.ImprovementId);
+			GridModel.FindImprovementDefinition(Tile.ImprovementId);
 
 		if (!ImprovementDefinition || !ImprovementDefinition->WorldMesh)
 		{

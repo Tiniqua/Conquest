@@ -156,6 +156,7 @@ private:
 	void SyncWorkedTilesFromAssignments(FCityState& City);
 	int32 GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const;
 	bool AssignCitizenToTile(FCityState& City, const FIntPoint& Coord);
+	bool IsTileImprovementUnlockedForPlayer(int32 PlayerId, FName ImprovementId) const;
 	void RefreshCityCombatStats(FCityState& City);
 	void HealCityAtStartOfTurn(FCityState& City);
 	void HealOwnedTilesAtStartOfTurn(FCityState& City);

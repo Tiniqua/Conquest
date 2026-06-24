@@ -25,7 +25,7 @@ class UConquestCityWorldLabelWidget;
 class UConquestTileHealthBarWidget;
 class UHexTileResourceData;
 class UHexResourceSetData;
-class UHexImprovementSetData;
+class UDataTable;
 class FLifetimeProperty;
 
 UCLASS()
@@ -301,7 +301,7 @@ private:
 
 	// Farms, mines, plantations, pastures, camps, fishing boats, etc.
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Data")
-	TObjectPtr<UHexImprovementSetData> ImprovementSetData = nullptr;
+	TObjectPtr<UDataTable> ImprovementTable = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Size")
 	FHexGridSizeSettings SizeSettings;

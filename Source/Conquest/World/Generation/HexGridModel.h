@@ -4,7 +4,9 @@
 #include "HexGridSettings.h"
 #include "HexTileResourceData.h"
 #include "HexResourceSetData.h"
-#include "HexImprovementSetData.h"
+#include "HexImprovementTypes.h"
+
+class UDataTable;
 
 class FHexGridModel
 {
@@ -14,7 +16,7 @@ public:
 		const FHexHeightSettings& InHeight,
 		const UHexTileResourceData* InTileData,
 		const UHexResourceSetData* InResourceSetData,
-		const UHexImprovementSetData* InImprovementSetData
+		const UDataTable* InImprovementTable
 	);
 
 	void ResolveSharedVertexHeightVariance(
@@ -77,7 +79,7 @@ private:
 	FHexHeightSettings Height;
 	TWeakObjectPtr<const UHexTileResourceData> TileData;
 	TWeakObjectPtr<const UHexResourceSetData> ResourceSetData;
-	TWeakObjectPtr<const UHexImprovementSetData> ImprovementSetData;
+	TWeakObjectPtr<const UDataTable> ImprovementTable;
 	TArray<FHexTileData> Tiles;
 	TMap<FHexVertexKey, float> ResolvedVertexHeights;
 	TMap<FHexVertexKey, float> ResolvedVertexHeightVarianceOffsets;

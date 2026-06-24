@@ -44,4 +44,7 @@ struct FConquestTechRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FName> UnlockedUnitIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FName> UnlockedTileImprovementIds;
 };

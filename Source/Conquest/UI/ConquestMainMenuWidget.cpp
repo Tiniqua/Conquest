@@ -105,7 +105,7 @@ void UConquestMainMenuWidget::HandleCreateSessionComplete(bool bWasSuccessful, F
 			this,
 			FName(*CurrentLevelName),
 			true,
-			TEXT("listen?ConquestHostSetup=1")
+			TEXT("?listen?ConquestHostSetup=1")
 		);
 	}
 }

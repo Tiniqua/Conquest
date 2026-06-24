@@ -61,7 +61,7 @@ void UConquestMultiplayerSessionSubsystem::HostSession(int32 PublicConnections, 
 	SessionSettings.bAllowJoinInProgress = true;
 	SessionSettings.bAllowJoinViaPresence = !bUseLan;
 	SessionSettings.bAllowJoinViaPresenceFriendsOnly = false;
-	SessionSettings.Set(ConquestPresenceKey, FString(TEXT("Conquest")), EOnlineDataAdvertisementType::ViaOnlineService);
+	SessionSettings.Set(ConquestPresenceKey, FString(TEXT("Conquest")), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	UE_LOG(
 		LogTemp,
@@ -113,12 +113,14 @@ void UConquestMultiplayerSessionSubsystem::FindSessions(int32 MaxResults, bool b
 	LastSessionSearch->bIsLanQuery = bUseLan;
 	// Steam lobby searches can reject custom predicates before returning candidates, especially with AppId 480.
 	// Query the lobby surface first, then filter to Conquest sessions locally in HandleFindSessionsComplete.
-#if defined(SEARCH_LOBBIES)
 	if (!bUseLan)
 	{
+		LastSessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+#if defined(SEARCH_LOBBIES)
 		LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
-	}
 #endif
+	}
 
 	UE_LOG(
 		LogTemp,

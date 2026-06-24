@@ -1100,7 +1100,7 @@ void UConquestGameWidget::ShowCombatPreview(const FConquestCombatPreviewData& Pr
 		const ESlateVisibility ModifierVisibility = ModifierLines.Num() > 0
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed;
-		SetWidgetVisibility(CombatPreviewModifiersPanel, ModifierVisibility);
+		SetWidgetVisibility(CombatPreviewModifiersPanel ? CombatPreviewModifiersPanel.Get() : CombatMods.Get(), ModifierVisibility);
 		SetWidgetVisibility(
 			CombatPreviewModifiersText,
 			ModifierVisibility
@@ -1122,7 +1122,7 @@ void UConquestGameWidget::ClearCombatPreview()
 		ClearText(CombatPreviewModifiersText);
 		SetWidgetVisibility(CombatPreviewModifiersText, ESlateVisibility::Collapsed);
 	}
-	SetWidgetVisibility(CombatPreviewModifiersPanel, ESlateVisibility::Collapsed);
+	SetWidgetVisibility(CombatPreviewModifiersPanel ? CombatPreviewModifiersPanel.Get() : CombatMods.Get(), ESlateVisibility::Collapsed);
 }
 
 void UConquestGameWidget::HandleTileExpansionConfirmClicked()

@@ -195,6 +195,73 @@ namespace
 			PenaltyText
 		));
 	}
+
+	bool ConquestHUDIsHappinessCombatModifier(FName ModifierId)
+	{
+		return
+			ModifierId == FName(TEXT("Happiness_Unhappy_Attack")) ||
+			ModifierId == FName(TEXT("Happiness_Unhappy_Defense"));
+	}
+
+	FString ConquestHUDFormatCombatModifierName(FName ModifierId)
+	{
+		if (ModifierId == FName(TEXT("Tile_Defense_Modifier")))
+		{
+			return TEXT("Tile Defense");
+		}
+
+		FString Result = ModifierId.IsNone()
+			? FString(TEXT("Modifier"))
+			: ModifierId.ToString();
+		Result.ReplaceInline(TEXT("_"), TEXT(" "));
+		return Result;
+	}
+
+	void ConquestHUDAppendUnitCombatModifierTexts(
+		TArray<FText>& OutModifierTexts,
+		const FText& CombatantLabel,
+		const FConquestUnitState& Unit,
+		EConquestUnitCombatModifierType ModifierType
+	)
+	{
+		for (const FConquestUnitCombatModifier& Modifier : Unit.CombatModifiers)
+		{
+			if (
+				Modifier.ModifierType != ModifierType ||
+				ConquestHUDIsHappinessCombatModifier(Modifier.ModifierId)
+			)
+			{
+				continue;
+			}
+
+			TArray<FString> ModifierParts;
+			if (Modifier.FlatBonus != 0)
+			{
+				ModifierParts.Add(FString::Printf(TEXT("%+d"), Modifier.FlatBonus));
+			}
+
+			if (!FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f))
+			{
+				const int32 Percent = FMath::RoundToInt((Modifier.Multiplier - 1.0f) * 100.0f);
+				if (Percent != 0)
+				{
+					ModifierParts.Add(FString::Printf(TEXT("%+d%%"), Percent));
+				}
+			}
+
+			if (ModifierParts.Num() <= 0)
+			{
+				continue;
+			}
+
+			OutModifierTexts.Add(FText::FromString(FString::Printf(
+				TEXT("%s: %s (%s)"),
+				*CombatantLabel.ToString(),
+				*ConquestHUDFormatCombatModifierName(Modifier.ModifierId),
+				*FString::Join(ModifierParts, TEXT(", "))
+			)));
+		}
+	}
 }
 
 AConquestHUD::AConquestHUD()
@@ -1473,6 +1540,12 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 				NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
 				Player
 			);
+			ConquestHUDAppendUnitCombatModifierTexts(
+				PreviewData.ModifierTexts,
+				NSLOCTEXT("Conquest", "CombatPreviewAttackerAttackLabel", "Attacker ATK"),
+				*SelectedUnit,
+				EConquestUnitCombatModifierType::Attack
+			);
 
 			if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 			{
@@ -1534,6 +1607,12 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 			NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
 			Player
 		);
+		ConquestHUDAppendUnitCombatModifierTexts(
+			PreviewData.ModifierTexts,
+			NSLOCTEXT("Conquest", "CombatPreviewAttackerAttackLabel", "Attacker ATK"),
+			*SelectedUnit,
+			EConquestUnitCombatModifierType::Attack
+		);
 
 		if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 		{
@@ -1553,6 +1632,12 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
 		Player
 	);
+	ConquestHUDAppendUnitCombatModifierTexts(
+		PreviewData.ModifierTexts,
+		NSLOCTEXT("Conquest", "CombatPreviewAttackerAttackLabel", "Attacker ATK"),
+		*SelectedUnit,
+		EConquestUnitCombatModifierType::Attack
+	);
 	if (DefenderUnit->OwnerPlayerId != INDEX_NONE)
 	{
 		const FConquestPlayerEmpireState& DefenderPlayer = ConquestGS->GetPlayerEmpire(DefenderUnit->OwnerPlayerId);
@@ -1564,6 +1649,21 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 				DefenderPlayer
 			);
 		}
+	}
+	ConquestHUDAppendUnitCombatModifierTexts(
+		PreviewData.ModifierTexts,
+		NSLOCTEXT("Conquest", "CombatPreviewDefenderDefenseLabel", "Defender DEF"),
+		*DefenderUnit,
+		EConquestUnitCombatModifierType::Defense
+	);
+	if (PreviewData.bHasCounterAttack)
+	{
+		ConquestHUDAppendUnitCombatModifierTexts(
+			PreviewData.ModifierTexts,
+			NSLOCTEXT("Conquest", "CombatPreviewDefenderCounterLabel", "Defender Counter"),
+			*DefenderUnit,
+			EConquestUnitCombatModifierType::Attack
+		);
 	}
 
 	if (!PreviewData.bIsValid)

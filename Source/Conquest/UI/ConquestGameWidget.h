@@ -452,6 +452,9 @@ protected:
 	TObjectPtr<UWidget> CombatPreviewModifiersPanel = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> CombatMods = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CombatPreviewModifiersText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))

@@ -291,6 +291,12 @@ const FHexResourceDefinition* FHexGridModel::FindResourceDefinition(FName Resour
 	return ResourceData ? ResourceData->FindResource(ResourceId) : nullptr;
 }
 
+const FHexImprovementDefinition* FHexGridModel::FindImprovementDefinition(FName ImprovementId) const
+{
+	const UHexImprovementSetData* ImprovementData = ImprovementSetData.Get();
+	return ImprovementData ? ImprovementData->FindImprovement(ImprovementId) : nullptr;
+}
+
 void FHexGridModel::GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const
 {
 	OutImprovements.Reset();

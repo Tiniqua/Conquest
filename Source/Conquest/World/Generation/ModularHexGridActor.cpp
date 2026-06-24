@@ -9,6 +9,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Conquest/UI/ConquestCityWorldLabelWidget.h"
+#include "Conquest/UI/ConquestTileHealthBarWidget.h"
 #include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -25,6 +26,14 @@ AModularHexGridActor::AModularHexGridActor()
 	if (UnitWorldIconWidgetFinder.Succeeded())
 	{
 		UnitWorldIconWidgetClass = UnitWorldIconWidgetFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UConquestTileHealthBarWidget> TileHealthBarWidgetFinder(
+		TEXT("/Game/UI/WBP_TileHealthBar")
+	);
+	if (TileHealthBarWidgetFinder.Succeeded())
+	{
+		TileHealthBarWidgetClass = TileHealthBarWidgetFinder.Class;
 	}
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
@@ -242,6 +251,16 @@ FTransform AModularHexGridActor::BuildCityWorldLabelTransform(const FIntPoint& C
 	);
 }
 
+FTransform AModularHexGridActor::BuildTileHealthBarTransform(const FIntPoint& Coord) const
+{
+	const FTransform SurfaceTransform = BuildCityPlaceholderTransform(Coord, true, FVector::OneVector);
+	return FTransform(
+		TileHealthBarRotation,
+		SurfaceTransform.GetLocation() + TileHealthBarOffset,
+		FVector(TileHealthBarScale, TileHealthBarScale, TileHealthBarScale)
+	);
+}
+
 void AModularHexGridActor::AddCityPlaceholder(
 	int32 CityId,
 	const FIntPoint& Coord,
@@ -405,6 +424,97 @@ void AModularHexGridActor::SetCityWorldLabelVisible(int32 CityId, bool bVisible)
 	LabelComponent->SetVisibility(bVisible);
 }
 
+void AModularHexGridActor::AddOrUpdateTileHealthBar(
+	const FIntPoint& Coord,
+	int32 CurrentHealth,
+	int32 MaxHealth,
+	int32 CombatStrength
+)
+{
+	if (!TileHealthBarWidgetClass || !GridModel.IsValidTile(Coord.X, Coord.Y))
+	{
+		return;
+	}
+
+	const int32 ClampedMaxHealth = FMath::Max(1, MaxHealth);
+	const int32 ClampedCurrentHealth = FMath::Clamp(CurrentHealth, 0, ClampedMaxHealth);
+	if (ClampedCurrentHealth >= ClampedMaxHealth)
+	{
+		RemoveTileHealthBar(Coord);
+		return;
+	}
+
+	UWidgetComponent* HealthBarComponent = nullptr;
+	if (TObjectPtr<UWidgetComponent>* ExistingComponent = TileHealthBarComponents.Find(Coord))
+	{
+		HealthBarComponent = ExistingComponent->Get();
+	}
+
+	if (!HealthBarComponent)
+	{
+		const FName ComponentName = MakeUniqueObjectName(
+			this,
+			UWidgetComponent::StaticClass(),
+			TEXT("TileHealthBar")
+		);
+
+		HealthBarComponent = NewObject<UWidgetComponent>(this, ComponentName);
+		if (!HealthBarComponent)
+		{
+			return;
+		}
+
+		HealthBarComponent->SetupAttachment(SceneRoot);
+		HealthBarComponent->RegisterComponent();
+		HealthBarComponent->SetWidgetClass(TileHealthBarWidgetClass);
+		HealthBarComponent->SetWidgetSpace(EWidgetSpace::World);
+		HealthBarComponent->SetDrawSize(TileHealthBarDrawSize);
+		HealthBarComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HealthBarComponent->SetGenerateOverlapEvents(false);
+		HealthBarComponent->SetCastShadow(false);
+		HealthBarComponent->bCastDynamicShadow = false;
+		HealthBarComponent->bCastStaticShadow = false;
+		HealthBarComponent->CastShadow = false;
+
+		AddInstanceComponent(HealthBarComponent);
+		TileHealthBarComponents.Add(Coord, HealthBarComponent);
+	}
+
+	HealthBarComponent->SetRelativeTransform(BuildTileHealthBarTransform(Coord));
+	HealthBarComponent->InitWidget();
+	HealthBarComponent->SetVisibility(true);
+
+	if (UConquestTileHealthBarWidget* HealthBarWidget = Cast<UConquestTileHealthBarWidget>(HealthBarComponent->GetWidget()))
+	{
+		HealthBarWidget->SetTileHealth(ClampedCurrentHealth, ClampedMaxHealth, CombatStrength);
+	}
+}
+
+void AModularHexGridActor::RemoveTileHealthBar(const FIntPoint& Coord)
+{
+	TObjectPtr<UWidgetComponent>* ExistingComponent = TileHealthBarComponents.Find(Coord);
+	UWidgetComponent* HealthBarComponent = ExistingComponent ? ExistingComponent->Get() : nullptr;
+	if (HealthBarComponent)
+	{
+		HealthBarComponent->DestroyComponent();
+	}
+
+	TileHealthBarComponents.Remove(Coord);
+}
+
+void AModularHexGridActor::ClearTileHealthBars()
+{
+	for (const TPair<FIntPoint, TObjectPtr<UWidgetComponent>>& Pair : TileHealthBarComponents)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->DestroyComponent();
+		}
+	}
+
+	TileHealthBarComponents.Reset();
+}
+
 void AModularHexGridActor::ClearCityPlaceholders()
 {
 	CityIdToPlaceholderInstanceIndex.Reset();
@@ -428,6 +538,7 @@ void AModularHexGridActor::ClearCityPlaceholders()
 	}
 
 	CityWorldLabelComponents.Reset();
+	ClearTileHealthBars();
 }
 
 void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)

@@ -176,6 +176,30 @@ struct FCityWorkedTileAssignment
 };
 
 USTRUCT(BlueprintType)
+struct FCityOwnedTileCombatState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FIntPoint Coord = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CombatStrength = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 HealRatePerTurn = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float DefenderModifier = 1.0f;
+};
+
+USTRUCT(BlueprintType)
 struct FCityState
 {
 	GENERATED_BODY()
@@ -220,6 +244,9 @@ struct FCityState
 	TArray<FCityWorkedTileAssignment> WorkedTileAssignments;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FCityOwnedTileCombatState> OwnedTileCombatStates;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ConstructedBuildingIds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -260,4 +287,19 @@ struct FHexTileGameplayState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FHexYield CachedFinalYields;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CombatStrength = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 HealRatePerTurn = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float DefenderModifier = 1.0f;
 };

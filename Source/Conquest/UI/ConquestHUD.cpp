@@ -1241,17 +1241,33 @@ bool AConquestHUD::TryAttackSelectedUnitAtTile(int32 Q, int32 R)
 		const FCityState* DefenderCity = DefenderCityId != INDEX_NONE
 			? ConquestGS->CityManager->GetCity(DefenderCityId)
 			: nullptr;
-		if (!DefenderCity || DefenderCity->OwnerPlayerId == Player.PlayerId)
+		if (DefenderCity && DefenderCity->OwnerPlayerId != Player.PlayerId)
 		{
-			return false;
+			if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+			{
+				ConquestPC->RequestAttackCity(SelectedUnit->UnitInstanceId, DefenderCityId);
+			}
+		}
+		else
+		{
+			const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+			const FHexTileData* TargetTile = GridModel ? GridModel->GetTile(TargetCoord) : nullptr;
+			if (
+				!TargetTile ||
+				TargetTile->Gameplay.OwnerPlayerId == INDEX_NONE ||
+				TargetTile->Gameplay.OwnerPlayerId == Player.PlayerId
+			)
+			{
+				return false;
+			}
+
+			if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+			{
+				ConquestPC->RequestAttackTile(SelectedUnit->UnitInstanceId, TargetCoord);
+			}
 		}
 
-		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
-		{
-			ConquestPC->RequestAttackCity(SelectedUnit->UnitInstanceId, DefenderCityId);
-		}
-
-		SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+		SelectedUnit->CurrentMovementPoints = 0;
 		ClearUnitAttackHighlights();
 		if (SelectedUnit->CurrentMovementPoints <= 0)
 		{
@@ -1270,7 +1286,7 @@ bool AConquestHUD::TryAttackSelectedUnitAtTile(int32 Q, int32 R)
 		ConquestPC->RequestAttackUnit(SelectedUnit->UnitInstanceId, DefenderUnitInstanceId);
 	}
 
-	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+	SelectedUnit->CurrentMovementPoints = 0;
 	ClearUnitAttackHighlights();
 	if (SelectedUnit->CurrentMovementPoints <= 0)
 	{
@@ -1351,7 +1367,85 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 			: nullptr;
 		if (!DefenderCity || DefenderCity->OwnerPlayerId == Player.PlayerId)
 		{
-			ClearCombatPreview();
+			const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+			const FHexTileData* TargetTile = GridModel ? GridModel->GetTile(TargetCoord) : nullptr;
+			FCityOwnedTileCombatState TileCombatState;
+			if (
+				!TargetTile ||
+				TargetTile->Gameplay.OwnerPlayerId == INDEX_NONE ||
+				TargetTile->Gameplay.OwnerPlayerId == Player.PlayerId ||
+				!ConquestGS->CityManager ||
+				!ConquestGS->CityManager->GetOwnedTileCombatState(TargetCoord, TileCombatState)
+			)
+			{
+				ClearCombatPreview();
+				return false;
+			}
+
+			const int32 AttackDistance = GridModel->GetHexDistance(SelectedUnit->TileCoord, TargetCoord);
+			const float AttackerCombatValue =
+				ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
+			const float TileDefenseValue = FMath::Max(1.0f, static_cast<float>(FMath::Max(0, TileCombatState.CombatStrength)));
+
+			FConquestCombatPreviewData PreviewData;
+			PreviewData.AttackerUnitInstanceId = SelectedUnit->UnitInstanceId;
+			PreviewData.DefenderUnitInstanceId = INDEX_NONE;
+			PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
+			PreviewData.DefenderName = NSLOCTEXT("Conquest", "CombatPreviewTileDefenderName", "Border Tile");
+			PreviewData.AttackerCurrentHealth = SelectedUnit->CurrentHealth;
+			PreviewData.AttackerMaxHealth = SelectedUnit->CachedMaxHealth;
+			PreviewData.DefenderCurrentHealth = TileCombatState.CurrentHealth;
+			PreviewData.DefenderMaxHealth = TileCombatState.MaxHealth;
+			PreviewData.AttackDistance = AttackDistance;
+			PreviewData.DamageDealt = ConquestUnitCombat::CalculateDeterministicDamage(
+				AttackerCombatValue,
+				TileDefenseValue,
+				50.0f
+			);
+			PreviewData.DefenderProjectedHealth = FMath::Clamp(
+				TileCombatState.CurrentHealth - PreviewData.DamageDealt,
+				0,
+				FMath::Max(1, TileCombatState.MaxHealth)
+			);
+			PreviewData.bDefenderKilled = PreviewData.DefenderProjectedHealth <= 0;
+			PreviewData.bHasCounterAttack =
+				!PreviewData.bDefenderKilled &&
+				AttackDistance <= 1 &&
+				TileCombatState.CombatStrength > 0;
+			if (PreviewData.bHasCounterAttack)
+			{
+				PreviewData.DamageTaken = ConquestUnitCombat::CalculateDeterministicDamage(
+					TileDefenseValue,
+					AttackerCombatValue,
+					25.0f
+				);
+			}
+			PreviewData.AttackerProjectedHealth = FMath::Clamp(
+				SelectedUnit->CurrentHealth - PreviewData.DamageTaken,
+				0,
+				SelectedUnit->CachedMaxHealth
+			);
+			PreviewData.bAttackerKilled = PreviewData.AttackerProjectedHealth <= 0;
+			PreviewData.bCanAttack = true;
+			PreviewData.bIsValid = true;
+			PreviewData.Rating = PreviewData.bAttackerKilled
+				? EConquestCombatPreviewRating::Costly
+				: EConquestCombatPreviewRating::Safe;
+			PreviewData.RatingText = PreviewData.bAttackerKilled
+				? NSLOCTEXT("Conquest", "CombatPreviewCostlyTileAttack", "Costly Attack")
+				: NSLOCTEXT("Conquest", "CombatPreviewSafeTileAttack", "Safe Attack");
+			ConquestHUDAppendHappinessCombatModifierText(
+				PreviewData.ModifierTexts,
+				NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
+				Player
+			);
+
+			if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+			{
+				ActiveGameWidget->ShowCombatPreview(PreviewData);
+				return true;
+			}
+
 			return false;
 		}
 

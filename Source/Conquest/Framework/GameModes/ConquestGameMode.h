@@ -68,6 +68,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
 	bool AttackCityForPlayer(int32 PlayerId, int32 AttackerUnitInstanceId, int32 DefenderCityId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	bool AttackTileForPlayer(int32 PlayerId, int32 AttackerUnitInstanceId, FIntPoint TargetCoord);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|Game")
 	void ResetGameToMainMenu();
 

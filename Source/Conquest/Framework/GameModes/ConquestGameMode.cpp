@@ -880,7 +880,7 @@ bool AConquestGameMode::AttackUnitForPlayer(
 	const int32 DefenderDamage = ConquestUnitCombat::CalculateDeterministicDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
 
 	Defender->CurrentHealth = FMath::Clamp(Defender->CurrentHealth - DefenderDamage, 0, Defender->CachedMaxHealth);
-	Attacker->CurrentMovementPoints = FMath::Max(0, Attacker->CurrentMovementPoints - 1);
+	Attacker->CurrentMovementPoints = 0;
 	Attacker->bIsFortified = false;
 	Attacker->bIsSleeping = false;
 
@@ -994,7 +994,7 @@ bool AConquestGameMode::AttackCityForPlayer(
 		FMath::Max(1, DefenderCity->MaxHealth)
 	);
 
-	Attacker->CurrentMovementPoints = FMath::Max(0, Attacker->CurrentMovementPoints - 1);
+	Attacker->CurrentMovementPoints = 0;
 	Attacker->bIsFortified = false;
 	Attacker->bIsSleeping = false;
 
@@ -1034,6 +1034,131 @@ bool AConquestGameMode::AttackCityForPlayer(
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackCity")));
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestGameMode::AttackTileForPlayer(
+	int32 PlayerId,
+	int32 AttackerUnitInstanceId,
+	FIntPoint TargetCoord
+)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->CityManager || !ConquestGS->GetHexGridModel())
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& AttackerPlayer = ConquestGS->GetPlayerEmpireMutable(PlayerId);
+	FConquestUnitState* Attacker = FindUnitMutable(AttackerPlayer, AttackerUnitInstanceId);
+	if (!Attacker || Attacker->OwnerPlayerId != PlayerId || Attacker->CurrentMovementPoints <= 0)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const FHexTileData* TargetTile = GridModel->GetTile(TargetCoord);
+	if (
+		!TargetTile ||
+		TargetTile->Gameplay.OwnerPlayerId == INDEX_NONE ||
+		TargetTile->Gameplay.OwnerPlayerId == PlayerId ||
+		ConquestGS->CityManager->FindCityAtTile(TargetCoord) != INDEX_NONE
+	)
+	{
+		return false;
+	}
+
+	for (const FConquestPlayerEmpireState& OtherPlayer : ConquestGS->PlayerEmpires)
+	{
+		for (const FConquestUnitState& OtherUnit : OtherPlayer.Units)
+		{
+			if (OtherUnit.TileCoord == TargetCoord)
+			{
+				return false;
+			}
+		}
+	}
+
+	FCityOwnedTileCombatState TileCombatState;
+	if (!ConquestGS->CityManager->GetOwnedTileCombatState(TargetCoord, TileCombatState))
+	{
+		return false;
+	}
+
+	const int32 AttackDistance = GridModel->GetHexDistance(Attacker->TileCoord, TargetCoord);
+	if (AttackDistance <= 0 || AttackDistance > FMath::Max(1, Attacker->CachedAttackRange))
+	{
+		return false;
+	}
+
+	const FIntPoint AttackerFromCoord = Attacker->TileCoord;
+	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(
+		*Attacker,
+		EConquestUnitCombatModifierType::Attack
+	);
+	const float TileDefenseValue = FMath::Max(1.0f, static_cast<float>(FMath::Max(0, TileCombatState.CombatStrength)));
+	const int32 TileDamage = ConquestUnitCombat::CalculateDeterministicDamage(
+		AttackerCombatValue,
+		TileDefenseValue,
+		50.0f
+	);
+
+	if (!ConquestGS->CityManager->DamageOwnedTile(TargetCoord, TileDamage))
+	{
+		return false;
+	}
+
+	ConquestGS->CityManager->GetOwnedTileCombatState(TargetCoord, TileCombatState);
+
+	Attacker->CurrentMovementPoints = 0;
+	Attacker->bIsFortified = false;
+	Attacker->bIsSleeping = false;
+
+	const bool bTileDestroyed = TileCombatState.CurrentHealth <= 0;
+	if (!bTileDestroyed && AttackDistance <= 1 && TileCombatState.CombatStrength > 0)
+	{
+		const int32 AttackerDamage = ConquestUnitCombat::CalculateDeterministicDamage(
+			TileDefenseValue,
+			AttackerCombatValue,
+			25.0f
+		);
+		Attacker->CurrentHealth = FMath::Clamp(
+			Attacker->CurrentHealth - AttackerDamage,
+			0,
+			Attacker->CachedMaxHealth
+		);
+	}
+
+	const bool bAttackerKilled = Attacker->CurrentHealth <= 0;
+	if (bAttackerKilled)
+	{
+		AttackerPlayer.Units.RemoveAll([AttackerUnitInstanceId](const FConquestUnitState& Candidate)
+		{
+			return Candidate.UnitInstanceId == AttackerUnitInstanceId;
+		});
+		DestroyUnitActor(*ConquestGS, AttackerUnitInstanceId);
+	}
+	else if (bTileDestroyed)
+	{
+		const bool bDestroyed = ConquestGS->CityManager->DestroyOwnedTile(TargetCoord, PlayerId);
+		if (bDestroyed && AttackDistance <= 1)
+		{
+			Attacker->TileCoord = TargetCoord;
+
+			if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = ConquestGS->UnitActorsByInstanceId.Find(Attacker->UnitInstanceId))
+			{
+				if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+				{
+					UnitActor->MoveToTile(TargetCoord);
+				}
+			}
+
+			ConquestGS->MulticastNotifyUnitMoved(Attacker->UnitInstanceId, PlayerId, AttackerFromCoord, TargetCoord);
+		}
+	}
+
+	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackTile")));
 	ConquestGS->BroadcastStateChanged();
 	return true;
 }

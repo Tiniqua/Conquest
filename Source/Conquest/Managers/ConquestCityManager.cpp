@@ -9,6 +9,7 @@
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexImprovementTypes.h"
 #include "Conquest/World/Generation/HexResourceSetData.h"
 #include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
@@ -21,6 +22,9 @@ namespace
 	const FName ConquestProductionProjectScienceFocus(TEXT("ScienceFocus"));
 	const FName ConquestUnhappyAttackModifierId(TEXT("Happiness_Unhappy_Attack"));
 	const FName ConquestUnhappyDefenseModifierId(TEXT("Happiness_Unhappy_Defense"));
+	const FName ConquestTileDefenseModifierId(TEXT("Tile_Defense_Modifier"));
+	constexpr int32 ConquestDefaultOwnedTileHealth = 100;
+	constexpr int32 ConquestDefaultOwnedTileHealRate = 5;
 
 	const TArray<FName>& GetConquestProductionProjectIds()
 	{
@@ -250,6 +254,7 @@ bool UConquestCityManager::ClaimTileForCity(FCityState& City, const FIntPoint& C
 	Tile->Gameplay.OwningCityId = City.CityId;
 
 	City.OwnedTiles.AddUnique(Coord);
+	EnsureOwnedTileCombatState(City, Coord);
 	return true;
 }
 
@@ -268,6 +273,11 @@ bool UConquestCityManager::IsValidExpansionTileForCity(const FCityState& City, c
 
 	const FHexTileData* Tile = GridModel->GetTile(Coord);
 	if (!Tile || Tile->Gameplay.OwnerPlayerId != INDEX_NONE)
+	{
+		return false;
+	}
+
+	if (IsEnemyUnitOnTile(City.OwnerPlayerId, Coord))
 	{
 		return false;
 	}
@@ -317,10 +327,95 @@ bool UConquestCityManager::IsValidPopulationAssignmentTile(const FCityState& Cit
 
 	if (City.OwnedTiles.Contains(Coord))
 	{
-		return Coord != City.CenterTile && GetAssignedCitizensForTile(City, Coord) < 3;
+		return
+			Coord != City.CenterTile &&
+			GetAssignedCitizensForTile(City, Coord) < 3 &&
+			!IsEnemyUnitOnTile(City.OwnerPlayerId, Coord);
 	}
 
 	return IsValidExpansionTileForCity(City, Coord);
+}
+
+FCityOwnedTileCombatState& UConquestCityManager::EnsureOwnedTileCombatState(FCityState& City, const FIntPoint& Coord)
+{
+	if (FCityOwnedTileCombatState* ExistingState = GetOwnedTileCombatStateMutable(City, Coord))
+	{
+		RefreshOwnedTileCombatState(City, *ExistingState);
+		return *ExistingState;
+	}
+
+	FCityOwnedTileCombatState& NewState = City.OwnedTileCombatStates.AddDefaulted_GetRef();
+	NewState.Coord = Coord;
+	NewState.CurrentHealth = ConquestDefaultOwnedTileHealth;
+	NewState.MaxHealth = ConquestDefaultOwnedTileHealth;
+	NewState.CombatStrength = 0;
+	NewState.HealRatePerTurn = ConquestDefaultOwnedTileHealRate;
+	NewState.DefenderModifier = 1.0f;
+	RefreshOwnedTileCombatState(City, NewState);
+	return NewState;
+}
+
+void UConquestCityManager::RefreshOwnedTileCombatState(
+	FCityState& City,
+	FCityOwnedTileCombatState& TileCombatState
+)
+{
+	TileCombatState.MaxHealth = FMath::Max(1, TileCombatState.MaxHealth <= 0
+		? ConquestDefaultOwnedTileHealth
+		: TileCombatState.MaxHealth);
+	TileCombatState.CurrentHealth = FMath::Clamp(TileCombatState.CurrentHealth, 0, TileCombatState.MaxHealth);
+	TileCombatState.CombatStrength = 0;
+	TileCombatState.HealRatePerTurn = ConquestDefaultOwnedTileHealRate;
+	TileCombatState.DefenderModifier = 1.0f;
+
+	const FHexGridModel* GridModel = GameStateRef ? GameStateRef->GetHexGridModel() : nullptr;
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(TileCombatState.Coord) : nullptr;
+	const FHexImprovementDefinition* Improvement = nullptr;
+	if (GridModel && Tile && !Tile->ImprovementId.IsNone())
+	{
+		Improvement = GridModel->FindImprovementDefinition(Tile->ImprovementId);
+	}
+
+	if (Improvement)
+	{
+		TileCombatState.CombatStrength += FMath::Max(0, Improvement->TileCombatStrengthBonus);
+		TileCombatState.HealRatePerTurn += FMath::Max(0, Improvement->TileHealRateBonus);
+		TileCombatState.DefenderModifier += FMath::Max(0.0f, Improvement->UnitDefenderModifierBonus);
+	}
+
+	if (FHexGridModel* MutableGridModel = GameStateRef ? GameStateRef->GetHexGridModelMutable() : nullptr)
+	{
+		if (FHexTileData* MutableTile = MutableGridModel->GetTileMutable(TileCombatState.Coord))
+		{
+			MutableTile->Gameplay.CurrentHealth = TileCombatState.CurrentHealth;
+			MutableTile->Gameplay.MaxHealth = TileCombatState.MaxHealth;
+			MutableTile->Gameplay.CombatStrength = TileCombatState.CombatStrength;
+			MutableTile->Gameplay.HealRatePerTurn = TileCombatState.HealRatePerTurn;
+			MutableTile->Gameplay.DefenderModifier = TileCombatState.DefenderModifier;
+		}
+	}
+}
+
+FCityOwnedTileCombatState* UConquestCityManager::GetOwnedTileCombatStateMutable(
+	FCityState& City,
+	const FIntPoint& Coord
+)
+{
+	return City.OwnedTileCombatStates.FindByPredicate([Coord](const FCityOwnedTileCombatState& TileCombatState)
+	{
+		return TileCombatState.Coord == Coord;
+	});
+}
+
+const FCityOwnedTileCombatState* UConquestCityManager::GetOwnedTileCombatStateForCity(
+	const FCityState& City,
+	const FIntPoint& Coord
+) const
+{
+	return City.OwnedTileCombatStates.FindByPredicate([Coord](const FCityOwnedTileCombatState& TileCombatState)
+	{
+		return TileCombatState.Coord == Coord;
+	});
 }
 
 void UConquestCityManager::AutoAssignWorkedTiles(FCityState& City)
@@ -372,6 +467,23 @@ void UConquestCityManager::SyncWorkedTilesFromAssignments(FCityState& City)
 		}
 
 		City.WorkedTiles.AddUnique(Assignment.Coord);
+	}
+
+	for (int32 TileStateIndex = City.OwnedTileCombatStates.Num() - 1; TileStateIndex >= 0; --TileStateIndex)
+	{
+		FCityOwnedTileCombatState& TileCombatState = City.OwnedTileCombatStates[TileStateIndex];
+		if (!City.OwnedTiles.Contains(TileCombatState.Coord))
+		{
+			City.OwnedTileCombatStates.RemoveAt(TileStateIndex);
+			continue;
+		}
+
+		RefreshOwnedTileCombatState(City, TileCombatState);
+	}
+
+	for (const FIntPoint& OwnedCoord : City.OwnedTiles)
+	{
+		EnsureOwnedTileCombatState(City, OwnedCoord);
 	}
 
 	if (!City.WorkedTiles.Contains(City.CenterTile) && City.OwnedTiles.Contains(City.CenterTile))
@@ -457,6 +569,24 @@ void UConquestCityManager::HealCityAtStartOfTurn(FCityState& City)
 	}
 }
 
+void UConquestCityManager::HealOwnedTilesAtStartOfTurn(FCityState& City)
+{
+	for (FCityOwnedTileCombatState& TileCombatState : City.OwnedTileCombatStates)
+	{
+		RefreshOwnedTileCombatState(City, TileCombatState);
+		if (TileCombatState.CurrentHealth < TileCombatState.MaxHealth)
+		{
+			TileCombatState.CurrentHealth = FMath::Min(
+				TileCombatState.MaxHealth,
+				TileCombatState.CurrentHealth + FMath::Max(0, TileCombatState.HealRatePerTurn)
+			);
+			RefreshOwnedTileCombatState(City, TileCombatState);
+		}
+
+		UpdateOwnedTileHealthBar(City, TileCombatState);
+	}
+}
+
 bool UConquestCityManager::DamageCity(int32 CityId, int32 DamageAmount)
 {
 	FCityState* City = GetCityMutable(CityId);
@@ -476,6 +606,160 @@ bool UConquestCityManager::DamageCity(int32 CityId, int32 DamageAmount)
 	}
 
 	return true;
+}
+
+bool UConquestCityManager::DamageOwnedTile(const FIntPoint& Coord, int32 DamageAmount)
+{
+	if (!GameStateRef || DamageAmount < 0)
+	{
+		return false;
+	}
+
+	FCityState* OwningCity = nullptr;
+	for (FCityState& City : Cities)
+	{
+		if (City.OwnedTiles.Contains(Coord))
+		{
+			OwningCity = &City;
+			break;
+		}
+	}
+
+	if (!OwningCity || OwningCity->CenterTile == Coord)
+	{
+		return false;
+	}
+
+	FCityOwnedTileCombatState& TileCombatState = EnsureOwnedTileCombatState(*OwningCity, Coord);
+	TileCombatState.CurrentHealth = FMath::Clamp(
+		TileCombatState.CurrentHealth - DamageAmount,
+		0,
+		FMath::Max(1, TileCombatState.MaxHealth)
+	);
+	RefreshOwnedTileCombatState(*OwningCity, TileCombatState);
+	UpdateOwnedTileHealthBar(*OwningCity, TileCombatState);
+	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
+	OnCityChanged.Broadcast(OwningCity->CityId);
+	GameStateRef->BroadcastStateChanged();
+	return true;
+}
+
+bool UConquestCityManager::DestroyOwnedTile(const FIntPoint& Coord, int32 AttackerPlayerId)
+{
+	if (!GameStateRef)
+	{
+		return false;
+	}
+
+	FCityState* OwningCity = nullptr;
+	for (FCityState& City : Cities)
+	{
+		if (City.OwnedTiles.Contains(Coord))
+		{
+			OwningCity = &City;
+			break;
+		}
+	}
+
+	if (!OwningCity || OwningCity->CenterTile == Coord || OwningCity->OwnerPlayerId == AttackerPlayerId)
+	{
+		return false;
+	}
+
+	const int32 PreviousOwnerPlayerId = OwningCity->OwnerPlayerId;
+	const int32 LostCitizens = FMath::Max(1, GetAssignedCitizensForTile(*OwningCity, Coord));
+
+	OwningCity->OwnedTiles.Remove(Coord);
+	OwningCity->WorkedTiles.Remove(Coord);
+	OwningCity->WorkedTileAssignments.RemoveAll([Coord](const FCityWorkedTileAssignment& Assignment)
+	{
+		return Assignment.Coord == Coord;
+	});
+	OwningCity->OwnedTileCombatStates.RemoveAll([Coord](const FCityOwnedTileCombatState& TileCombatState)
+	{
+		return TileCombatState.Coord == Coord;
+	});
+	OwningCity->Population = FMath::Max(1, OwningCity->Population - LostCitizens);
+	OwningCity->PendingBorderExpansions = FMath::Max(0, OwningCity->PendingBorderExpansions - LostCitizens);
+	OwningCity->CachedFoodRequiredForNextPopulation = GetFoodRequiredForNextPopulation(*OwningCity);
+
+	if (FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable())
+	{
+		if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+		{
+			Tile->Gameplay.OwnerPlayerId = INDEX_NONE;
+			Tile->Gameplay.OwningCityId = INDEX_NONE;
+			Tile->Gameplay.bIsWorked = false;
+			Tile->Gameplay.WorkedByCityId = INDEX_NONE;
+			Tile->Gameplay.CurrentHealth = ConquestDefaultOwnedTileHealth;
+			Tile->Gameplay.MaxHealth = ConquestDefaultOwnedTileHealth;
+			Tile->Gameplay.CombatStrength = 0;
+			Tile->Gameplay.HealRatePerTurn = ConquestDefaultOwnedTileHealRate;
+			Tile->Gameplay.DefenderModifier = 1.0f;
+		}
+	}
+
+	if (GameStateRef->ActiveGridActor)
+	{
+		GameStateRef->ActiveGridActor->SetTileImprovement(Coord.X, Coord.Y, NAME_None);
+		GameStateRef->ActiveGridActor->RemoveTileHealthBar(Coord);
+	}
+
+	AutoAssignWorkedTiles(*OwningCity);
+	RefreshCityCombatStats(*OwningCity);
+	RecalculateCityYields(*OwningCity);
+	RecalculateEmpireYields(PreviousOwnerPlayerId);
+	RecalculateStrategicResourceEconomy(PreviousOwnerPlayerId);
+	UpdateOwnedTileVisuals(PreviousOwnerPlayerId);
+	UpdateCityWorldLabel(*OwningCity);
+	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
+	OnCityChanged.Broadcast(OwningCity->CityId);
+	GameStateRef->BroadcastStateChanged();
+	return true;
+}
+
+bool UConquestCityManager::GetOwnedTileCombatState(
+	const FIntPoint& Coord,
+	FCityOwnedTileCombatState& OutTileCombatState
+) const
+{
+	for (const FCityState& City : Cities)
+	{
+		if (const FCityOwnedTileCombatState* TileCombatState = GetOwnedTileCombatStateForCity(City, Coord))
+		{
+			OutTileCombatState = *TileCombatState;
+			return true;
+		}
+	}
+
+	OutTileCombatState = FCityOwnedTileCombatState();
+	return false;
+}
+
+bool UConquestCityManager::IsEnemyUnitOnTile(int32 PlayerId, const FIntPoint& Coord) const
+{
+	if (!GameStateRef)
+	{
+		return false;
+	}
+
+	for (const FConquestPlayerEmpireState& Player : GameStateRef->PlayerEmpires)
+	{
+		if (Player.PlayerId == PlayerId)
+		{
+			continue;
+		}
+
+		for (const FConquestUnitState& Unit : Player.Units)
+		{
+			if (Unit.TileCoord == Coord)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 bool UConquestCityManager::CaptureCity(int32 CityId, int32 NewOwnerPlayerId)
@@ -809,7 +1093,8 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 	{
 		return
 			Modifier.ModifierId == ConquestUnhappyAttackModifierId ||
-			Modifier.ModifierId == ConquestUnhappyDefenseModifierId;
+			Modifier.ModifierId == ConquestUnhappyDefenseModifierId ||
+			Modifier.ModifierId == ConquestTileDefenseModifierId;
 	});
 
 	for (const FConquestUnitAugmentState& Augment : Unit.Augments)
@@ -860,6 +1145,21 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 		DefenseModifier.ModifierType = EConquestUnitCombatModifierType::Defense;
 		DefenseModifier.Multiplier = HappinessCombatMultiplier;
 		Unit.CombatModifiers.Add(DefenseModifier);
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Unit.TileCoord) : nullptr;
+	if (
+		Tile &&
+		Tile->Gameplay.OwnerPlayerId == Unit.OwnerPlayerId &&
+		Tile->Gameplay.DefenderModifier > 1.0f
+	)
+	{
+		FConquestUnitCombatModifier TileDefenseModifier;
+		TileDefenseModifier.ModifierId = ConquestTileDefenseModifierId;
+		TileDefenseModifier.ModifierType = EConquestUnitCombatModifierType::Defense;
+		TileDefenseModifier.Multiplier = Tile->Gameplay.DefenderModifier;
+		Unit.CombatModifiers.Add(TileDefenseModifier);
 	}
 
 	Unit.CurrentHealth = Unit.CurrentHealth <= 0
@@ -1088,6 +1388,30 @@ void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
 	);
 }
 
+void UConquestCityManager::UpdateOwnedTileHealthBar(
+	const FCityState& City,
+	const FCityOwnedTileCombatState& TileCombatState
+)
+{
+	if (!GameStateRef || !GameStateRef->ActiveGridActor)
+	{
+		return;
+	}
+
+	if (!City.OwnedTiles.Contains(TileCombatState.Coord) || TileCombatState.Coord == City.CenterTile)
+	{
+		GameStateRef->ActiveGridActor->RemoveTileHealthBar(TileCombatState.Coord);
+		return;
+	}
+
+	GameStateRef->ActiveGridActor->AddOrUpdateTileHealthBar(
+		TileCombatState.Coord,
+		TileCombatState.CurrentHealth,
+		TileCombatState.MaxHealth,
+		TileCombatState.CombatStrength
+	);
+}
+
 FName UConquestCityManager::ResolveCityName(int32 PlayerId, FName RequestedCityName) const
 {
 	if (!RequestedCityName.IsNone())
@@ -1170,6 +1494,7 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 
 		AutoAssignWorkedTiles(City);
 		HealCityAtStartOfTurn(City);
+		HealOwnedTilesAtStartOfTurn(City);
 		RecalculateCityYields(City);
 		ProcessCityGrowth(City);
 		RefreshCityCombatStats(City);

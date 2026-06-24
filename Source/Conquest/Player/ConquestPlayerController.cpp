@@ -200,6 +200,18 @@ void AConquestPlayerController::RequestAttackCity(int32 AttackerUnitInstanceId, 
 	}
 }
 
+void AConquestPlayerController::RequestAttackTile(int32 AttackerUnitInstanceId, FIntPoint TargetCoord)
+{
+	if (HasAuthority())
+	{
+		ServerRequestAttackTile_Implementation(AttackerUnitInstanceId, TargetCoord);
+	}
+	else
+	{
+		ServerRequestAttackTile(AttackerUnitInstanceId, TargetCoord);
+	}
+}
+
 void AConquestPlayerController::RequestSetLobbySlotCivilisation(
 	int32 SlotIndex,
 	UConquestCivilisationData* Civilisation
@@ -338,6 +350,17 @@ void AConquestPlayerController::ServerRequestAttackCity_Implementation(
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->AttackCityForPlayer(AssignedPlayerId, AttackerUnitInstanceId, DefenderCityId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestAttackTile_Implementation(
+	int32 AttackerUnitInstanceId,
+	FIntPoint TargetCoord
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->AttackTileForPlayer(AssignedPlayerId, AttackerUnitInstanceId, TargetCoord);
 	}
 }
 

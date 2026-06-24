@@ -11,6 +11,7 @@ struct FConquestUnitState;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCityChanged, int32, CityId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCityFounded, int32, CityId, FIntPoint, Coord);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCityNeedsBorderExpansion, int32, CityId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCityTileChanged, int32, CityId, FIntPoint, Coord);
 
 UCLASS(BlueprintType)
 class CONQUEST_API UConquestCityManager : public UObject
@@ -28,6 +29,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 	FOnCityNeedsBorderExpansion OnCityNeedsBorderExpansion;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnCityTileChanged OnCityTileChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<FCityState> Cities;
@@ -100,6 +104,18 @@ public:
 	UFUNCTION(BlueprintCallable)
 	bool CaptureCity(int32 CityId, int32 NewOwnerPlayerId);
 
+	UFUNCTION(BlueprintCallable)
+	bool DamageOwnedTile(const FIntPoint& Coord, int32 DamageAmount);
+
+	UFUNCTION(BlueprintCallable)
+	bool DestroyOwnedTile(const FIntPoint& Coord, int32 AttackerPlayerId);
+
+	UFUNCTION(BlueprintPure)
+	bool GetOwnedTileCombatState(const FIntPoint& Coord, FCityOwnedTileCombatState& OutTileCombatState) const;
+
+	UFUNCTION(BlueprintPure)
+	bool IsEnemyUnitOnTile(int32 PlayerId, const FIntPoint& Coord) const;
+
 	UFUNCTION(BlueprintPure)
 	int32 GetFoodRequiredForNextPopulation(const FCityState& City) const;
 	
@@ -132,12 +148,17 @@ private:
 	bool ClaimTileForCity(FCityState& City, const FIntPoint& Coord);
 	bool IsValidExpansionTileForCity(const FCityState& City, const FIntPoint& Coord) const;
 	bool IsValidPopulationAssignmentTile(const FCityState& City, const FIntPoint& Coord) const;
+	FCityOwnedTileCombatState& EnsureOwnedTileCombatState(FCityState& City, const FIntPoint& Coord);
+	void RefreshOwnedTileCombatState(FCityState& City, FCityOwnedTileCombatState& TileCombatState);
+	FCityOwnedTileCombatState* GetOwnedTileCombatStateMutable(FCityState& City, const FIntPoint& Coord);
+	const FCityOwnedTileCombatState* GetOwnedTileCombatStateForCity(const FCityState& City, const FIntPoint& Coord) const;
 	void AutoAssignWorkedTiles(FCityState& City);
 	void SyncWorkedTilesFromAssignments(FCityState& City);
 	int32 GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const;
 	bool AssignCitizenToTile(FCityState& City, const FIntPoint& Coord);
 	void RefreshCityCombatStats(FCityState& City);
 	void HealCityAtStartOfTurn(FCityState& City);
+	void HealOwnedTilesAtStartOfTurn(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
 	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
 	void CacheCurrentProductionProgress(FCityState& City) const;
@@ -148,6 +169,7 @@ private:
 	void SpawnUnitActorForState(const FConquestUnitState& UnitState);
 	void UpdateOwnedTileVisuals(int32 PlayerId);
 	void UpdateCityWorldLabel(const FCityState& City);
+	void UpdateOwnedTileHealthBar(const FCityState& City, const FCityOwnedTileCombatState& TileCombatState);
 	FName ResolveCityName(int32 PlayerId, FName RequestedCityName) const;
 	void ProcessCityGrowth(FCityState& City);
 	void ProcessCityProduction(FCityState& City);

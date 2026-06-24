@@ -37,6 +37,15 @@ struct FHexImprovementDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Cost", meta = (ClampMin = "0"))
 	int32 PurchaseGoldCost = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Combat", meta = (ClampMin = "0"))
+	int32 TileCombatStrengthBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Combat", meta = (ClampMin = "0"))
+	int32 TileHealRateBonus = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Combat", meta = (ClampMin = "0.0"))
+	float UnitDefenderModifierBonus = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	TArray<EHexTileType> ValidTileTypes;
 

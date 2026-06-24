@@ -22,6 +22,7 @@ class UMaterialInterface;
 class UStaticMesh;
 class UWidgetComponent;
 class UConquestCityWorldLabelWidget;
+class UConquestTileHealthBarWidget;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UHexImprovementSetData;
@@ -39,6 +40,7 @@ public:
 	UInstancedStaticMeshComponent* EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh = nullptr, UMaterialInterface* OverrideMaterial = nullptr);
 	FTransform BuildCityPlaceholderTransform(const FIntPoint& Coord, bool bOverrideScale = false, const FVector& OverrideScale = FVector::OneVector) const;
 	FTransform BuildCityWorldLabelTransform(const FIntPoint& Coord) const;
+	FTransform BuildTileHealthBarTransform(const FIntPoint& Coord) const;
 	void AddCityPlaceholder(
 		int32 CityId,
 		const FIntPoint& Coord,
@@ -69,6 +71,9 @@ public:
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);
 	void SetCityWorldLabelVisible(int32 CityId, bool bVisible);
+	void AddOrUpdateTileHealthBar(const FIntPoint& Coord, int32 CurrentHealth, int32 MaxHealth, int32 CombatStrength);
+	void RemoveTileHealthBar(const FIntPoint& Coord);
+	void ClearTileHealthBars();
 	void ClearCityPlaceholders();
 	void ClearCivilisationBorders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
@@ -114,6 +119,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Cities|World Label")
 	float CityWorldLabelScale = 1.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Tiles|Health Bar")
+	TSubclassOf<UConquestTileHealthBarWidget> TileHealthBarWidgetClass;
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Tiles|Health Bar")
+	FVector TileHealthBarOffset = FVector(0.0f, 0.0f, 72.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Tiles|Health Bar")
+	FRotator TileHealthBarRotation = FRotator(60.0f, 0.0f, 90.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Tiles|Health Bar")
+	FVector2D TileHealthBarDrawSize = FVector2D(180.0f, 36.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Hex Grid|Tiles|Health Bar")
+	float TileHealthBarScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, Category = "Hex Grid|Units|World Icon")
 	TSubclassOf<UConquestUnitWorldIconWidget> UnitWorldIconWidgetClass;
 
@@ -131,6 +151,9 @@ public:
 
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UWidgetComponent>> CityWorldLabelComponents;
+
+	UPROPERTY()
+	TMap<FIntPoint, TObjectPtr<UWidgetComponent>> TileHealthBarComponents;
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Hex Grid")
 	void RebuildGrid();

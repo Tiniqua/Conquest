@@ -480,17 +480,6 @@ bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEnd
 	{
 		for (const FCityState& City : CityManager->Cities)
 		{
-			if (City.OwnerPlayerId == PlayerId && City.PendingBorderExpansions > 0)
-			{
-				OutBlocker.Type = EConquestEndTurnBlockType::CityGrowth;
-				OutBlocker.CityId = City.CityId;
-				OutBlocker.Message = FText::Format(
-					NSLOCTEXT("Conquest", "EndTurnBlockedCityGrowth", "{0} must grow"),
-					FText::FromName(City.CityName)
-				);
-				return true;
-			}
-
 			if (City.OwnerPlayerId == PlayerId && !City.CurrentProduction.IsValid())
 			{
 				OutBlocker.Type = EConquestEndTurnBlockType::CityProduction;
@@ -550,6 +539,11 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 			Tile.Gameplay.OwningCityId = INDEX_NONE;
 			Tile.Gameplay.bIsWorked = false;
 			Tile.Gameplay.WorkedByCityId = INDEX_NONE;
+			Tile.Gameplay.CurrentHealth = 100;
+			Tile.Gameplay.MaxHealth = 100;
+			Tile.Gameplay.CombatStrength = 0;
+			Tile.Gameplay.HealRatePerTurn = 5;
+			Tile.Gameplay.DefenderModifier = 1.0f;
 		}
 	}
 
@@ -563,6 +557,20 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 				{
 					Tile->Gameplay.OwnerPlayerId = City.OwnerPlayerId;
 					Tile->Gameplay.OwningCityId = City.CityId;
+
+					const FCityOwnedTileCombatState* TileCombatState =
+						City.OwnedTileCombatStates.FindByPredicate([Coord](const FCityOwnedTileCombatState& Candidate)
+						{
+							return Candidate.Coord == Coord;
+						});
+					if (TileCombatState)
+					{
+						Tile->Gameplay.CurrentHealth = TileCombatState->CurrentHealth;
+						Tile->Gameplay.MaxHealth = TileCombatState->MaxHealth;
+						Tile->Gameplay.CombatStrength = TileCombatState->CombatStrength;
+						Tile->Gameplay.HealRatePerTurn = TileCombatState->HealRatePerTurn;
+						Tile->Gameplay.DefenderModifier = TileCombatState->DefenderModifier;
+					}
 				}
 			}
 
@@ -613,6 +621,19 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);
+
+		for (const FCityOwnedTileCombatState& TileCombatState : City.OwnedTileCombatStates)
+		{
+			if (TileCombatState.Coord != City.CenterTile && City.OwnedTiles.Contains(TileCombatState.Coord))
+			{
+				ActiveGridActor->AddOrUpdateTileHealthBar(
+					TileCombatState.Coord,
+					TileCombatState.CurrentHealth,
+					TileCombatState.MaxHealth,
+					TileCombatState.CombatStrength
+				);
+			}
+		}
 	}
 
 	for (const TPair<int32, TObjectPtr<UConquestCivilisationData>>& Pair : PlayerCivilisations)

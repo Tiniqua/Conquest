@@ -47,6 +47,7 @@ public:
 	const FHexResourceDefinition* FindResourceDefinition(FName ResourceId) const;
 	void GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const;
 	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
+	const FHexImprovementDefinition* FindImprovementDefinition(FName ImprovementId) const;
 
 	FVector GetHexCenter(int32 Q, int32 R) const;
 	FVector GetHexCornerOffset(int32 CornerIndex) const;

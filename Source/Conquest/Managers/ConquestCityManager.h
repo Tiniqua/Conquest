@@ -140,6 +140,9 @@ private:
 	void HealCityAtStartOfTurn(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
 	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
+	void CacheCurrentProductionProgress(FCityState& City) const;
+	float GetCachedProductionProgress(const FCityState& City, ECityProductionType ProductionType, FName ProductionId, float Cost) const;
+	void ClearCachedProductionProgress(FCityState& City, ECityProductionType ProductionType, FName ProductionId) const;
 	void AccumulateStrategicResourceIncome(int32 PlayerId);
 	int32 CreateUnitFromProduction(const FCityState& City, FName UnitId);
 	void SpawnUnitActorForState(const FConquestUnitState& UnitState);

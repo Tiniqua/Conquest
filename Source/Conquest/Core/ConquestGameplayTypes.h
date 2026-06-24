@@ -136,6 +136,34 @@ struct FCityProductionItem
 };
 
 USTRUCT(BlueprintType)
+struct FCityProductionProgressCacheEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	ECityProductionType Type = ECityProductionType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ProductionId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Progress = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Cost = 0.0f;
+
+	bool Matches(ECityProductionType InType, FName InProductionId) const
+	{
+		return Type == InType && ProductionId == InProductionId;
+	}
+
+	bool IsValid() const
+	{
+		return Type != ECityProductionType::None && !ProductionId.IsNone() && Cost > 0.0f;
+	}
+};
+
+USTRUCT(BlueprintType)
 struct FCityWorkedTileAssignment
 {
 	GENERATED_BODY()
@@ -196,6 +224,9 @@ struct FCityState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FCityProductionItem CurrentProduction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FCityProductionProgressCacheEntry> ProductionProgressCache;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FHexYield CachedYieldPerTurn;

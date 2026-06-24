@@ -495,6 +495,7 @@ bool UConquestCityManager::CaptureCity(int32 CityId, int32 NewOwnerPlayerId)
 
 	City->OwnerPlayerId = NewOwnerPlayerId;
 	City->CurrentHealth = 0;
+	City->ProductionProgressCache.Reset();
 	RefreshCityCombatStats(*City);
 
 	if (FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable())
@@ -568,6 +569,67 @@ FHexYield UConquestCityManager::GetProductionProjectYieldBonus(const FCityState&
 	}
 
 	return Result;
+}
+
+void UConquestCityManager::CacheCurrentProductionProgress(FCityState& City) const
+{
+	if (
+		!City.CurrentProduction.IsValid() ||
+		City.CurrentProduction.Type == ECityProductionType::Project ||
+		City.CurrentProduction.Progress <= 0.0f
+	)
+	{
+		return;
+	}
+
+	FCityProductionProgressCacheEntry* CacheEntry =
+		City.ProductionProgressCache.FindByPredicate([&City](const FCityProductionProgressCacheEntry& Entry)
+		{
+			return Entry.Matches(City.CurrentProduction.Type, City.CurrentProduction.ProductionId);
+		});
+
+	if (!CacheEntry)
+	{
+		CacheEntry = &City.ProductionProgressCache.AddDefaulted_GetRef();
+		CacheEntry->Type = City.CurrentProduction.Type;
+		CacheEntry->ProductionId = City.CurrentProduction.ProductionId;
+	}
+
+	CacheEntry->Cost = City.CurrentProduction.Cost;
+	CacheEntry->Progress = FMath::Clamp(City.CurrentProduction.Progress, 0.0f, FMath::Max(0.0f, City.CurrentProduction.Cost));
+}
+
+float UConquestCityManager::GetCachedProductionProgress(
+	const FCityState& City,
+	ECityProductionType ProductionType,
+	FName ProductionId,
+	float Cost
+) const
+{
+	const FCityProductionProgressCacheEntry* CacheEntry =
+		City.ProductionProgressCache.FindByPredicate([ProductionType, ProductionId](const FCityProductionProgressCacheEntry& Entry)
+		{
+			return Entry.Matches(ProductionType, ProductionId);
+		});
+
+	if (!CacheEntry || !CacheEntry->IsValid())
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(CacheEntry->Progress, 0.0f, FMath::Max(0.0f, Cost));
+}
+
+void UConquestCityManager::ClearCachedProductionProgress(
+	FCityState& City,
+	ECityProductionType ProductionType,
+	FName ProductionId
+) const
+{
+	City.ProductionProgressCache.RemoveAll([ProductionType, ProductionId](const FCityProductionProgressCacheEntry& Entry)
+	{
+		return Entry.Matches(ProductionType, ProductionId);
+	});
 }
 
 void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
@@ -1191,10 +1253,12 @@ void UConquestCityManager::ProcessCityProduction(FCityState& City)
 	if (City.CurrentProduction.Type == ECityProductionType::Building &&	!City.CurrentProduction.ProductionId.IsNone())
 	{
 		City.ConstructedBuildingIds.AddUnique(City.CurrentProduction.ProductionId);
+		ClearCachedProductionProgress(City, City.CurrentProduction.Type, City.CurrentProduction.ProductionId);
 	}
 	else if (City.CurrentProduction.Type == ECityProductionType::Unit && !City.CurrentProduction.ProductionId.IsNone())
 	{
 		CreateUnitFromProduction(City, City.CurrentProduction.ProductionId);
+		ClearCachedProductionProgress(City, City.CurrentProduction.Type, City.CurrentProduction.ProductionId);
 	}
 
 	City.CurrentProduction.Clear();
@@ -1493,10 +1557,16 @@ bool UConquestCityManager::SetCityProductionBuildingById(int32 CityId, FName Bui
 		return false;
 	}
 
+	CacheCurrentProductionProgress(*City);
 	City->CurrentProduction.Type = ECityProductionType::Building;
 	City->CurrentProduction.ProductionId = BuildingRow->BuildingId;
-	City->CurrentProduction.Progress = 0.0f;
 	City->CurrentProduction.Cost = BuildingRow->ProductionCost;
+	City->CurrentProduction.Progress = GetCachedProductionProgress(
+		*City,
+		City->CurrentProduction.Type,
+		City->CurrentProduction.ProductionId,
+		City->CurrentProduction.Cost
+	);
 	City->bNeedsProductionChoice = false;
 
 	OnCityChanged.Broadcast(CityId);
@@ -1539,10 +1609,16 @@ bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
 		return false;
 	}
 
+	CacheCurrentProductionProgress(*City);
 	City->CurrentProduction.Type = ECityProductionType::Unit;
 	City->CurrentProduction.ProductionId = UnitRow->UnitId;
-	City->CurrentProduction.Progress = 0.0f;
 	City->CurrentProduction.Cost = UnitRow->ProductionCost;
+	City->CurrentProduction.Progress = GetCachedProductionProgress(
+		*City,
+		City->CurrentProduction.Type,
+		City->CurrentProduction.ProductionId,
+		City->CurrentProduction.Cost
+	);
 	City->bNeedsProductionChoice = false;
 
 	OnCityChanged.Broadcast(CityId);
@@ -1568,6 +1644,7 @@ bool UConquestCityManager::SetCityProductionProjectById(int32 CityId, FName Proj
 		return false;
 	}
 
+	CacheCurrentProductionProgress(*City);
 	City->CurrentProduction.Type = ECityProductionType::Project;
 	City->CurrentProduction.ProductionId = ProjectId;
 	City->CurrentProduction.Progress = 0.0f;
@@ -1745,7 +1822,13 @@ int32 UConquestCityManager::EstimateTurnsToBuildById(int32 CityId, FName Buildin
 		return INDEX_NONE;
 	}
 
-	const float RemainingCost = BuildingRow->ProductionCost;
+	const float Cost = static_cast<float>(BuildingRow->ProductionCost);
+	const float CurrentProgress =
+		City->CurrentProduction.Type == ECityProductionType::Building &&
+		City->CurrentProduction.ProductionId == BuildingRow->BuildingId
+			? City->CurrentProduction.Progress
+			: GetCachedProductionProgress(*City, ECityProductionType::Building, BuildingRow->BuildingId, Cost);
+	const float RemainingCost = FMath::Max(0.0f, Cost - CurrentProgress);
 	return FMath::Max(1, FMath::CeilToInt(RemainingCost / ProductionPerTurn));
 }
 
@@ -1779,7 +1862,14 @@ int32 UConquestCityManager::EstimateTurnsToTrainUnitById(int32 CityId, FName Uni
 		return INDEX_NONE;
 	}
 
-	return FMath::Max(1, FMath::CeilToInt(static_cast<float>(UnitRow->ProductionCost) / ProductionPerTurn));
+	const float Cost = static_cast<float>(UnitRow->ProductionCost);
+	const float CurrentProgress =
+		City->CurrentProduction.Type == ECityProductionType::Unit &&
+		City->CurrentProduction.ProductionId == UnitRow->UnitId
+			? City->CurrentProduction.Progress
+			: GetCachedProductionProgress(*City, ECityProductionType::Unit, UnitRow->UnitId, Cost);
+	const float RemainingCost = FMath::Max(0.0f, Cost - CurrentProgress);
+	return FMath::Max(1, FMath::CeilToInt(RemainingCost / ProductionPerTurn));
 }
 
 int32 UConquestCityManager::EstimateTurnsToGrowth(int32 CityId) const

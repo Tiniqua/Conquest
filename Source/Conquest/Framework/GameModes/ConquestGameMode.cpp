@@ -866,6 +866,8 @@ bool AConquestGameMode::AttackUnitForPlayer(
 		return false;
 	}
 
+	const FIntPoint AttackerFromCoord = Attacker->TileCoord;
+	const FIntPoint DefenderCoord = Defender->TileCoord;
 	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
 	const int32 AttackDistance = GridModel->GetHexDistance(Attacker->TileCoord, Defender->TileCoord);
 	if (AttackDistance <= 0 || AttackDistance > FMath::Max(1, Attacker->CachedAttackRange))
@@ -908,6 +910,29 @@ bool AConquestGameMode::AttackUnitForPlayer(
 			return Candidate.UnitInstanceId == AttackerUnitInstanceId;
 		});
 		DestroyUnitActor(*ConquestGS, AttackerUnitInstanceId);
+	}
+	else if (bDefenderKilled)
+	{
+		const FHexTileData* DefenderTile = GridModel->GetTile(DefenderCoord);
+		const bool bCanAdvanceIntoDefenderTile =
+			DefenderTile &&
+			!IsOwnedByOtherPlayer(*DefenderTile, PlayerId) &&
+			!IsEnemyCityTile(*ConquestGS, PlayerId, DefenderCoord);
+
+		if (bCanAdvanceIntoDefenderTile)
+		{
+			Attacker->TileCoord = DefenderCoord;
+
+			if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = ConquestGS->UnitActorsByInstanceId.Find(Attacker->UnitInstanceId))
+			{
+				if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
+				{
+					UnitActor->MoveToTile(DefenderCoord);
+				}
+			}
+
+			ConquestGS->MulticastNotifyUnitMoved(Attacker->UnitInstanceId, PlayerId, AttackerFromCoord, DefenderCoord);
+		}
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("Attack")));

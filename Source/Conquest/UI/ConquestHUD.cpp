@@ -510,13 +510,24 @@ bool AConquestHUD::ConfirmSelectedExpansionTile()
 		return false;
 	}
 
+	const int32 ConfirmedCityId = ExpansionSelectionCityId;
+	const FIntPoint ConfirmedCoord = PendingExpansionTileCoord;
+	const FCityState* City = ConquestGS->CityManager->GetCity(ConfirmedCityId);
+	const bool bAssigningExistingOwnedTile = City && City->OwnedTiles.Contains(ConfirmedCoord);
+
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
 	{
-		ConquestPC->RequestClaimExpansionTile(ExpansionSelectionCityId, PendingExpansionTileCoord);
+		ConquestPC->RequestClaimExpansionTile(ConfirmedCityId, ConfirmedCoord);
 	}
 	else
 	{
 		return false;
+	}
+
+	if (bAssigningExistingOwnedTile)
+	{
+		HideCityPanel();
+		return true;
 	}
 
 	if (CityPanelWidget)

@@ -14,7 +14,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/Source/Conquest/Core/ConquestMultiplayerSessionSubsystem.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/Source/Conquest/Core/ConquestMultiplayerSessionSubsystem.h" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -412,7 +412,7 @@
       <workItem from="1782116291937" duration="13201000" />
       <workItem from="1782225049161" duration="3036000" />
       <workItem from="1782229434450" duration="2836000" />
-      <workItem from="1782289660829" duration="327000" />
+      <workItem from="1782289660829" duration="844000" />
     </task>
     <servers />
   </component>

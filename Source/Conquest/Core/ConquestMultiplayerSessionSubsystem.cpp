@@ -9,7 +9,8 @@ namespace
 {
 	const FName ConquestSessionName = NAME_GameSession;
 	const FName ConquestPresenceKey(TEXT("CONQUEST_PRESENCE"));
-
+	const FName SearchPresenceKey(TEXT("PRESENCESEARCH"));
+	
 	IOnlineSessionPtr GetSessionInterface()
 	{
 		IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
@@ -115,7 +116,7 @@ void UConquestMultiplayerSessionSubsystem::FindSessions(int32 MaxResults, bool b
 	// Query the lobby surface first, then filter to Conquest sessions locally in HandleFindSessionsComplete.
 	if (!bUseLan)
 	{
-		LastSessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+		LastSessionSearch->QuerySettings.Set(SearchPresenceKey, true, EOnlineComparisonOp::Equals);
 
 #if defined(SEARCH_LOBBIES)
 		LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);

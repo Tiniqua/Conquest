@@ -26,6 +26,8 @@ public:
 	void ClearHoveredTileInfoWidget() const;
 	void UpdateHoveredTileInfoWidget(int32 Q, int32 R, const FHexTileData& TileData) const;
 
+	void HandlePrimaryPressed();
+	void HandlePrimaryReleased();
 	void HandlePrimaryClick();
 	void HandleSecondaryClick();
 	bool GetTileUnderMouse(AModularHexGridActor*& OutGridActor, int32& OutQ, int32& OutR, FHexTileData& OutTileData) const;
@@ -81,6 +83,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	bool bMoveRelativeToCameraYaw = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan")
+	bool bEnableLeftMouseDragPan = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan"))
+	float DragPanWorldUnitsPerPixel = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan"))
+	float DragPanZoomScale = 0.001f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan"))
+	float DragPanClickThresholdPixels = 6.0f;
+
 	// Scroll zoom movement speed.
 	// This moves along the actual camera forward vector, not world up/down.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom")
@@ -112,6 +126,11 @@ protected:
 
 	int32 LastHoveredQ = INDEX_NONE;
 	int32 LastHoveredR = INDEX_NONE;
+	bool bPrimaryMouseDown = false;
+	bool bPrimaryDragPanning = false;
+	bool bPrimaryPressStartedOverWorld = false;
+	FVector2D PrimaryPressMousePosition = FVector2D::ZeroVector;
+	FVector2D LastDragMousePosition = FVector2D::ZeroVector;
 
 	void ClearHoveredTileVisual();
 	void UpdateHoveredTileVisual(AModularHexGridActor* HexGridActor, int32 Q, int32 R);
@@ -127,6 +146,7 @@ protected:
 	void MoveUp(float Value);
 
 	void Zoom(float Value);
+	void UpdateDragPan(float DeltaTime);
 
 	void ConfigurePlayerControllerForGameAndUI();
 	void ClampZoomHeightIfNeeded();

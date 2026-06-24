@@ -146,6 +146,8 @@ void AConquestPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	UpdateDragPan(DeltaTime);
+
 	if (!bEnableTileHoverDebug || !Camera)
 	{
 		ClearHoveredTileInfoWidget();
@@ -251,7 +253,8 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAxis(TEXT("MoveUp"), this, &AConquestPawn::MoveUp);
 
 	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
-	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Pressed, this, &AConquestPawn::HandlePrimaryClick);
+	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Pressed, this, &AConquestPawn::HandlePrimaryPressed);
+	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Released, this, &AConquestPawn::HandlePrimaryReleased);
 	PlayerInputComponent->BindAction(TEXT("SecondaryClick"), IE_Pressed, this, &AConquestPawn::HandleSecondaryClick);
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
@@ -417,6 +420,57 @@ void AConquestPawn::TryOpenCityPanelAtTile(const FIntPoint& Coord)
 	}
 
 	ConquestHUD->ShowCityPanel(CityId);
+}
+
+void AConquestPawn::HandlePrimaryPressed()
+{
+	bPrimaryMouseDown = false;
+	bPrimaryDragPanning = false;
+	bPrimaryPressStartedOverWorld = false;
+	PrimaryPressMousePosition = FVector2D::ZeroVector;
+	LastDragMousePosition = FVector2D::ZeroVector;
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return;
+	}
+
+	bPrimaryMouseDown = true;
+	PrimaryPressMousePosition = FVector2D(MouseX, MouseY);
+	LastDragMousePosition = PrimaryPressMousePosition;
+
+	AModularHexGridActor* HexGridActor = nullptr;
+	int32 Q = INDEX_NONE;
+	int32 R = INDEX_NONE;
+	FHexTileData TileData;
+	bPrimaryPressStartedOverWorld = GetTileUnderMouse(HexGridActor, Q, R, TileData);
+}
+
+void AConquestPawn::HandlePrimaryReleased()
+{
+	const bool bShouldRunClick =
+		bPrimaryMouseDown &&
+		!bPrimaryDragPanning &&
+		(!bEnableLeftMouseDragPan || bPrimaryPressStartedOverWorld);
+
+	bPrimaryMouseDown = false;
+	bPrimaryDragPanning = false;
+	bPrimaryPressStartedOverWorld = false;
+	PrimaryPressMousePosition = FVector2D::ZeroVector;
+	LastDragMousePosition = FVector2D::ZeroVector;
+
+	if (bShouldRunClick)
+	{
+		HandlePrimaryClick();
+	}
 }
 
 void AConquestPawn::HandlePrimaryClick()
@@ -728,6 +782,71 @@ void AConquestPawn::Zoom(float Value)
 	);
 
 	ClampZoomHeightIfNeeded();
+}
+
+void AConquestPawn::UpdateDragPan(float DeltaTime)
+{
+	(void)DeltaTime;
+
+	if (!bEnableLeftMouseDragPan || !bPrimaryMouseDown || !bPrimaryPressStartedOverWorld || !Camera)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (!PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		return;
+	}
+
+	const FVector2D CurrentMousePosition(MouseX, MouseY);
+	const FVector2D TotalMouseDelta = CurrentMousePosition - PrimaryPressMousePosition;
+	if (!bPrimaryDragPanning)
+	{
+		if (TotalMouseDelta.Size() < DragPanClickThresholdPixels)
+		{
+			return;
+		}
+
+		bPrimaryDragPanning = true;
+		LastDragMousePosition = CurrentMousePosition;
+		return;
+	}
+
+	const FVector2D FrameMouseDelta = CurrentMousePosition - LastDragMousePosition;
+	LastDragMousePosition = CurrentMousePosition;
+
+	if (FrameMouseDelta.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator CameraRotation = Camera->GetComponentRotation();
+	const FRotator YawOnlyRotation(0.0f, CameraRotation.Yaw, 0.0f);
+
+	FVector Forward = FRotationMatrix(YawOnlyRotation).GetUnitAxis(EAxis::X);
+	FVector Right = FRotationMatrix(YawOnlyRotation).GetUnitAxis(EAxis::Y);
+	Forward.Z = 0.0f;
+	Right.Z = 0.0f;
+	Forward.Normalize();
+	Right.Normalize();
+
+	const float ZoomAdjustedPanScale =
+		DragPanWorldUnitsPerPixel *
+		(1.0f + FMath::Max(0.0f, GetActorLocation().Z) * DragPanZoomScale);
+
+	const FVector PanDelta =
+		((-Right * FrameMouseDelta.X) + (Forward * FrameMouseDelta.Y)) *
+		ZoomAdjustedPanScale;
+
+	AddActorWorldOffset(PanDelta, true);
 }
 
 void AConquestPawn::ClampZoomHeightIfNeeded()

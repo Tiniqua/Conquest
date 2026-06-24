@@ -54,6 +54,21 @@ struct FConquestEndTurnBlocker
 };
 
 USTRUCT(BlueprintType)
+struct FConquestPlayerStartRegion
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PlayerId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FIntPoint Center = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 RegionRadius = 5;
+};
+
+USTRUCT(BlueprintType)
 struct FConquestReplicatedGameState
 {
 	GENERATED_BODY()
@@ -81,6 +96,9 @@ struct FConquestReplicatedGameState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestPlayerStartRegion> PlayerStartRegions;
 };
 
 UCLASS()
@@ -151,6 +169,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
 	TArray<FConquestPlayerEmpireState> PlayerEmpires;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
+	TArray<FConquestPlayerStartRegion> PlayerStartRegions;
+
 	UPROPERTY(ReplicatedUsing=OnRep_ReplicatedConquestState, BlueprintReadOnly, Category="Conquest|Replication")
 	FConquestReplicatedGameState ReplicatedConquestState;
 
@@ -186,6 +207,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	int32 GetLocalPlayerId() const;
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Players")
+	bool GetStartRegionForPlayer(int32 PlayerId, FConquestPlayerStartRegion& OutStartRegion) const;
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
 	void EnsurePlayerEmpire(int32 PlayerId);

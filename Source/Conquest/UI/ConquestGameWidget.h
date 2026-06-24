@@ -210,6 +210,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
 	void ShowTileExpansionConfirmation(const FConquestTileExpansionChoiceData& ChoiceData);
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
+	void ShowStartingCityConfirmation(const FConquestTileExpansionChoiceData& ChoiceData);
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
 	void ClearTileExpansionConfirmation();
 

@@ -174,6 +174,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
 	void SetFogOfWarVisible(bool bVisible);
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
+	void ResetLocalFogOfWar(bool bVisible = true);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Fog Of War")
+	void RevealFogOfWarAroundTile(FIntPoint CenterCoord, int32 Radius);
+
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Overlay")
 	bool IsHexGridOverlayVisible() const { return OverlaySettings.bShowHexGridOverlay; }
 
@@ -307,6 +313,9 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Hex Grid|Fog Of War")
 	TObjectPtr<UProceduralMeshComponent> FogOfWarMesh = nullptr;
 
+	UPROPERTY(Transient)
+	TSet<FIntPoint> LocallyRevealedFogTiles;
+
 	int32 HoveredQ = INDEX_NONE;
 	int32 HoveredR = INDEX_NONE;
 
@@ -346,6 +355,7 @@ private:
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
 	void RebuildPlacedTileVisualMeshes();
+	void RebuildFogOfWarMesh();
 
 
 };

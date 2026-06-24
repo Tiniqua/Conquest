@@ -1041,6 +1041,7 @@ void AModularHexGridActor::BeginPlay()
 void AModularHexGridActor::RebuildGrid()
 {
 	EnsureDefaultGenerationRules();
+	LocallyRevealedFogTiles.Reset();
 
 	GridModel.Initialize(SizeSettings, HeightSettings, TileResourceData, ResourceSetData, ImprovementSetData);
 
@@ -1142,11 +1143,7 @@ void AModularHexGridActor::RebuildGrid()
 
 	if (bGenerateFogOfWar)
 	{
-		MeshBuilder.BuildFogOfWarMesh(
-			FogOfWarMesh,
-			GridModel,
-			FogOfWarSettings
-		);
+		RebuildFogOfWarMesh();
 	}
 	else if (FogOfWarMesh)
 	{
@@ -1355,8 +1352,74 @@ void AModularHexGridActor::SetFogOfWarVisible(bool bVisible)
 
 	if (FogOfWarMesh)
 	{
+		if (bGenerateFogOfWar && FogOfWarMesh->GetNumSections() <= 0)
+		{
+			RebuildFogOfWarMesh();
+		}
+
 		FogOfWarMesh->SetVisibility(bGenerateFogOfWar);
 	}
+}
+
+void AModularHexGridActor::ResetLocalFogOfWar(bool bVisible)
+{
+	LocallyRevealedFogTiles.Reset();
+	bGenerateFogOfWar = bVisible;
+	RebuildFogOfWarMesh();
+}
+
+void AModularHexGridActor::RevealFogOfWarAroundTile(FIntPoint CenterCoord, int32 Radius)
+{
+	if (!GridModel.IsValidTile(CenterCoord.X, CenterCoord.Y))
+	{
+		return;
+	}
+
+	const int32 SafeRadius = FMath::Max(0, Radius);
+	bool bRevealedAnyTile = false;
+	for (const FIntPoint& Coord : GridModel.GetCoordsInRange(CenterCoord, SafeRadius))
+	{
+		if (GridModel.IsValidTile(Coord.X, Coord.Y))
+		{
+			const int32 PreviousCount = LocallyRevealedFogTiles.Num();
+			LocallyRevealedFogTiles.Add(Coord);
+			bRevealedAnyTile = bRevealedAnyTile || LocallyRevealedFogTiles.Num() != PreviousCount;
+		}
+	}
+
+	bGenerateFogOfWar = true;
+	if (bRevealedAnyTile)
+	{
+		RebuildFogOfWarMesh();
+	}
+	else if (FogOfWarMesh)
+	{
+		FogOfWarMesh->SetVisibility(true);
+	}
+}
+
+void AModularHexGridActor::RebuildFogOfWarMesh()
+{
+	if (!FogOfWarMesh)
+	{
+		return;
+	}
+
+	if (!bGenerateFogOfWar)
+	{
+		FogOfWarMesh->ClearAllMeshSections();
+		FogOfWarMesh->SetVisibility(false);
+		return;
+	}
+
+	MeshBuilder.BuildFogOfWarMesh(
+		FogOfWarMesh,
+		GridModel,
+		FogOfWarSettings,
+		&LocallyRevealedFogTiles
+	);
+
+	FogOfWarMesh->SetVisibility(true);
 }
 
 void AModularHexGridActor::SetWaterLayerVisible(bool bVisible)

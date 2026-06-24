@@ -11,6 +11,7 @@
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "GameFramework/PlayerState.h"
 
@@ -110,6 +111,15 @@ namespace
 	bool IsImpassableForLandUnit(const FHexGridModel& GridModel, const FHexTileData& TileData)
 	{
 		return GridModel.IsWaterTileType(TileData.TileType) || TileData.TileType == EHexTileType::Mountain;
+	}
+
+	bool IsPoorStartingTerrain(EHexTileType TileType)
+	{
+		return
+			TileType == EHexTileType::Ocean ||
+			TileType == EHexTileType::Coast ||
+			TileType == EHexTileType::Lake ||
+			TileType == EHexTileType::Mountain;
 	}
 
 	bool IsOwnedByOtherPlayer(const FHexTileData& TileData, int32 PlayerId)
@@ -350,6 +360,7 @@ void AConquestGameMode::StartSinglePlayerGame()
 	}
 
 	InitializeEmpiresFromLobby();
+	AssignPlayerStartRegions();
 	ConquestGS->TurnManager->BeginGameSetup();
 	ConquestGS->TurnManager->EnterAwaitingFirstCity();
 }
@@ -849,6 +860,14 @@ bool AConquestGameMode::FoundStartingCityForPlayer(int32 PlayerId, const FIntPoi
 		return false;
 	}
 
+	if (ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
+	{
+		if (!IsTileInPlayerStartRegion(*ConquestGS, PlayerId, TileCoord))
+		{
+			return false;
+		}
+	}
+
 	const bool bFounded = ConquestGS->CityManager->FoundCity(PlayerId, TileCoord, CityName);
 
 	if (bFounded && HaveAllHumanPlayersFoundedStartingCities(*ConquestGS))
@@ -888,6 +907,297 @@ bool AConquestGameMode::HaveAllHumanPlayersFoundedStartingCities(const AConquest
 	}
 
 	return true;
+}
+
+void AConquestGameMode::AssignPlayerStartRegions()
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	const FHexGridModel* GridModel = ConquestGS ? ConquestGS->GetHexGridModel() : nullptr;
+	if (!ConquestGS || !GridModel)
+	{
+		return;
+	}
+
+	const TArray<int32> HumanPlayerIds = GetHumanPlayerIds(*ConquestGS);
+	TArray<int32> PlayerIds = HumanPlayerIds;
+	if (PlayerIds.Num() <= 0)
+	{
+		for (const FConquestPlayerEmpireState& PlayerEmpire : ConquestGS->PlayerEmpires)
+		{
+			if (PlayerEmpire.PlayerId != INDEX_NONE)
+			{
+				PlayerIds.AddUnique(PlayerEmpire.PlayerId);
+			}
+		}
+	}
+
+	if (PlayerIds.Num() <= 0)
+	{
+		PlayerIds.Add(0);
+	}
+
+	TArray<FIntPoint> CandidateCenters;
+	for (int32 R = 0; R < GridModel->GetGridHeight(); ++R)
+	{
+		for (int32 Q = 0; Q < GridModel->GetGridWidth(); ++Q)
+		{
+			const FIntPoint Coord(Q, R);
+			if (IsValidStartRegionCenter(*ConquestGS, Coord))
+			{
+				CandidateCenters.Add(Coord);
+			}
+		}
+	}
+
+	ConquestGS->PlayerStartRegions.Reset();
+	if (CandidateCenters.Num() <= 0)
+	{
+		ConquestGS->PushReplicatedState();
+		return;
+	}
+
+	const int32 MinDimension = FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight());
+	const int32 PlayerCount = FMath::Max(1, PlayerIds.Num());
+	const int32 DesiredSpacing = FMath::Max(
+		StartingRegionRadius * 2 + 1,
+		FMath::RoundToInt(static_cast<float>(MinDimension) / FMath::Sqrt(static_cast<float>(PlayerCount)))
+	);
+
+	for (const int32 PlayerId : PlayerIds)
+	{
+		FIntPoint SelectedCenter = CandidateCenters[0];
+		float SelectedScore = -TNumericLimits<float>::Max();
+
+		for (int32 AttemptSpacing = DesiredSpacing; AttemptSpacing >= StartingRegionRadius + 1; --AttemptSpacing)
+		{
+			for (const FIntPoint& Candidate : CandidateCenters)
+			{
+				bool bTooClose = false;
+				for (const FConquestPlayerStartRegion& ExistingRegion : ConquestGS->PlayerStartRegions)
+				{
+					if (GridModel->GetHexDistance(ExistingRegion.Center, Candidate) < AttemptSpacing)
+					{
+						bTooClose = true;
+						break;
+					}
+				}
+
+				if (bTooClose)
+				{
+					continue;
+				}
+
+				const float CandidateScore =
+					ScoreStartRegionCandidate(*ConquestGS, Candidate, ConquestGS->PlayerStartRegions) +
+					FMath::FRandRange(0.0f, 0.01f);
+				if (CandidateScore > SelectedScore)
+				{
+					SelectedCenter = Candidate;
+					SelectedScore = CandidateScore;
+				}
+			}
+
+			if (SelectedScore > -TNumericLimits<float>::Max())
+			{
+				break;
+			}
+		}
+
+		if (SelectedScore <= -TNumericLimits<float>::Max())
+		{
+			for (const FIntPoint& Candidate : CandidateCenters)
+			{
+				const float CandidateScore =
+					ScoreStartRegionCandidate(*ConquestGS, Candidate, ConquestGS->PlayerStartRegions) +
+					FMath::FRandRange(0.0f, 0.01f);
+				if (CandidateScore > SelectedScore)
+				{
+					SelectedCenter = Candidate;
+					SelectedScore = CandidateScore;
+				}
+			}
+		}
+
+		FConquestPlayerStartRegion StartRegion;
+		StartRegion.PlayerId = PlayerId;
+		StartRegion.Center = SelectedCenter;
+		StartRegion.RegionRadius = StartingRegionRadius;
+		ConquestGS->PlayerStartRegions.Add(StartRegion);
+		CandidateCenters.Remove(SelectedCenter);
+	}
+
+	ConquestGS->PushReplicatedState();
+}
+
+bool AConquestGameMode::IsValidStartRegionCenter(const AConquestGameState& ConquestGS, const FIntPoint& Coord) const
+{
+	const FHexGridModel* GridModel = ConquestGS.GetHexGridModel();
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
+	return
+		GridModel &&
+		Tile &&
+		Tile->Gameplay.OwnerPlayerId == INDEX_NONE &&
+		!GridModel->IsWaterTileType(Tile->TileType) &&
+		Tile->TileType != EHexTileType::Mountain;
+}
+
+float AConquestGameMode::ScoreStartRegionCandidate(
+	const AConquestGameState& ConquestGS,
+	const FIntPoint& Coord,
+	const TArray<FConquestPlayerStartRegion>& ExistingRegions
+) const
+{
+	const FHexGridModel* GridModel = ConquestGS.GetHexGridModel();
+	if (!GridModel)
+	{
+		return -TNumericLimits<float>::Max();
+	}
+
+	float Score = 0.0f;
+
+	if (ExistingRegions.Num() > 0)
+	{
+		int32 ClosestStartDistance = TNumericLimits<int32>::Max();
+		for (const FConquestPlayerStartRegion& ExistingRegion : ExistingRegions)
+		{
+			ClosestStartDistance = FMath::Min(
+				ClosestStartDistance,
+				GridModel->GetHexDistance(ExistingRegion.Center, Coord)
+			);
+		}
+
+		const float DistanceScale = FMath::Max(
+			1.0f,
+			static_cast<float>(FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight()))
+		);
+		Score += (static_cast<float>(ClosestStartDistance) / DistanceScale) * 1000.0f;
+	}
+
+	const int32 EdgeDistance = FMath::Min(
+		FMath::Min(Coord.X, Coord.Y),
+		FMath::Min(GridModel->GetGridWidth() - 1 - Coord.X, GridModel->GetGridHeight() - 1 - Coord.Y)
+	);
+	const float MaxEdgeDistance = FMath::Max(
+		1.0f,
+		static_cast<float>(FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight())) * 0.5f
+	);
+	Score += FMath::Clamp(static_cast<float>(EdgeDistance) / MaxEdgeDistance, 0.0f, 1.0f) * 650.0f;
+
+	int32 CheckedTiles = 0;
+	int32 PoorTerrainTiles = 0;
+	int32 BonusResources = 0;
+	int32 LuxuryResources = 0;
+	int32 StrategicResources = 0;
+	TSet<FName> UniqueLuxuryResources;
+	TSet<FName> UniqueStrategicResources;
+
+	for (const FIntPoint& RegionCoord : GridModel->GetCoordsInRange(Coord, StartingRegionRadius))
+	{
+		const FHexTileData* Tile = GridModel->GetTile(RegionCoord);
+		if (!Tile)
+		{
+			continue;
+		}
+
+		++CheckedTiles;
+		if (IsPoorStartingTerrain(Tile->TileType))
+		{
+			++PoorTerrainTiles;
+		}
+
+		if (!Tile->Resource.HasResource())
+		{
+			continue;
+		}
+
+		const FHexResourceDefinition* ResourceDefinition =
+			GridModel->FindResourceDefinition(Tile->Resource.ResourceId);
+		if (!ResourceDefinition)
+		{
+			continue;
+		}
+
+		switch (ResourceDefinition->Category)
+		{
+		case EHexResourceCategory::Bonus:
+			++BonusResources;
+			break;
+		case EHexResourceCategory::Luxury:
+			++LuxuryResources;
+			UniqueLuxuryResources.Add(ResourceDefinition->ResourceId);
+			break;
+		case EHexResourceCategory::Strategic:
+			++StrategicResources;
+			UniqueStrategicResources.Add(ResourceDefinition->ResourceId);
+			break;
+		default:
+			break;
+		}
+	}
+
+	const float PoorTerrainDensity = CheckedTiles > 0
+		? static_cast<float>(PoorTerrainTiles) / static_cast<float>(CheckedTiles)
+		: 1.0f;
+	Score -= PoorTerrainDensity * 450.0f;
+
+	constexpr int32 TargetBonusResources = 3;
+	constexpr int32 TargetLuxuryResources = 2;
+	constexpr int32 TargetStrategicResources = 1;
+
+	Score -= FMath::Abs(BonusResources - TargetBonusResources) * 30.0f;
+	Score -= FMath::Abs(LuxuryResources - TargetLuxuryResources) * 55.0f;
+	Score -= FMath::Abs(StrategicResources - TargetStrategicResources) * 40.0f;
+
+	if (BonusResources > 0)
+	{
+		Score += 45.0f;
+	}
+	if (UniqueLuxuryResources.Num() > 0)
+	{
+		Score += 80.0f;
+	}
+	if (UniqueStrategicResources.Num() > 0)
+	{
+		Score += 55.0f;
+	}
+
+	if (LuxuryResources > TargetLuxuryResources + 2)
+	{
+		Score -= static_cast<float>(LuxuryResources - TargetLuxuryResources - 2) * 80.0f;
+	}
+	if (StrategicResources > TargetStrategicResources + 2)
+	{
+		Score -= static_cast<float>(StrategicResources - TargetStrategicResources - 2) * 65.0f;
+	}
+
+	return Score;
+}
+
+bool AConquestGameMode::IsTileInPlayerStartRegion(
+	const AConquestGameState& ConquestGS,
+	int32 PlayerId,
+	const FIntPoint& Coord
+) const
+{
+	const FHexGridModel* GridModel = ConquestGS.GetHexGridModel();
+	if (!GridModel)
+	{
+		return false;
+	}
+
+	FConquestPlayerStartRegion StartRegion;
+	if (!ConquestGS.GetStartRegionForPlayer(PlayerId, StartRegion))
+	{
+		return false;
+	}
+
+	const FHexTileData* Tile = GridModel->GetTile(Coord);
+	return
+		Tile &&
+		Tile->Gameplay.OwnerPlayerId == INDEX_NONE &&
+		!GridModel->IsWaterTileType(Tile->TileType) &&
+		Tile->TileType != EHexTileType::Mountain &&
+		GridModel->GetHexDistance(StartRegion.Center, Coord) <= StartRegion.RegionRadius;
 }
 
 void AConquestGameMode::InitializeEmpiresFromLobby()

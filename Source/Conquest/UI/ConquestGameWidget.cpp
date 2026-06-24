@@ -601,6 +601,12 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 		return true;
 	}
 
+	if (ConquestGS->TurnManager && ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
+	{
+		ConquestHUD->BeginStartingRegionSelection();
+		return true;
+	}
+
 	switch (Blocker.Type)
 	{
 	case EConquestEndTurnBlockType::Research:
@@ -609,12 +615,26 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 	case EConquestEndTurnBlockType::CityProduction:
 		if (Blocker.CityId != INDEX_NONE)
 		{
+			if (ConquestGS->CityManager)
+			{
+				if (const FCityState* City = ConquestGS->CityManager->GetCity(Blocker.CityId))
+				{
+					ConquestHUD->FocusCameraOnTile(City->CenterTile, false);
+				}
+			}
 			ConquestHUD->ShowCityPanel(Blocker.CityId);
 		}
 		return true;
 	case EConquestEndTurnBlockType::CityGrowth:
 		if (Blocker.CityId != INDEX_NONE)
 		{
+			if (ConquestGS->CityManager)
+			{
+				if (const FCityState* City = ConquestGS->CityManager->GetCity(Blocker.CityId))
+				{
+					ConquestHUD->FocusCameraOnTile(City->CenterTile, false);
+				}
+			}
 			ConquestHUD->ShowCityPanel(Blocker.CityId);
 		}
 		return true;
@@ -628,6 +648,7 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 
 			if (UnitToSelect)
 			{
+				ConquestHUD->FocusCameraOnTile(UnitToSelect->TileCoord, false);
 				ConquestHUD->SelectUnitAtTile(UnitToSelect->TileCoord.X, UnitToSelect->TileCoord.Y);
 			}
 			return true;
@@ -707,6 +728,33 @@ void UConquestGameWidget::ShowTileExpansionConfirmation(const FConquestTileExpan
 				*ChoiceData.Resource,
 				*ChoiceData.Features
 			)
+	);
+	SetText(TileExpansionYieldText, ChoiceData.Yield.ToCompactString());
+}
+
+void UConquestGameWidget::ShowStartingCityConfirmation(const FConquestTileExpansionChoiceData& ChoiceData)
+{
+	PendingTileExpansionChoice = ChoiceData;
+
+	if (!ChoiceData.bIsValid)
+	{
+		ClearTileExpansionConfirmation();
+		return;
+	}
+
+	SetWidgetVisibility(TileExpansionConfirmPanel, ESlateVisibility::Visible);
+	SetText(
+		TileExpansionTitleText,
+		FString::Printf(TEXT("Settle City [%d, %d]"), ChoiceData.Coord.X, ChoiceData.Coord.Y)
+	);
+	SetText(
+		TileExpansionDetailText,
+		FString::Printf(
+			TEXT("%s | Resource: %s | Features: %s"),
+			*ChoiceData.TileType,
+			*ChoiceData.Resource,
+			*ChoiceData.Features
+		)
 	);
 	SetText(TileExpansionYieldText, ChoiceData.Yield.ToCompactString());
 }
@@ -923,7 +971,10 @@ void UConquestGameWidget::HandleTileExpansionConfirmClicked()
 	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
 	if (ConquestHUD)
 	{
-		ConquestHUD->ConfirmSelectedExpansionTile();
+		if (!ConquestHUD->ConfirmSelectedStartingCity())
+		{
+			ConquestHUD->ConfirmSelectedExpansionTile();
+		}
 	}
 }
 
@@ -933,7 +984,14 @@ void UConquestGameWidget::HandleTileExpansionCancelClicked()
 	AConquestHUD* ConquestHUD = PC ? Cast<AConquestHUD>(PC->GetHUD()) : nullptr;
 	if (ConquestHUD)
 	{
-		ConquestHUD->CancelSelectedExpansionTile();
+		if (PendingTileExpansionChoice.bIsValid && PendingTileExpansionChoice.CityId == INDEX_NONE)
+		{
+			ConquestHUD->CancelSelectedStartingCity();
+		}
+		else
+		{
+			ConquestHUD->CancelSelectedExpansionTile();
+		}
 	}
 	else
 	{

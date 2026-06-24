@@ -2,11 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Conquest/Core/ConquestGameplayTypes.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "GameFramework/GameModeBase.h"
 #include "ConquestGameMode.generated.h"
 
 class UConquestCivilisationData;
-class AConquestGameState;
 
 UCLASS()
 class CONQUEST_API AConquestGameMode : public AGameModeBase
@@ -81,9 +81,19 @@ public:
 private:
 	int32 NextAssignedPlayerId = 0;
 
+	static constexpr int32 StartingRegionRadius = 5;
+
 	void SyncAvailableCivilisationsToGameState();
 	void AssignPlayerToLobbySlot(int32 PlayerId, const FString& PlayerName);
 	void InitializeEmpiresFromLobby();
+	void AssignPlayerStartRegions();
+	bool IsValidStartRegionCenter(const AConquestGameState& ConquestGS, const FIntPoint& Coord) const;
+	float ScoreStartRegionCandidate(
+		const AConquestGameState& ConquestGS,
+		const FIntPoint& Coord,
+		const TArray<FConquestPlayerStartRegion>& ExistingRegions
+	) const;
+	bool IsTileInPlayerStartRegion(const AConquestGameState& ConquestGS, int32 PlayerId, const FIntPoint& Coord) const;
 	bool HaveAllHumanPlayersFoundedStartingCities(const AConquestGameState& ConquestGS) const;
 	bool AreAllHumanPlayersReady(const AConquestGameState& ConquestGS) const;
 	TArray<int32> GetHumanPlayerIds(const AConquestGameState& ConquestGS) const;

@@ -12,7 +12,9 @@
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
+#include "Conquest/Player/ConquestPawn.h"
 #include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
@@ -194,6 +196,14 @@ void AConquestHUD::BeginPlay()
 			ResearchPanelWidget->AddToViewport(6);
 			ResearchPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
+	}
+
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &AConquestHUD::HandleConquestStateChangedForHUD);
+		ConquestGS->OnConquestStateChanged.AddDynamic(this, &AConquestHUD::HandleConquestStateChangedForHUD);
+		ConquestGS->OnConquestUnitMoved.RemoveDynamic(this, &AConquestHUD::HandleUnitMovedForHUD);
+		ConquestGS->OnConquestUnitMoved.AddDynamic(this, &AConquestHUD::HandleUnitMovedForHUD);
 	}
 
 	if (
@@ -803,6 +813,32 @@ void AConquestHUD::ClearUnitAttackHighlights()
 	if (ConquestGS && ConquestGS->ActiveGridActor)
 	{
 		ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+	}
+}
+
+void AConquestHUD::FocusCameraOnTile(FIntPoint Coord, bool bPreserveCurrentHeight)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	APlayerController* PlayerController = GetOwningPlayerController();
+	AConquestPawn* ConquestPawn = PlayerController
+		? Cast<AConquestPawn>(PlayerController->GetPawn())
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->ActiveGridActor || !ConquestPawn)
+	{
+		return;
+	}
+
+	ConquestPawn->FocusCameraOnHex(ConquestGS->ActiveGridActor, Coord, bPreserveCurrentHeight);
+}
+
+void AConquestHUD::TriggerEndTurnShortcut()
+{
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->HandleEndTurnClicked();
 	}
 }
 
@@ -1572,6 +1608,270 @@ void AConquestHUD::HideResearchPanel()
 	}
 }
 
+bool AConquestHUD::GetLocalStartingRegion(FConquestPlayerStartRegion& OutStartRegion) const
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	return ConquestGS && ConquestGS->GetStartRegionForPlayer(ConquestGS->GetLocalPlayerId(), OutStartRegion);
+}
+
+TArray<FIntPoint> AConquestHUD::GetValidStartingRegionTiles(const FConquestPlayerStartRegion& StartRegion) const
+{
+	TArray<FIntPoint> Result;
+
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	const FHexGridModel* GridModel = ConquestGS ? ConquestGS->GetHexGridModel() : nullptr;
+	if (!GridModel)
+	{
+		return Result;
+	}
+
+	for (const FIntPoint& Coord : GridModel->GetCoordsInRange(StartRegion.Center, StartRegion.RegionRadius))
+	{
+		const FHexTileData* Tile = GridModel->GetTile(Coord);
+		if (
+			Tile &&
+			Tile->Gameplay.OwnerPlayerId == INDEX_NONE &&
+			!GridModel->IsWaterTileType(Tile->TileType) &&
+			Tile->TileType != EHexTileType::Mountain
+		)
+		{
+			Result.Add(Coord);
+		}
+	}
+
+	return Result;
+}
+
+void AConquestHUD::BeginStartingRegionSelection()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->TurnManager || !ConquestGS->ActiveGridActor)
+	{
+		return;
+	}
+
+	if (ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::AwaitingFirstCity)
+	{
+		return;
+	}
+
+	const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+	const bool bHasLocalCity = ConquestGS->CityManager && ConquestGS->CityManager->Cities.ContainsByPredicate(
+		[LocalPlayerId](const FCityState& City)
+		{
+			return City.OwnerPlayerId == LocalPlayerId;
+		}
+	);
+	if (bHasLocalCity)
+	{
+		ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+		return;
+	}
+
+	FConquestPlayerStartRegion StartRegion;
+	if (!GetLocalStartingRegion(StartRegion))
+	{
+		return;
+	}
+
+	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, 7);
+	if (!bStartingCameraFocused)
+	{
+		FocusCameraOnTile(StartRegion.Center, false);
+		bStartingCameraFocused = true;
+	}
+
+	UMaterialInterface* HighlightMaterial = nullptr;
+	if (const UConquestCivilisationData* Civilisation = ConquestGS->GetCivilisationForPlayer(LocalPlayerId))
+	{
+		HighlightMaterial = Civilisation->BorderMaterial;
+	}
+
+	ConquestGS->ActiveGridActor->RebuildExpansionCandidateHighlights(
+		GetValidStartingRegionTiles(StartRegion),
+		HighlightMaterial
+	);
+}
+
+bool AConquestHUD::SelectStartingCandidateTile(int32 Q, int32 R)
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->TurnManager || ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::AwaitingFirstCity)
+	{
+		return false;
+	}
+
+	FConquestPlayerStartRegion StartRegion;
+	if (!GetLocalStartingRegion(StartRegion))
+	{
+		return false;
+	}
+
+	const FIntPoint Coord(Q, R);
+	if (!GetValidStartingRegionTiles(StartRegion).Contains(Coord))
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
+	if (!Tile)
+	{
+		return false;
+	}
+
+	PendingStartingCityCoord = Coord;
+
+	FConquestTileExpansionChoiceData ChoiceData;
+	ChoiceData.CityId = INDEX_NONE;
+	ChoiceData.Coord = Coord;
+	ChoiceData.TileType = ConquestHUDHexTileTypeToString(Tile->TileType);
+	ChoiceData.Resource = ConquestHUDFormatTileResource(*Tile);
+	ChoiceData.Features = ConquestHUDFormatTileFeatures(*Tile);
+	ChoiceData.Yield = Tile->FinalYield;
+	ChoiceData.bIsValid = true;
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ShowStartingCityConfirmation(ChoiceData);
+	}
+
+	return true;
+}
+
+bool AConquestHUD::ConfirmSelectedStartingCity()
+{
+	if (PendingStartingCityCoord == FIntPoint(INT32_MIN, INT32_MIN))
+	{
+		return false;
+	}
+
+	AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController());
+	if (!ConquestPC)
+	{
+		return false;
+	}
+
+	const FIntPoint CityCoord = PendingStartingCityCoord;
+	PendingStartingCityCoord = FIntPoint(INT32_MIN, INT32_MIN);
+	ConquestPC->RequestFoundStartingCity(CityCoord, NAME_None);
+
+	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGS->ActiveGridActor)
+		{
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(CityCoord, 7);
+			ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
+		}
+	}
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+
+	return true;
+}
+
+void AConquestHUD::CancelSelectedStartingCity()
+{
+	PendingStartingCityCoord = FIntPoint(INT32_MIN, INT32_MIN);
+
+	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
+	}
+
+	BeginStartingRegionSelection();
+}
+
+void AConquestHUD::ApplyLocalFogOfWar()
+{
+	AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->ActiveGridActor)
+	{
+		return;
+	}
+
+	const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+	if (!bLocalFogInitialized || LocalFogPlayerId != LocalPlayerId)
+	{
+		ConquestGS->ActiveGridActor->ResetLocalFogOfWar(true);
+		bLocalFogInitialized = true;
+		LocalFogPlayerId = LocalPlayerId;
+		bStartingCameraFocused = false;
+	}
+
+	FConquestPlayerStartRegion StartRegion;
+	if (GetLocalStartingRegion(StartRegion))
+	{
+		ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, 7);
+	}
+
+	if (ConquestGS->CityManager)
+	{
+		for (const FCityState& City : ConquestGS->CityManager->Cities)
+		{
+			if (City.OwnerPlayerId != LocalPlayerId)
+			{
+				continue;
+			}
+
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(City.CenterTile, 7);
+			for (const FIntPoint& OwnedTile : City.OwnedTiles)
+			{
+				ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(OwnedTile, 1);
+			}
+		}
+	}
+
+	const FConquestPlayerEmpireState& LocalPlayer = ConquestGS->GetPlayerEmpire(LocalPlayerId);
+	for (const FConquestUnitState& Unit : LocalPlayer.Units)
+	{
+		if (Unit.OwnerPlayerId == LocalPlayerId)
+		{
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(Unit.TileCoord, 1);
+		}
+	}
+
+	if (ConquestGS->TurnManager && ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
+	{
+		BeginStartingRegionSelection();
+	}
+}
+
+void AConquestHUD::HandleConquestStateChangedForHUD()
+{
+	ApplyLocalFogOfWar();
+}
+
+void AConquestHUD::HandleUnitMovedForHUD(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord)
+{
+	(void)UnitInstanceId;
+	(void)FromCoord;
+
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->ActiveGridActor || PlayerId != ConquestGS->GetLocalPlayerId())
+	{
+		return;
+	}
+
+	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(ToCoord, 1);
+}
+
 void AConquestHUD::ShowGameSetup()
 {
 	ConfigureMenuInputMode();
@@ -1595,6 +1895,8 @@ void AConquestHUD::ShowGame()
 	{
 		ActiveGameWidget->RefreshTopBarYieldInfo();
 	}
+
+	ApplyLocalFogOfWar();
 }
 
 void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSettings)

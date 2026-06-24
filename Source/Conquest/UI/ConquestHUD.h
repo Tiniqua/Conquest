@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "GameFramework/HUD.h"
 #include "Conquest/World/Generation/HexMapTypePresets.h"
@@ -72,6 +73,18 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void HideResearchPanel();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
+	void BeginStartingRegionSelection();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
+	bool SelectStartingCandidateTile(int32 Q, int32 R);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
+	bool ConfirmSelectedStartingCity();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
+	void CancelSelectedStartingCity();
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Tile Expansion")
 	void BeginCityTileExpansionSelection(int32 CityId);
@@ -157,6 +170,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void ClearUnitAttackHighlights();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Camera")
+	void FocusCameraOnTile(FIntPoint Coord, bool bPreserveCurrentHeight);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Turn")
+	void TriggerEndTurnShortcut();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Conquest|HUD")
 	TSubclassOf<UConquestHUDWidget> HUDWidgetClass;
@@ -189,10 +208,23 @@ protected:
 	TMap<FIntPoint, int32> CurrentUnitMovementRemainingByTile;
 	TSet<FIntPoint> CurrentUnitAttackTiles;
 	int32 PendingAugmentUnitInstanceId = INDEX_NONE;
+	FIntPoint PendingStartingCityCoord = FIntPoint(INT32_MIN, INT32_MIN);
+	bool bLocalFogInitialized = false;
+	int32 LocalFogPlayerId = INDEX_NONE;
+	bool bStartingCameraFocused = false;
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();
 	void SetCityWorldLabelHiddenForPanel(int32 CityId);
 	void RestoreHiddenCityWorldLabel();
 	void RefreshSelectedUnitWidget(const FConquestUnitState& UnitState);
+	void ApplyLocalFogOfWar();
+	bool GetLocalStartingRegion(FConquestPlayerStartRegion& OutStartRegion) const;
+	TArray<FIntPoint> GetValidStartingRegionTiles(const FConquestPlayerStartRegion& StartRegion) const;
+
+	UFUNCTION()
+	void HandleConquestStateChangedForHUD();
+
+	UFUNCTION()
+	void HandleUnitMovedForHUD(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord);
 };

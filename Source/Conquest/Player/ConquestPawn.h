@@ -33,6 +33,8 @@ public:
 	bool GetTileUnderMouse(AModularHexGridActor*& OutGridActor, int32& OutQ, int32& OutR, FHexTileData& OutTileData) const;
 
 	void TryOpenCityPanelAtTile(const FIntPoint& Coord);
+	void FocusCameraOnHex(AModularHexGridActor* HexGridActor, const FIntPoint& Coord, bool bPreserveCurrentHeight);
+	void FocusCameraOnWorldLocation(const FVector& TargetWorldLocation, bool bPreserveCurrentHeight);
 
 protected:
 	virtual void BeginPlay() override;
@@ -95,10 +97,28 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan"))
 	float DragPanClickThresholdPixels = 6.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan"))
+	bool bSmoothDragPan = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Drag Pan", meta = (EditCondition = "bEnableLeftMouseDragPan && bSmoothDragPan", ClampMin = "0.1"))
+	float DragPanSmoothingSpeed = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Focus")
+	float CameraFocusHeightAboveTarget = 1200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Focus")
+	float CameraFocusBackwardOffset = 1000.0f;
+
 	// Scroll zoom movement speed.
 	// This moves along the actual camera forward vector, not world up/down.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom")
 	float ZoomSpeed = 1800.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom")
+	bool bSmoothZoom = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom", meta = (EditCondition = "bSmoothZoom", ClampMin = "0.1"))
+	float ZoomSmoothingSpeed = 14.0f;
 
 	// Optional bounds so the camera cannot zoom too close or too far.
 	// This clamps actor world Z after zoom movement.
@@ -131,6 +151,9 @@ protected:
 	bool bPrimaryPressStartedOverWorld = false;
 	FVector2D PrimaryPressMousePosition = FVector2D::ZeroVector;
 	FVector2D LastDragMousePosition = FVector2D::ZeroVector;
+	bool bHasSmoothedCameraTarget = false;
+	FVector SmoothedCameraTargetLocation = FVector::ZeroVector;
+	float ActiveCameraSmoothingSpeed = 0.0f;
 
 	void ClearHoveredTileVisual();
 	void UpdateHoveredTileVisual(AModularHexGridActor* HexGridActor, int32 Q, int32 R);
@@ -138,6 +161,7 @@ protected:
 	void ToggleFogOfWar();
 	void ToggleHexGridOverlay();
 	void RegenerateMapWithNewSeed();
+	void HandleEnterShortcut();
 
 	AModularHexGridActor* FindHexGridActor() const;
 
@@ -147,6 +171,10 @@ protected:
 
 	void Zoom(float Value);
 	void UpdateDragPan(float DeltaTime);
+	void AddCameraOffset(const FVector& Offset, bool bUseSmoothing, float SmoothingSpeed);
+	void UpdateSmoothedCameraMovement(float DeltaTime);
+	void ResetSmoothedCameraTarget();
+	FVector ClampZoomHeightForLocation(const FVector& Location) const;
 
 	void ConfigurePlayerControllerForGameAndUI();
 	void ClampZoomHeightIfNeeded();

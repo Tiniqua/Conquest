@@ -103,6 +103,7 @@ void AConquestGameState::PushReplicatedState()
 	ReplicatedConquestState.PlayerEmpires = PlayerEmpires;
 	ReplicatedConquestState.LobbyPlayerSlots = LobbyPlayerSlots;
 	ReplicatedConquestState.AvailableCivilisations = AvailableCivilisations;
+	ReplicatedConquestState.PlayerStartRegions = PlayerStartRegions;
 
 	if (TurnManager)
 	{
@@ -123,6 +124,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 	PlayerEmpires = ReplicatedConquestState.PlayerEmpires;
 	LobbyPlayerSlots = ReplicatedConquestState.LobbyPlayerSlots;
 	AvailableCivilisations = ReplicatedConquestState.AvailableCivilisations;
+	PlayerStartRegions = ReplicatedConquestState.PlayerStartRegions;
 	PlayerCivilisations.Reset();
 
 	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
@@ -216,6 +218,21 @@ int32 AConquestGameState::GetLocalPlayerId() const
 	const AConquestPlayerController* ConquestPC =
 		Cast<AConquestPlayerController>(World->GetFirstPlayerController());
 	return ConquestPC ? ConquestPC->GetAssignedPlayerId() : HumanPlayer.PlayerId;
+}
+
+bool AConquestGameState::GetStartRegionForPlayer(int32 PlayerId, FConquestPlayerStartRegion& OutStartRegion) const
+{
+	for (const FConquestPlayerStartRegion& StartRegion : PlayerStartRegions)
+	{
+		if (StartRegion.PlayerId == PlayerId)
+		{
+			OutStartRegion = StartRegion;
+			return true;
+		}
+	}
+
+	OutStartRegion = FConquestPlayerStartRegion();
+	return false;
 }
 
 void AConquestGameState::EnsurePlayerEmpire(int32 PlayerId)
@@ -425,7 +442,9 @@ bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEnd
 	if (TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions)
 	{
 		OutBlocker.Type = EConquestEndTurnBlockType::WrongPhase;
-		OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedWrongPhase", "It is not currently the player action phase");
+		OutBlocker.Message = TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity
+			? NSLOCTEXT("Conquest", "EndTurnBlockedPickStartingHex", "Pick your Starting Hex")
+			: NSLOCTEXT("Conquest", "EndTurnBlockedWrongPhase", "It is not currently the player action phase");
 		return true;
 	}
 

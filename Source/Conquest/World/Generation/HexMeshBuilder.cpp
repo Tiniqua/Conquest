@@ -183,7 +183,8 @@ void FHexMeshBuilder::BuildGridOverlayMesh(
 void FHexMeshBuilder::BuildFogOfWarMesh(
 	UProceduralMeshComponent* FogOfWarMesh,
 	const FHexGridModel& GridModel,
-	const FHexFogOfWarSettings& FogOfWarSettings
+	const FHexFogOfWarSettings& FogOfWarSettings,
+	const TSet<FIntPoint>* RevealedTiles
 )
 {
 	if (!FogOfWarMesh)
@@ -233,6 +234,11 @@ void FHexMeshBuilder::BuildFogOfWarMesh(
 		for (int32 Q = 0; Q < GridWidth; ++Q)
 		{
 			if (!GridModel.IsValidTile(Q, R))
+			{
+				continue;
+			}
+
+			if (RevealedTiles && RevealedTiles->Contains(FIntPoint(Q, R)))
 			{
 				continue;
 			}

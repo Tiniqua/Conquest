@@ -33,7 +33,8 @@ public:
 	void BuildFogOfWarMesh(
 		UProceduralMeshComponent* FogOfWarMesh,
 		const FHexGridModel& GridModel,
-		const FHexFogOfWarSettings& FogOfWarSettings
+		const FHexFogOfWarSettings& FogOfWarSettings,
+		const TSet<FIntPoint>* RevealedTiles = nullptr
 	);
 
 	void BuildSimpleRiverMesh(

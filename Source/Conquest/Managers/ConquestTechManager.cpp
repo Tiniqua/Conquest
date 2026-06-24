@@ -25,8 +25,10 @@ bool UConquestTechManager::SetCurrentResearchById(int32 PlayerId, FName TechId)
 	}
 
 	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
+	CacheCurrentResearchProgress(Player);
+
 	Player.CurrentResearchId = TechId;
-	Player.CurrentResearchProgress = 0.0f;
+	Player.CurrentResearchProgress = GetCachedResearchProgress(Player, TechId);
 
 	OnResearchChanged.Broadcast();
 	GameStateRef->BroadcastStateChanged();
@@ -67,6 +69,7 @@ void UConquestTechManager::ProcessResearchAtStartOfTurn(int32 PlayerId)
 	if (Player.CurrentResearchProgress >= CurrentResearch->ScienceCost)
 	{
 		Player.ResearchedTechIds.AddUnique(CurrentResearch->TechId);
+		ClearCachedResearchProgress(Player, CurrentResearch->TechId);
 		Player.CurrentResearchId = NAME_None;
 		Player.CurrentResearchProgress = 0.0f;
 	}
@@ -129,7 +132,7 @@ int32 UConquestTechManager::EstimateTurnsToResearchById(int32 PlayerId, FName Te
 	const float CurrentProgress =
 		Player.CurrentResearchId == TechId
 			? Player.CurrentResearchProgress
-			: 0.0f;
+			: GetCachedResearchProgress(Player, TechId);
 
 	const float Remaining = FMath::Max(
 		0.0f,
@@ -213,4 +216,58 @@ bool UConquestTechManager::CanResearchTech(int32 PlayerId, FName TechId) const
 	}
 
 	return true;
+}
+
+void UConquestTechManager::CacheCurrentResearchProgress(FConquestPlayerEmpireState& Player) const
+{
+	if (Player.CurrentResearchId.IsNone() || Player.CurrentResearchProgress <= 0.0f)
+	{
+		return;
+	}
+
+	FConquestResearchProgressCacheEntry* CacheEntry =
+		Player.ResearchProgressCache.FindByPredicate([&Player](const FConquestResearchProgressCacheEntry& Entry)
+		{
+			return Entry.TechId == Player.CurrentResearchId;
+		});
+
+	if (!CacheEntry)
+	{
+		CacheEntry = &Player.ResearchProgressCache.AddDefaulted_GetRef();
+		CacheEntry->TechId = Player.CurrentResearchId;
+	}
+
+	CacheEntry->Progress = FMath::Max(0.0f, Player.CurrentResearchProgress);
+}
+
+float UConquestTechManager::GetCachedResearchProgress(
+	const FConquestPlayerEmpireState& Player,
+	FName TechId
+) const
+{
+	if (TechId.IsNone())
+	{
+		return 0.0f;
+	}
+
+	const FConquestResearchProgressCacheEntry* CacheEntry =
+		Player.ResearchProgressCache.FindByPredicate([TechId](const FConquestResearchProgressCacheEntry& Entry)
+		{
+			return Entry.TechId == TechId;
+		});
+
+	return CacheEntry ? FMath::Max(0.0f, CacheEntry->Progress) : 0.0f;
+}
+
+void UConquestTechManager::ClearCachedResearchProgress(FConquestPlayerEmpireState& Player, FName TechId) const
+{
+	if (TechId.IsNone())
+	{
+		return;
+	}
+
+	Player.ResearchProgressCache.RemoveAll([TechId](const FConquestResearchProgressCacheEntry& Entry)
+	{
+		return Entry.TechId == TechId;
+	});
 }

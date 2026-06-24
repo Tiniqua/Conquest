@@ -5,6 +5,7 @@
 #include "ConquestTechManager.generated.h"
 
 class AConquestGameState;
+struct FConquestPlayerEmpireState;
 struct FConquestTechRow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnResearchChanged);
@@ -40,4 +41,7 @@ private:
 
 	int32 CalculateEmpireSciencePerTurn(int32 PlayerId) const;
 	bool CanResearchTech(int32 PlayerId, FName TechId) const;
+	void CacheCurrentResearchProgress(FConquestPlayerEmpireState& Player) const;
+	float GetCachedResearchProgress(const FConquestPlayerEmpireState& Player, FName TechId) const;
+	void ClearCachedResearchProgress(FConquestPlayerEmpireState& Player, FName TechId) const;
 };

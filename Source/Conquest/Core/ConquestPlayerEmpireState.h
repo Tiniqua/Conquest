@@ -99,6 +99,18 @@ struct FConquestUnitState
 };
 
 USTRUCT(BlueprintType)
+struct FConquestResearchProgressCacheEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName TechId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float Progress = 0.0f;
+};
+
+USTRUCT(BlueprintType)
 struct FConquestPlayerEmpireState
 {
 	GENERATED_BODY()
@@ -150,6 +162,9 @@ struct FConquestPlayerEmpireState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float CurrentResearchProgress = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestResearchProgressCacheEntry> ResearchProgressCache;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 AdoptedPhilosophyTenets = 0;

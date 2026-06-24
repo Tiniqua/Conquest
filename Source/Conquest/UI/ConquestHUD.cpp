@@ -437,7 +437,18 @@ bool AConquestHUD::ConfirmSelectedExpansionTile()
 		ActiveGameWidget->ClearTileExpansionConfirmation();
 	}
 
-	BeginCityTileExpansionSelection(ExpansionSelectionCityId);
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+	{
+		if (ConquestPC->HasAuthority())
+		{
+			BeginCityTileExpansionSelection(ExpansionSelectionCityId);
+		}
+		else
+		{
+			ClearCityTileExpansionSelection();
+		}
+	}
+
 	return true;
 }
 

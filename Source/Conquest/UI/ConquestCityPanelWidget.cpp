@@ -291,6 +291,14 @@ void UConquestCityPanelWidget::HandleConquestStateChanged()
 	}
 
 	Refresh();
+
+	if (APlayerController* PlayerController = GetOwningPlayer())
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+		{
+			ConquestHUD->BeginCityTileExpansionSelection(CityId);
+		}
+	}
 }
 
 void UConquestCityPanelWidget::HandleCloseClicked()

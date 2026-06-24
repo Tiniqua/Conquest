@@ -95,6 +95,10 @@ void AConquestUnitActor::RefreshUnitVisuals(
 	TileCoord = InUnitState.TileCoord;
 	CurrentHealth = InUnitState.CurrentHealth;
 	MaxHealth = FMath::Max(1, InUnitState.CachedMaxHealth);
+	AttackValue = FMath::Max(
+		1,
+		FMath::CeilToInt(ConquestUnitCombat::GetCombatValue(InUnitState, EConquestUnitCombatModifierType::Attack))
+	);
 	UnitMeshCount = FMath::Max(1, InUnitRow.UnitMeshCount);
 	UnitMeshSpacing = FMath::Max(0.0f, InUnitRow.UnitMeshSpacing);
 	UnitMeshScale = InUnitRow.UnitMeshScale;
@@ -259,7 +263,15 @@ void AConquestUnitActor::UpdateUnitWorldIcon(
 
 	if (UConquestUnitWorldIconWidget* IconWidget = Cast<UConquestUnitWorldIconWidget>(UnitWorldIconComponent->GetWidget()))
 	{
-		IconWidget->SetUnitIcon(UnitName, CivilisationName, UnitDisplayColor, UnitIconMaterial);
+		IconWidget->SetUnitIcon(
+			UnitName,
+			CivilisationName,
+			UnitDisplayColor,
+			UnitIconMaterial,
+			CurrentHealth,
+			MaxHealth,
+			AttackValue
+		);
 	}
 }
 

@@ -36,7 +36,7 @@ namespace ConquestUnitCombat
 			Multiplier *= FMath::Max(0.0f, Modifier.Multiplier);
 		}
 
-		return FMath::Max(1.0f, Value * Multiplier);
+		return static_cast<float>(FMath::Max(1, FMath::CeilToInt(Value * Multiplier)));
 	}
 
 	int32 CalculateDeterministicDamage(float AttackerValue, float DefenderValue, float EqualStrengthDamage)

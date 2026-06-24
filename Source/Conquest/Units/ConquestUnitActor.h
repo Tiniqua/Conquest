@@ -76,10 +76,10 @@ protected:
 	FVector UnitWorldIconOffset = FVector(0.0f, 0.0f, 125.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
-	FRotator UnitWorldIconRotation = FRotator(60.0f, 0.0f, 90.0f);
+	FRotator UnitWorldIconRotation = FRotator(45.0f, -90.0f, 0.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
-	FVector2D UnitWorldIconDrawSize = FVector2D(180.0f, 64.0f);
+	FVector2D UnitWorldIconDrawSize = FVector2D(260.0f, 55.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Unit Icon")
 	float UnitWorldIconScale = 1.0f;
@@ -96,6 +96,7 @@ private:
 	FIntPoint TileCoord = FIntPoint::ZeroValue;
 	int32 CurrentHealth = 0;
 	int32 MaxHealth = 1;
+	int32 AttackValue = 1;
 	int32 UnitMeshCount = 1;
 	float UnitMeshSpacing = 60.0f;
 	FVector UnitMeshScale = FVector::OneVector;

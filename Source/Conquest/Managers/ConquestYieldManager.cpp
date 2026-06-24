@@ -38,12 +38,12 @@ namespace
 	FHexYield ScaleYield(const FHexYield& Yield, float Multiplier)
 	{
 		FHexYield Result;
-		Result.Food = FMath::RoundToInt(static_cast<float>(Yield.Food) * Multiplier);
-		Result.Production = FMath::RoundToInt(static_cast<float>(Yield.Production) * Multiplier);
-		Result.Gold = FMath::RoundToInt(static_cast<float>(Yield.Gold) * Multiplier);
-		Result.Science = FMath::RoundToInt(static_cast<float>(Yield.Science) * Multiplier);
-		Result.Culture = FMath::RoundToInt(static_cast<float>(Yield.Culture) * Multiplier);
-		Result.Faith = FMath::RoundToInt(static_cast<float>(Yield.Faith) * Multiplier);
+		Result.Food = FMath::CeilToInt(static_cast<float>(Yield.Food) * Multiplier);
+		Result.Production = FMath::CeilToInt(static_cast<float>(Yield.Production) * Multiplier);
+		Result.Gold = FMath::CeilToInt(static_cast<float>(Yield.Gold) * Multiplier);
+		Result.Science = FMath::CeilToInt(static_cast<float>(Yield.Science) * Multiplier);
+		Result.Culture = FMath::CeilToInt(static_cast<float>(Yield.Culture) * Multiplier);
+		Result.Faith = FMath::CeilToInt(static_cast<float>(Yield.Faith) * Multiplier);
 		return Result;
 	}
 
@@ -387,12 +387,12 @@ FHexYield UConquestYieldManager::ApplyUnhappyYieldPenalty(const FHexYield& Yield
 	}
 
 	FHexYield Result = Yield;
-	Result.Food = FMath::FloorToInt(static_cast<float>(Result.Food) * PenaltyMultiplier);
-	Result.Production = FMath::FloorToInt(static_cast<float>(Result.Production) * PenaltyMultiplier);
-	Result.Gold = FMath::FloorToInt(static_cast<float>(Result.Gold) * PenaltyMultiplier);
-	Result.Science = FMath::FloorToInt(static_cast<float>(Result.Science) * PenaltyMultiplier);
-	Result.Culture = FMath::FloorToInt(static_cast<float>(Result.Culture) * PenaltyMultiplier);
-	Result.Faith = FMath::FloorToInt(static_cast<float>(Result.Faith) * PenaltyMultiplier);
+	Result.Food = FMath::CeilToInt(static_cast<float>(Result.Food) * PenaltyMultiplier);
+	Result.Production = FMath::CeilToInt(static_cast<float>(Result.Production) * PenaltyMultiplier);
+	Result.Gold = FMath::CeilToInt(static_cast<float>(Result.Gold) * PenaltyMultiplier);
+	Result.Science = FMath::CeilToInt(static_cast<float>(Result.Science) * PenaltyMultiplier);
+	Result.Culture = FMath::CeilToInt(static_cast<float>(Result.Culture) * PenaltyMultiplier);
+	Result.Faith = FMath::CeilToInt(static_cast<float>(Result.Faith) * PenaltyMultiplier);
 	return Result;
 }
 

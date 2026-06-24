@@ -138,10 +138,10 @@ namespace
 
 	float ConquestHUDGetCityCombatValue(const FCityState& City)
 	{
-		return FMath::Max(
-			1.0f,
-			static_cast<float>(FMath::Max(1, City.CachedStrength)) * ConquestHUDGetCityHealthCombatMultiplier(City)
-		);
+		return static_cast<float>(FMath::Max(
+			1,
+			FMath::CeilToInt(static_cast<float>(FMath::Max(1, City.CachedStrength)) * ConquestHUDGetCityHealthCombatMultiplier(City))
+		));
 	}
 
 	FConquestUnitState* ConquestHUDFindUnitMutable(

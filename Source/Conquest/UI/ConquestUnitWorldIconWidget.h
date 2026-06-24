@@ -6,6 +6,7 @@
 
 class UImage;
 class UMaterialInterface;
+class UProgressBar;
 class UTextBlock;
 
 UCLASS()
@@ -19,7 +20,10 @@ public:
 		const FText& UnitName,
 		const FText& CivilisationName,
 		FLinearColor UnitDisplayColor,
-		UMaterialInterface* UnitIconMaterial
+		UMaterialInterface* UnitIconMaterial,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		int32 AttackValue
 	);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Conquest|Unit")
@@ -27,7 +31,10 @@ public:
 		const FText& UnitName,
 		const FText& CivilisationName,
 		FLinearColor UnitDisplayColor,
-		UMaterialInterface* UnitIconMaterial
+		UMaterialInterface* UnitIconMaterial,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		int32 AttackValue
 	);
 
 protected:
@@ -39,4 +46,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> UnitIconImage = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> HealthBar = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AttackText = nullptr;
 };

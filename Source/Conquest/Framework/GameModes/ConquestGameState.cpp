@@ -447,9 +447,24 @@ bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEnd
 	if (TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions)
 	{
 		OutBlocker.Type = EConquestEndTurnBlockType::WrongPhase;
-		OutBlocker.Message = TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity
-			? NSLOCTEXT("Conquest", "EndTurnBlockedPickStartingHex", "Pick your Starting Hex")
-			: NSLOCTEXT("Conquest", "EndTurnBlockedWrongPhase", "It is not currently the player action phase");
+		if (TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
+		{
+			const bool bPlayerHasStartingCity =
+				CityManager &&
+				CityManager->Cities.ContainsByPredicate(
+					[PlayerId](const FCityState& City)
+					{
+						return City.OwnerPlayerId == PlayerId;
+					}
+				);
+			OutBlocker.Message = bPlayerHasStartingCity
+				? NSLOCTEXT("Conquest", "EndTurnBlockedWaitingForStartingCities", "Waiting for Players")
+				: NSLOCTEXT("Conquest", "EndTurnBlockedPickStartingHex", "Pick your Starting Hex");
+		}
+		else
+		{
+			OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedWrongPhase", "It is not currently the player action phase");
+		}
 		return true;
 	}
 

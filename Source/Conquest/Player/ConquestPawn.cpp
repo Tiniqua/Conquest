@@ -554,15 +554,28 @@ void AConquestPawn::HandlePrimaryClick()
 	// First click: found capital.
 	if (ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
 	{
-		if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
-		{
-			if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
-			{
-				ConquestHUD->SelectStartingCandidateTile(Q, R);
-			}
-		}
+		const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+		const bool bLocalPlayerHasCity =
+			ConquestGS->CityManager &&
+			ConquestGS->CityManager->Cities.ContainsByPredicate(
+				[LocalPlayerId](const FCityState& City)
+				{
+					return City.OwnerPlayerId == LocalPlayerId;
+				}
+			);
 
-		return;
+		if (!bLocalPlayerHasCity)
+		{
+			if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+			{
+				if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+				{
+					ConquestHUD->SelectStartingCandidateTile(Q, R);
+				}
+			}
+
+			return;
+		}
 	}
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))

@@ -27,6 +27,11 @@
 
 namespace
 {
+	constexpr int32 ConquestHUDStartingRegionFogRevealRadius = 7;
+	constexpr int32 ConquestHUDCityFogRevealRadius = 5;
+	constexpr int32 ConquestHUDCityOwnedTileFogRevealRadius = 1;
+	constexpr int32 ConquestHUDUnitFogRevealRadius = 2;
+
 	FString ConquestHUDHexTileTypeToString(EHexTileType TileType)
 	{
 		if (const UEnum* EnumPtr = StaticEnum<EHexTileType>())
@@ -1797,7 +1802,7 @@ void AConquestHUD::BeginStartingRegionSelection()
 		return;
 	}
 
-	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, 7);
+	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, ConquestHUDStartingRegionFogRevealRadius);
 	if (!bStartingCameraFocused)
 	{
 		FocusCameraOnTile(StartRegion.Center, false);
@@ -1885,7 +1890,7 @@ bool AConquestHUD::ConfirmSelectedStartingCity()
 	{
 		if (ConquestGS->ActiveGridActor)
 		{
-			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(CityCoord, 7);
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(CityCoord, ConquestHUDCityFogRevealRadius);
 			ConquestGS->ActiveGridActor->ClearExpansionCandidateHighlights();
 		}
 	}
@@ -1945,7 +1950,7 @@ void AConquestHUD::ApplyLocalFogOfWar()
 			}
 		}
 
-		ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, 7);
+		ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, ConquestHUDStartingRegionFogRevealRadius);
 	}
 
 	if (ConquestGS->CityManager)
@@ -1957,10 +1962,10 @@ void AConquestHUD::ApplyLocalFogOfWar()
 				continue;
 			}
 
-			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(City.CenterTile, 7);
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(City.CenterTile, ConquestHUDCityFogRevealRadius);
 			for (const FIntPoint& OwnedTile : City.OwnedTiles)
 			{
-				ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(OwnedTile, 1);
+				ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(OwnedTile, ConquestHUDCityOwnedTileFogRevealRadius);
 			}
 		}
 	}
@@ -1970,7 +1975,7 @@ void AConquestHUD::ApplyLocalFogOfWar()
 	{
 		if (Unit.OwnerPlayerId == LocalPlayerId)
 		{
-			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(Unit.TileCoord, 1);
+			ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(Unit.TileCoord, ConquestHUDUnitFogRevealRadius);
 		}
 	}
 
@@ -1998,7 +2003,7 @@ void AConquestHUD::HandleUnitMovedForHUD(int32 UnitInstanceId, int32 PlayerId, F
 		return;
 	}
 
-	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(ToCoord, 1);
+	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(ToCoord, ConquestHUDUnitFogRevealRadius);
 }
 
 void AConquestHUD::ShowGameSetup()

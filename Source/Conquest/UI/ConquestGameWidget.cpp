@@ -612,7 +612,19 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 
 	if (ConquestGS->TurnManager && ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::AwaitingFirstCity)
 	{
-		ConquestHUD->BeginStartingRegionSelection();
+		const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+		const bool bLocalPlayerHasCity =
+			ConquestGS->CityManager &&
+			ConquestGS->CityManager->Cities.ContainsByPredicate(
+				[LocalPlayerId](const FCityState& City)
+				{
+					return City.OwnerPlayerId == LocalPlayerId;
+				}
+			);
+		if (!bLocalPlayerHasCity)
+		{
+			ConquestHUD->BeginStartingRegionSelection();
+		}
 		return true;
 	}
 

@@ -2,10 +2,11 @@
 
 namespace
 {
-	constexpr int32 ConquestHappinessCityCost = 4;
+	constexpr int32 ConquestHappinessCityCost = 2;
 	constexpr int32 ConquestHappinessPopulationCost = 1;
 	constexpr int32 ConquestSevereUnhappyThreshold = -10;
-	constexpr float ConquestUnhappyPenaltyPerPoint = 0.05f;
+	constexpr float ConquestUnhappyPenaltyPerPoint = 0.03f;
+	constexpr float ConquestUnhappyMinimumYieldMultiplier = 0.6f;
 }
 
 namespace ConquestUnitCombat
@@ -180,7 +181,11 @@ namespace ConquestHappiness
 	float GetPenaltyMultiplier(int32 Happiness)
 	{
 		const int32 Unhappiness = FMath::Max(0, -Happiness);
-		return FMath::Clamp(1.0f - (static_cast<float>(Unhappiness) * ConquestUnhappyPenaltyPerPoint), 0.25f, 1.0f);
+		return FMath::Clamp(
+			1.0f - (static_cast<float>(Unhappiness) * ConquestUnhappyPenaltyPerPoint),
+			ConquestUnhappyMinimumYieldMultiplier,
+			1.0f
+		);
 	}
 
 	FText GetPenaltyText(int32 Happiness)

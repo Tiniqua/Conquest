@@ -247,6 +247,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	int32 GetRequiredReadyHumanPlayerCount() const;
 
+	UFUNCTION(BlueprintPure, Category="Conquest|Turn")
+	bool IsPlayerWaitingForOtherPlayers(int32 PlayerId) const;
+
 	UFUNCTION(BlueprintPure, Category="Conquest|Players")
 	UConquestCivilisationData* GetCivilisationForPlayer(int32 PlayerId) const;
 

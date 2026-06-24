@@ -96,12 +96,54 @@ FText UConquestGameWidget::FormatStoredYieldText(const FText& Label, int32 Store
 	);
 }
 
+FText UConquestGameWidget::FormatStoredYieldText(
+	const FText& Label,
+	int32 Stored,
+	int32 PerTurn,
+	int32 PerTurnBeforeUnhappyPenalty,
+	bool bShowUnhappyPenalty
+)
+{
+	if (!bShowUnhappyPenalty || PerTurn >= PerTurnBeforeUnhappyPenalty)
+	{
+		return FormatStoredYieldText(Label, Stored, PerTurn);
+	}
+
+	return FText::Format(
+		NSLOCTEXT("Conquest", "TopBarStoredYieldUnhappyFormat", "{0}: {1} (+{2} ({3}))"),
+		Label,
+		FText::AsNumber(Stored),
+		FText::AsNumber(PerTurn),
+		FText::AsNumber(PerTurn - PerTurnBeforeUnhappyPenalty)
+	);
+}
+
 FText UConquestGameWidget::FormatPerTurnYieldText(const FText& Label, int32 PerTurn)
 {
 	return FText::Format(
 		NSLOCTEXT("Conquest", "TopBarPerTurnYieldFormat", "{0}: +{1}"),
 		Label,
 		FText::AsNumber(PerTurn)
+	);
+}
+
+FText UConquestGameWidget::FormatPerTurnYieldText(
+	const FText& Label,
+	int32 PerTurn,
+	int32 PerTurnBeforeUnhappyPenalty,
+	bool bShowUnhappyPenalty
+)
+{
+	if (!bShowUnhappyPenalty || PerTurn >= PerTurnBeforeUnhappyPenalty)
+	{
+		return FormatPerTurnYieldText(Label, PerTurn);
+	}
+
+	return FText::Format(
+		NSLOCTEXT("Conquest", "TopBarPerTurnYieldUnhappyFormat", "{0}: +{1} ({2})"),
+		Label,
+		FText::AsNumber(PerTurn),
+		FText::AsNumber(PerTurn - PerTurnBeforeUnhappyPenalty)
 	);
 }
 
@@ -117,11 +159,21 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	{
 		SetText(
 			TopBarFoodText,
-			FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldFoodShort", "Food"), YieldData.SelectedCityYieldPerTurn.Food)
+			FormatPerTurnYieldText(
+				NSLOCTEXT("Conquest", "YieldFoodShort", "Food"),
+				YieldData.SelectedCityYieldPerTurn.Food,
+				YieldData.SelectedCityYieldPerTurnBeforeUnhappyPenalty.Food,
+				YieldData.bIsUnhappy
+			)
 		);
 		SetText(
 			TopBarProductionText,
-			FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldProductionShort", "Prod"), YieldData.SelectedCityYieldPerTurn.Production)
+			FormatPerTurnYieldText(
+				NSLOCTEXT("Conquest", "YieldProductionShort", "Prod"),
+				YieldData.SelectedCityYieldPerTurn.Production,
+				YieldData.SelectedCityYieldPerTurnBeforeUnhappyPenalty.Production,
+				YieldData.bIsUnhappy
+			)
 		);
 	}
 	else
@@ -132,19 +184,42 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 
 	SetText(
 		TopBarGoldText,
-		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldGoldShort", "Gold"), YieldData.EmpireStoredYields.Gold, YieldData.EmpireYieldPerTurn.Gold)
+		FormatStoredYieldText(
+			NSLOCTEXT("Conquest", "YieldGoldShort", "Gold"),
+			YieldData.EmpireStoredYields.Gold,
+			YieldData.EmpireYieldPerTurn.Gold,
+			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Gold,
+			YieldData.bIsUnhappy
+		)
 	);
 	SetText(
 		TopBarScienceText,
-		FormatPerTurnYieldText(NSLOCTEXT("Conquest", "YieldScienceShort", "Sci"), YieldData.EmpireYieldPerTurn.Science)
+		FormatPerTurnYieldText(
+			NSLOCTEXT("Conquest", "YieldScienceShort", "Sci"),
+			YieldData.EmpireYieldPerTurn.Science,
+			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Science,
+			YieldData.bIsUnhappy
+		)
 	);
 	SetText(
 		TopBarCultureText,
-		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldCultureShort", "Culture"), YieldData.EmpireStoredYields.Culture, YieldData.EmpireYieldPerTurn.Culture)
+		FormatStoredYieldText(
+			NSLOCTEXT("Conquest", "YieldCultureShort", "Culture"),
+			YieldData.EmpireStoredYields.Culture,
+			YieldData.EmpireYieldPerTurn.Culture,
+			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Culture,
+			YieldData.bIsUnhappy
+		)
 	);
 	SetText(
 		TopBarFaithText,
-		FormatStoredYieldText(NSLOCTEXT("Conquest", "YieldFaithShort", "Faith"), YieldData.EmpireStoredYields.Faith, YieldData.EmpireYieldPerTurn.Faith)
+		FormatStoredYieldText(
+			NSLOCTEXT("Conquest", "YieldFaithShort", "Faith"),
+			YieldData.EmpireStoredYields.Faith,
+			YieldData.EmpireYieldPerTurn.Faith,
+			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Faith,
+			YieldData.bIsUnhappy
+		)
 	);
 	SetText(
 		TopBarHappinessText,
@@ -428,12 +503,36 @@ bool UConquestGameWidget::IsWaitingForOtherPlayers() const
 		return false;
 	}
 
+	const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+	if (ConquestGS->IsPlayerWaitingForOtherPlayers(LocalPlayerId))
+	{
+		return true;
+	}
+
+	int32 HumanPlayerCount = 0;
+	for (const FConquestLobbyPlayerSlot& Slot : ConquestGS->LobbyPlayerSlots)
+	{
+		if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+		{
+			++HumanPlayerCount;
+		}
+	}
+
+	if (HumanPlayerCount <= 0)
+	{
+		for (const FConquestLobbyPlayerSlot& Slot : ConquestGS->ReplicatedConquestState.LobbyPlayerSlots)
+		{
+			if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+			{
+				++HumanPlayerCount;
+			}
+		}
+	}
+
 	return
 		ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::PlayerActions &&
-		(
-			bLocalEndTurnRequestPending ||
-			ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Contains(ConquestGS->GetLocalPlayerId())
-		);
+		bLocalEndTurnRequestPending &&
+		HumanPlayerCount > 1;
 }
 
 FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
@@ -449,6 +548,15 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 	const FConquestPlayerEmpireState& LocalPlayer = ConquestGS->GetHumanPlayer();
 	Result.EmpireStoredYields = LocalPlayer.StoredYields;
 	Result.EmpireYieldPerTurn = LocalPlayer.CachedYieldPerTurn;
+	if (ConquestGS->YieldManager)
+	{
+		Result.EmpireYieldPerTurnBeforeUnhappyPenalty =
+			ConquestGS->YieldManager->CalculateEmpireYieldPerTurnBeforeUnhappyPenalty(LocalPlayer.PlayerId);
+	}
+	else
+	{
+		Result.EmpireYieldPerTurnBeforeUnhappyPenalty = Result.EmpireYieldPerTurn;
+	}
 	Result.Happiness = LocalPlayer.CachedHappiness;
 	Result.bIsUnhappy = ConquestHappiness::IsUnhappy(LocalPlayer.CachedHappiness);
 	Result.bIsSeverelyUnhappy = ConquestHappiness::IsSeverelyUnhappy(LocalPlayer.CachedHappiness);
@@ -462,6 +570,9 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 		if (const FCityState* City = ConquestGS->CityManager->GetCity(SelectedCityYieldContextId))
 		{
 			Result.SelectedCityYieldPerTurn = City->CachedYieldPerTurn;
+			Result.SelectedCityYieldPerTurnBeforeUnhappyPenalty = ConquestGS->YieldManager
+				? ConquestGS->YieldManager->CalculateCityTotalYieldsBeforeUnhappyPenalty(*City)
+				: Result.SelectedCityYieldPerTurn;
 		}
 		else
 		{

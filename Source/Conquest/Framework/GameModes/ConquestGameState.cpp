@@ -418,6 +418,40 @@ int32 AConquestGameState::GetRequiredReadyHumanPlayerCount() const
 	return RequiredCount;
 }
 
+bool AConquestGameState::IsPlayerWaitingForOtherPlayers(int32 PlayerId) const
+{
+	if (
+		!TurnManager ||
+		TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions ||
+		!ReplicatedConquestState.ReadyPlayerIds.Contains(PlayerId)
+	)
+	{
+		return false;
+	}
+
+	int32 HumanPlayerCount = 0;
+	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+		{
+			++HumanPlayerCount;
+		}
+	}
+
+	if (HumanPlayerCount <= 0)
+	{
+		for (const FConquestLobbyPlayerSlot& Slot : ReplicatedConquestState.LobbyPlayerSlots)
+		{
+			if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+			{
+				++HumanPlayerCount;
+			}
+		}
+	}
+
+	return HumanPlayerCount > 1;
+}
+
 UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 PlayerId) const
 {
 	if (const TObjectPtr<UConquestCivilisationData>* FoundCivilisation = PlayerCivilisations.Find(PlayerId))

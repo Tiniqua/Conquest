@@ -102,7 +102,13 @@ struct FConquestTopBarYieldData
 	FHexYield EmpireYieldPerTurn;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FHexYield EmpireYieldPerTurnBeforeUnhappyPenalty;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
 	FHexYield SelectedCityYieldPerTurn;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FHexYield SelectedCityYieldPerTurnBeforeUnhappyPenalty;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
 	int32 SelectedCityId = INDEX_NONE;
@@ -476,6 +482,8 @@ private:
 	void SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData);
 	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn);
 	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn);
+	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn, int32 PerTurnBeforeUnhappyPenalty, bool bShowUnhappyPenalty);
+	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn, int32 PerTurnBeforeUnhappyPenalty, bool bShowUnhappyPenalty);
 	void ClearTileTexts();
 	void RefreshSelectedUnitInfoFromGameState();
 	bool FocusNextRequiredEndTurnAction();

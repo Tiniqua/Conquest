@@ -117,7 +117,7 @@ FHexYield UConquestYieldManager::CalculateCityBuildingYields(const FCityState& C
 	return Result;
 }
 
-FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City) const
+FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(const FCityState& City) const
 {
 	FHexYield Result;
 
@@ -164,7 +164,44 @@ FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City
 
 	Result += CalculateCityBuildingYields(City);
 
-	return ApplyUnhappyYieldPenalty(Result, City.OwnerPlayerId);
+	return Result;
+}
+
+FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City) const
+{
+	return ApplyUnhappyYieldPenalty(
+		CalculateCityTotalYieldsBeforeUnhappyPenalty(City),
+		City.OwnerPlayerId
+	);
+}
+
+FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurnBeforeUnhappyPenalty(int32 PlayerId) const
+{
+	FHexYield Result;
+
+	if (!GameStateRef || !GameStateRef->CityManager)
+	{
+		return Result;
+	}
+
+	for (const FCityState& City : GameStateRef->CityManager->Cities)
+	{
+		if (City.OwnerPlayerId == PlayerId)
+		{
+			Result += CalculateCityTotalYieldsBeforeUnhappyPenalty(City);
+		}
+	}
+
+	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
+	if (Player.PlayerId == PlayerId)
+	{
+		for (const FConquestUnitState& Unit : Player.Units)
+		{
+			Result.Gold -= FMath::Max(0, Unit.CachedGoldMaintenancePerTurn);
+		}
+	}
+
+	return Result;
 }
 
 FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurn(int32 PlayerId) const

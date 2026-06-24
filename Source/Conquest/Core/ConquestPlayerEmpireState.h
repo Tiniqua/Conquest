@@ -137,10 +137,10 @@ struct FConquestPlayerEmpireState
 	int32 NextUnitInstanceId = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 BaseHappiness = 6;
+	int32 BaseHappiness = 10;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 CachedHappiness = 6;
+	int32 CachedHappiness = 10;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CachedLuxuryHappiness = 0;

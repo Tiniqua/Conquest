@@ -187,3 +187,14 @@ namespace ConquestUnitCombat
 		int32 AttackDistance
 	);
 }
+
+namespace ConquestHappiness
+{
+	CONQUEST_API int32 GetCityCost();
+	CONQUEST_API int32 GetPopulationCost();
+	CONQUEST_API int32 GetSevereUnhappyThreshold();
+	CONQUEST_API bool IsUnhappy(int32 Happiness);
+	CONQUEST_API bool IsSeverelyUnhappy(int32 Happiness);
+	CONQUEST_API float GetPenaltyMultiplier(int32 Happiness);
+	CONQUEST_API FText GetPenaltyText(int32 Happiness);
+}

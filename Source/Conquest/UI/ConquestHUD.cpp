@@ -117,6 +117,15 @@ namespace
 		return City && City->OwnerPlayerId != PlayerId;
 	}
 
+	bool ConquestHUDIsLocalOwnedCity(const AConquestGameState& GameState, int32 CityId)
+	{
+		const FCityState* City = CityId != INDEX_NONE && GameState.CityManager
+			? GameState.CityManager->GetCity(CityId)
+			: nullptr;
+
+		return City && City->OwnerPlayerId == GameState.GetLocalPlayerId();
+	}
+
 	float ConquestHUDGetCityHealthCombatMultiplier(const FCityState& City)
 	{
 		return FMath::Clamp(
@@ -313,7 +322,7 @@ void AConquestHUD::SetCityWorldLabelHiddenForPanel(int32 CityId)
 			? GetWorld()->GetGameState<AConquestGameState>()
 			: nullptr;
 
-		if (ConquestGS && ConquestGS->ActiveGridActor)
+		if (ConquestGS && ConquestGS->ActiveGridActor && ConquestHUDIsLocalOwnedCity(*ConquestGS, CityId))
 		{
 			ConquestGS->ActiveGridActor->SetCityWorldLabelVisible(CityId, false);
 		}
@@ -327,7 +336,12 @@ void AConquestHUD::SetCityWorldLabelHiddenForPanel(int32 CityId)
 		? GetWorld()->GetGameState<AConquestGameState>()
 		: nullptr;
 
-	if (!ConquestGS || !ConquestGS->ActiveGridActor || CityId == INDEX_NONE)
+	if (
+		!ConquestGS ||
+		!ConquestGS->ActiveGridActor ||
+		CityId == INDEX_NONE ||
+		!ConquestHUDIsLocalOwnedCity(*ConquestGS, CityId)
+	)
 	{
 		return;
 	}
@@ -1988,6 +2002,21 @@ void AConquestHUD::ApplyLocalFogOfWar()
 void AConquestHUD::HandleConquestStateChangedForHUD()
 {
 	ApplyLocalFogOfWar();
+
+	if (HiddenCityWorldLabelId != INDEX_NONE)
+	{
+		const AConquestGameState* ConquestGS = GetWorld()
+			? GetWorld()->GetGameState<AConquestGameState>()
+			: nullptr;
+		if (ConquestGS && ConquestHUDIsLocalOwnedCity(*ConquestGS, HiddenCityWorldLabelId))
+		{
+			SetCityWorldLabelHiddenForPanel(HiddenCityWorldLabelId);
+		}
+		else
+		{
+			RestoreHiddenCityWorldLabel();
+		}
+	}
 }
 
 void AConquestHUD::HandleUnitMovedForHUD(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord)

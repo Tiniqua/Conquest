@@ -1,5 +1,14 @@
 #include "ConquestPlayerEmpireState.h"
 
+namespace
+{
+	constexpr int32 ConquestHappinessCityCost = 4;
+	constexpr int32 ConquestHappinessPopulationCost = 1;
+	constexpr int32 ConquestSevereUnhappyThreshold = -10;
+	constexpr float ConquestUnhappyPenaltyMultiplier = 0.8f;
+	constexpr float ConquestSevereUnhappyPenaltyMultiplier = 0.6f;
+}
+
 namespace ConquestUnitCombat
 {
 	float GetHealthCombatMultiplier(const FConquestUnitState& Unit)
@@ -131,5 +140,60 @@ namespace ConquestUnitCombat
 		}
 
 		return Preview;
+	}
+}
+
+namespace ConquestHappiness
+{
+	int32 GetCityCost()
+	{
+		return ConquestHappinessCityCost;
+	}
+
+	int32 GetPopulationCost()
+	{
+		return ConquestHappinessPopulationCost;
+	}
+
+	int32 GetSevereUnhappyThreshold()
+	{
+		return ConquestSevereUnhappyThreshold;
+	}
+
+	bool IsUnhappy(int32 Happiness)
+	{
+		return Happiness < 0;
+	}
+
+	bool IsSeverelyUnhappy(int32 Happiness)
+	{
+		return Happiness <= ConquestSevereUnhappyThreshold;
+	}
+
+	float GetPenaltyMultiplier(int32 Happiness)
+	{
+		if (IsSeverelyUnhappy(Happiness))
+		{
+			return ConquestSevereUnhappyPenaltyMultiplier;
+		}
+
+		return IsUnhappy(Happiness)
+			? ConquestUnhappyPenaltyMultiplier
+			: 1.0f;
+	}
+
+	FText GetPenaltyText(int32 Happiness)
+	{
+		if (IsSeverelyUnhappy(Happiness))
+		{
+			return NSLOCTEXT("Conquest", "SevereUnhappyPenaltyText", "-40% Unhappy");
+		}
+
+		if (IsUnhappy(Happiness))
+		{
+			return NSLOCTEXT("Conquest", "UnhappyPenaltyText", "-20% Unhappy");
+		}
+
+		return FText::GetEmpty();
 	}
 }

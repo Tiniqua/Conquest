@@ -83,6 +83,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void RecalculateStrategicResourceEconomy(int32 PlayerId);
 
+	void RecalculateEmpireYields(int32 PlayerId);
+
 	UFUNCTION(BlueprintCallable)
 	void RecalculateUnitStats(FConquestUnitState& Unit) const;
 
@@ -138,7 +140,6 @@ private:
 	void HealCityAtStartOfTurn(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
 	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
-	void RecalculateEmpireYields(int32 PlayerId);
 	void AccumulateStrategicResourceIncome(int32 PlayerId);
 	int32 CreateUnitFromProduction(const FCityState& City, FName UnitId);
 	void SpawnUnitActorForState(const FConquestUnitState& UnitState);

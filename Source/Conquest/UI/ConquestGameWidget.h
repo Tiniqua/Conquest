@@ -117,6 +117,12 @@ struct FConquestTopBarYieldData
 	bool bIsUnhappy = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	bool bIsSeverelyUnhappy = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
+	FText HappinessPenaltyText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Yields")
 	TArray<FConquestStrategicResourceStockpile> StrategicResources;
 };
 
@@ -347,7 +353,7 @@ protected:
 	TObjectPtr<UTextBlock> TopBarHappinessText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> TopBarStrategicResourcesText = nullptr;
+	TObjectPtr<UHorizontalBox> TopBarStrategicResources = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TopBarHorsesText = nullptr;

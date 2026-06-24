@@ -18,6 +18,38 @@
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 
+namespace
+{
+	const FLinearColor ConquestTopBarHappinessPositiveColor(0.2f, 0.85f, 0.35f, 1.0f);
+	const FLinearColor ConquestTopBarHappinessZeroColor(1.0f, 0.82f, 0.2f, 1.0f);
+	const FLinearColor ConquestTopBarHappinessUnhappyColor(1.0f, 0.48f, 0.12f, 1.0f);
+	const FLinearColor ConquestTopBarHappinessSevereColor(0.95f, 0.08f, 0.08f, 1.0f);
+
+	FText FormatHappinessValueText(int32 Happiness)
+	{
+		return Happiness > 0
+			? FText::FromString(FString::Printf(TEXT("+%d"), Happiness))
+			: FText::AsNumber(Happiness);
+	}
+
+	FLinearColor GetHappinessDisplayColor(int32 Happiness)
+	{
+		if (ConquestHappiness::IsSeverelyUnhappy(Happiness))
+		{
+			return ConquestTopBarHappinessSevereColor;
+		}
+
+		if (ConquestHappiness::IsUnhappy(Happiness))
+		{
+			return ConquestTopBarHappinessUnhappyColor;
+		}
+
+		return Happiness == 0
+			? ConquestTopBarHappinessZeroColor
+			: ConquestTopBarHappinessPositiveColor;
+	}
+}
+
 void UConquestGameWidget::SetText(UTextBlock* TextBlock, const FText& Text)
 {
 	if (TextBlock)
@@ -118,14 +150,19 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 		TopBarHappinessText,
 		YieldData.bIsUnhappy
 			? FText::Format(
-				NSLOCTEXT("Conquest", "TopBarUnhappyFormat", "Happy: {0} (-25% Unhappy)"),
-				FText::AsNumber(YieldData.Happiness)
+				NSLOCTEXT("Conquest", "TopBarUnhappyFormat", "Happy: {0} ({1})"),
+				FormatHappinessValueText(YieldData.Happiness),
+				YieldData.HappinessPenaltyText
 			)
 			: FText::Format(
 				NSLOCTEXT("Conquest", "TopBarHappinessFormat", "Happy: {0}"),
-				FText::AsNumber(YieldData.Happiness)
+				FormatHappinessValueText(YieldData.Happiness)
 			)
 	);
+	if (TopBarHappinessText)
+	{
+		TopBarHappinessText->SetColorAndOpacity(FSlateColor(GetHappinessDisplayColor(YieldData.Happiness)));
+	}
 
 	auto FindStockpile = [&YieldData](FName ResourceId) -> const FConquestStrategicResourceStockpile*
 	{
@@ -147,16 +184,7 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(TopBarIronText, FormatStrategicResource(TEXT("Iron"), FName(TEXT("Iron"))));
 	SetText(TopBarCoalText, FormatStrategicResource(TEXT("Coal"), FName(TEXT("Coal"))));
 	SetText(TopBarAluminiumText, FormatStrategicResource(TEXT("Aluminium"), FName(TEXT("Aluminium"))));
-	SetText(
-		TopBarStrategicResourcesText,
-		FText::Format(
-			NSLOCTEXT("Conquest", "TopBarStrategicResourcesFormat", "Strategic: {0} | {1} | {2} | {3}"),
-			FormatStrategicResource(TEXT("Horses"), FName(TEXT("Horses"))),
-			FormatStrategicResource(TEXT("Iron"), FName(TEXT("Iron"))),
-			FormatStrategicResource(TEXT("Coal"), FName(TEXT("Coal"))),
-			FormatStrategicResource(TEXT("Aluminium"), FName(TEXT("Aluminium")))
-		)
-	);
+	SetWidgetVisibility(TopBarStrategicResources, ESlateVisibility::Visible);
 }
 
 void UConquestGameWidget::ClearTileTexts()
@@ -376,7 +404,9 @@ FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const
 	Result.EmpireStoredYields = LocalPlayer.StoredYields;
 	Result.EmpireYieldPerTurn = LocalPlayer.CachedYieldPerTurn;
 	Result.Happiness = LocalPlayer.CachedHappiness;
-	Result.bIsUnhappy = LocalPlayer.CachedHappiness < 0;
+	Result.bIsUnhappy = ConquestHappiness::IsUnhappy(LocalPlayer.CachedHappiness);
+	Result.bIsSeverelyUnhappy = ConquestHappiness::IsSeverelyUnhappy(LocalPlayer.CachedHappiness);
+	Result.HappinessPenaltyText = ConquestHappiness::GetPenaltyText(LocalPlayer.CachedHappiness);
 	Result.StrategicResources = LocalPlayer.StrategicResources;
 	Result.SelectedCityId = SelectedCityYieldContextId;
 	Result.bShowSelectedCityLocalYields = SelectedCityYieldContextId != INDEX_NONE;
@@ -401,13 +431,14 @@ void UConquestGameWidget::RefreshTopBarYieldInfo()
 {
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
-		if (ConquestGS->YieldManager)
-		{
-			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(ConquestGS->GetHumanPlayer().PlayerId);
-		}
+		const int32 LocalPlayerId = ConquestGS->GetHumanPlayer().PlayerId;
 		if (ConquestGS->CityManager)
 		{
-			ConquestGS->CityManager->RecalculateStrategicResourceEconomy(ConquestGS->GetHumanPlayer().PlayerId);
+			ConquestGS->CityManager->RecalculateEmpireYields(LocalPlayerId);
+		}
+		else if (ConquestGS->YieldManager)
+		{
+			ConquestGS->YieldManager->RecalculateEmpireYieldPerTurn(LocalPlayerId);
 		}
 	}
 

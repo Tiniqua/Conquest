@@ -19,6 +19,8 @@ namespace
 	const FName ConquestProductionProjectGoldFocus(TEXT("GoldFocus"));
 	const FName ConquestProductionProjectCultureFocus(TEXT("CultureFocus"));
 	const FName ConquestProductionProjectScienceFocus(TEXT("ScienceFocus"));
+	const FName ConquestUnhappyAttackModifierId(TEXT("Happiness_Unhappy_Attack"));
+	const FName ConquestUnhappyDefenseModifierId(TEXT("Happiness_Unhappy_Defense"));
 
 	const TArray<FName>& GetConquestProductionProjectIds()
 	{
@@ -582,6 +584,15 @@ void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
 			}
 		}
 
+		FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
+		if (Player.PlayerId == PlayerId)
+		{
+			for (FConquestUnitState& Unit : Player.Units)
+			{
+				RecalculateUnitStats(Unit);
+			}
+		}
+
 		GameStateRef->YieldManager->RecalculateEmpireYieldPerTurn(PlayerId);
 		RecalculateStrategicResourceEconomy(PlayerId);
 	}
@@ -732,6 +743,12 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 	Unit.CachedHealthRegenPerTurn = UnitRow->HealthRegenPerTurn;
 	Unit.CachedMovementPoints = UnitRow->MovementPoints;
 	Unit.CachedGoldMaintenancePerTurn = UnitRow->GoldMaintenancePerTurn;
+	Unit.CombatModifiers.RemoveAll([](const FConquestUnitCombatModifier& Modifier)
+	{
+		return
+			Modifier.ModifierId == ConquestUnhappyAttackModifierId ||
+			Modifier.ModifierId == ConquestUnhappyDefenseModifierId;
+	});
 
 	for (const FConquestUnitAugmentState& Augment : Unit.Augments)
 	{
@@ -763,6 +780,26 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 	Unit.CachedAttackRange = FMath::Max(1, Unit.CachedAttackRange);
 	Unit.CachedMaxHealth = FMath::Max(1, Unit.CachedMaxHealth);
 	Unit.CachedMovementPoints = FMath::Max(0, Unit.CachedMovementPoints);
+
+	const FConquestPlayerEmpireState& OwnerPlayer = GameStateRef->GetPlayerEmpire(Unit.OwnerPlayerId);
+	const float HappinessCombatMultiplier = OwnerPlayer.PlayerId == Unit.OwnerPlayerId
+		? ConquestHappiness::GetPenaltyMultiplier(OwnerPlayer.CachedHappiness)
+		: 1.0f;
+	if (HappinessCombatMultiplier < 1.0f)
+	{
+		FConquestUnitCombatModifier AttackModifier;
+		AttackModifier.ModifierId = ConquestUnhappyAttackModifierId;
+		AttackModifier.ModifierType = EConquestUnitCombatModifierType::Attack;
+		AttackModifier.Multiplier = HappinessCombatMultiplier;
+		Unit.CombatModifiers.Add(AttackModifier);
+
+		FConquestUnitCombatModifier DefenseModifier;
+		DefenseModifier.ModifierId = ConquestUnhappyDefenseModifierId;
+		DefenseModifier.ModifierType = EConquestUnitCombatModifierType::Defense;
+		DefenseModifier.Multiplier = HappinessCombatMultiplier;
+		Unit.CombatModifiers.Add(DefenseModifier);
+	}
+
 	Unit.CurrentHealth = Unit.CurrentHealth <= 0
 		? Unit.CachedMaxHealth
 		: FMath::Clamp(Unit.CurrentHealth, 1, Unit.CachedMaxHealth);

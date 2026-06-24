@@ -2,6 +2,7 @@
 
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GameFramework/PlayerController.h"
@@ -98,6 +99,14 @@ void UConquestCityPanelWidget::Refresh()
 			GrowthText,
 			FText::AsNumber(City->PendingBorderExpansions)
 		));
+	}
+
+	if (GrowthProgressBar)
+	{
+		const float GrowthCost = static_cast<float>(FMath::Max(1, City->CachedFoodRequiredForNextPopulation));
+		const float GrowthPercent = FMath::Clamp(City->FoodStored / GrowthCost, 0.0f, 1.0f);
+		GrowthProgressBar->SetPercent(GrowthPercent);
+		GrowthProgressBar->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
 	if (YieldText)

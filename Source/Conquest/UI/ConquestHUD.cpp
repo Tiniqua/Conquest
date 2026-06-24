@@ -1356,18 +1356,19 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 	}
 
 	const FIntPoint TargetCoord(Q, R);
-	if (!CurrentUnitAttackTiles.Contains(TargetCoord))
-	{
-		ClearCombatPreview();
-		return false;
-	}
-
 	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
 	const FConquestUnitState* SelectedUnit = Player.Units.FindByPredicate([ConquestGS](const FConquestUnitState& Unit)
 	{
 		return Unit.UnitInstanceId == ConquestGS->SelectedUnitInstanceId;
 	});
 	if (!SelectedUnit || SelectedUnit->CurrentMovementPoints <= 0)
+	{
+		ClearCombatPreview();
+		return false;
+	}
+
+	const int32 AttackDistance = ConquestGS->GetHexGridModel()->GetHexDistance(SelectedUnit->TileCoord, TargetCoord);
+	if (AttackDistance <= 0 || AttackDistance > FMath::Max(1, SelectedUnit->CachedAttackRange))
 	{
 		ClearCombatPreview();
 		return false;
@@ -1416,7 +1417,6 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 				return false;
 			}
 
-			const int32 AttackDistance = GridModel->GetHexDistance(SelectedUnit->TileCoord, TargetCoord);
 			const float AttackerCombatValue =
 				ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
 			const float TileDefenseValue = FMath::Max(1.0f, static_cast<float>(FMath::Max(0, TileCombatState.CombatStrength)));
@@ -1483,10 +1483,6 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 			return false;
 		}
 
-		const int32 AttackDistance = ConquestGS->GetHexGridModel()->GetHexDistance(
-			SelectedUnit->TileCoord,
-			DefenderCity->CenterTile
-		);
 		const float AttackerCombatValue =
 			ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
 		const float CityDefenseValue = ConquestHUDGetCityCombatValue(*DefenderCity);
@@ -1548,10 +1544,6 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		return false;
 	}
 
-	const int32 AttackDistance = ConquestGS->GetHexGridModel()->GetHexDistance(
-		SelectedUnit->TileCoord,
-		DefenderUnit->TileCoord
-	);
 	FConquestCombatPreviewData PreviewData =
 		ConquestUnitCombat::CalculatePreview(*SelectedUnit, *DefenderUnit, AttackDistance);
 	PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);

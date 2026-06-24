@@ -9,6 +9,7 @@ class UTextBlock;
 class UVerticalBox;
 class UButton;
 class UImage;
+class UProgressBar;
 class UMaterialInterface;
 class UConquestChoiceButtonWidget;
 class AConquestGameState;
@@ -57,6 +58,9 @@ protected:
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> PopulationText;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UProgressBar> GrowthProgressBar = nullptr;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> YieldText;

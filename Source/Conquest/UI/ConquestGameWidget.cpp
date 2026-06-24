@@ -304,6 +304,12 @@ void UConquestGameWidget::NativeDestruct()
 
 void UConquestGameWidget::HandleEndTurnClicked()
 {
+	if (IsWaitingForOtherPlayers())
+	{
+		RefreshTurnInfo();
+		return;
+	}
+
 	if (FocusNextRequiredEndTurnAction())
 	{
 		RefreshTurnInfo();
@@ -312,6 +318,7 @@ void UConquestGameWidget::HandleEndTurnClicked()
 
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 	{
+		bLocalEndTurnRequestPending = true;
 		ConquestPC->RequestEndTurn();
 	}
 
@@ -335,6 +342,7 @@ void UConquestGameWidget::HandleResearchClicked()
 void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 {
 	(void)NewTurn;
+	bLocalEndTurnRequestPending = false;
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
@@ -342,6 +350,13 @@ void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 
 void UConquestGameWidget::HandleConquestStateChanged()
 {
+	if (const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr)
+	{
+		bLocalEndTurnRequestPending = false;
+	}
+
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
@@ -357,15 +372,23 @@ void UConquestGameWidget::HandleResearchChanged()
 void UConquestGameWidget::RefreshTurnInfo()
 {
 	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
-	if (!ConquestGS || !ConquestGS->TurnManager || !TurnText)
+	if (!ConquestGS || !ConquestGS->TurnManager)
 	{
 		return;
 	}
 
-	TurnText->SetText(FText::Format(
-		NSLOCTEXT("Conquest", "TurnTextFormat", "Turn {0}"),
-		FText::AsNumber(ConquestGS->TurnManager->CurrentTurn)
-	));
+	if (TurnText)
+	{
+		TurnText->SetText(FText::Format(
+			NSLOCTEXT("Conquest", "TurnTextFormat", "Turn {0}"),
+			FText::AsNumber(ConquestGS->TurnManager->CurrentTurn)
+		));
+	}
+
+	if (EndTurnButton)
+	{
+		EndTurnButton->SetIsEnabled(!IsWaitingForOtherPlayers());
+	}
 }
 
 FText UConquestGameWidget::GetEndTurnButtonText() const
@@ -379,6 +402,11 @@ FText UConquestGameWidget::GetEndTurnButtonText() const
 		return NSLOCTEXT("Conquest", "EndTurnButtonDefault", "Next Turn");
 	}
 
+	if (IsWaitingForOtherPlayers())
+	{
+		return NSLOCTEXT("Conquest", "EndTurnButtonWaitingForPlayers", "Waiting for Players");
+	}
+
 	FConquestEndTurnBlocker Blocker;
 	if (!ConquestGS->GetEndTurnBlockerForPlayer(ConquestGS->GetLocalPlayerId(), Blocker))
 	{
@@ -388,6 +416,24 @@ FText UConquestGameWidget::GetEndTurnButtonText() const
 	return Blocker.Message.IsEmpty()
 		? NSLOCTEXT("Conquest", "EndTurnButtonNeedsActions", "Actions Required")
 		: Blocker.Message;
+}
+
+bool UConquestGameWidget::IsWaitingForOtherPlayers() const
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->TurnManager)
+	{
+		return false;
+	}
+
+	return
+		ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::PlayerActions &&
+		(
+			bLocalEndTurnRequestPending ||
+			ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Contains(ConquestGS->GetLocalPlayerId())
+		);
 }
 
 FConquestTopBarYieldData UConquestGameWidget::GetTopBarYieldData() const

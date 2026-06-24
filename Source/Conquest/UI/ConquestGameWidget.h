@@ -192,6 +192,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Conquest|Turn")
 	FText GetEndTurnButtonText() const;
 
+	UFUNCTION(BlueprintPure, Category = "Conquest|Turn")
+	bool IsWaitingForOtherPlayers() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void RefreshTopBarYieldInfo();
 
@@ -481,6 +484,7 @@ private:
 	FConquestTileImprovementChoiceData PendingTileImprovementChoice;
 	FConquestCombatPreviewData CurrentCombatPreviewData;
 	int32 PendingUnitAugmentUnitInstanceId = INDEX_NONE;
+	bool bLocalEndTurnRequestPending = false;
 
 	UFUNCTION()
 	void HandleTileExpansionConfirmClicked();

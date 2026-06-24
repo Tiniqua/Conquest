@@ -4,6 +4,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
 #include "Conquest/UI/ConquestUnitActionButtonWidget.h"
@@ -758,7 +759,13 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 					this,
 					&UConquestGameWidget::HandleUnitActionClicked
 				);
-				UnitActionButtonBox->AddChild(ActionButton);
+				if (UHorizontalBoxSlot* ButtonSlot = Cast<UHorizontalBoxSlot>(UnitActionButtonBox->AddChild(ActionButton)))
+				{
+					ButtonSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+					ButtonSlot->SetHorizontalAlignment(HAlign_Fill);
+					ButtonSlot->SetVerticalAlignment(VAlign_Fill);
+					ButtonSlot->SetPadding(FMargin(2.0f, 0.0f));
+				}
 			}
 		}
 	}

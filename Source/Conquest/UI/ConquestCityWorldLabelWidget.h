@@ -22,6 +22,7 @@ public:
 		int32 CurrentHealth,
 		int32 MaxHealth,
 		int32 Strength,
+		float GrowthPercent,
 		UMaterialInterface* CivilisationThemeMaterial,
 		FLinearColor CivilisationThemeColor
 	);
@@ -41,6 +42,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> HealthBar = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> GrowthProgressBar = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> ThemeMaterialImage = nullptr;

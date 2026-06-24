@@ -673,6 +673,11 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 			City.CurrentHealth,
 			City.MaxHealth,
 			City.CachedStrength,
+			FMath::Clamp(
+				City.FoodStored / static_cast<float>(FMath::Max(1, City.CachedFoodRequiredForNextPopulation)),
+				0.0f,
+				1.0f
+			),
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);

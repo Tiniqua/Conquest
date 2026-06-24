@@ -309,6 +309,7 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 	int32 CurrentHealth,
 	int32 MaxHealth,
 	int32 Strength,
+	float GrowthPercent,
 	UMaterialInterface* CivilisationThemeMaterial,
 	FLinearColor CivilisationThemeColor
 )
@@ -369,6 +370,7 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 		CurrentHealth,
 		MaxHealth,
 		Strength,
+		GrowthPercent,
 		CivilisationThemeMaterial,
 		CivilisationThemeColor
 	);
@@ -381,6 +383,7 @@ void AModularHexGridActor::UpdateCityWorldLabel(
 	int32 CurrentHealth,
 	int32 MaxHealth,
 	int32 Strength,
+	float GrowthPercent,
 	UMaterialInterface* CivilisationThemeMaterial,
 	FLinearColor CivilisationThemeColor
 )
@@ -400,6 +403,7 @@ void AModularHexGridActor::UpdateCityWorldLabel(
 			CurrentHealth,
 			MaxHealth,
 			Strength,
+			GrowthPercent,
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);

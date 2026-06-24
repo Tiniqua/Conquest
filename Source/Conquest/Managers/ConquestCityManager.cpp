@@ -117,6 +117,11 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 			NewCity.CurrentHealth,
 			NewCity.MaxHealth,
 			NewCity.CachedStrength,
+			FMath::Clamp(
+				NewCity.FoodStored / static_cast<float>(FMath::Max(1, NewCity.CachedFoodRequiredForNextPopulation)),
+				0.0f,
+				1.0f
+			),
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);
@@ -1456,6 +1461,11 @@ void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
 		City.CurrentHealth,
 		City.MaxHealth,
 		City.CachedStrength,
+		FMath::Clamp(
+			City.FoodStored / static_cast<float>(FMath::Max(1, City.CachedFoodRequiredForNextPopulation)),
+			0.0f,
+			1.0f
+		),
 		CivilisationThemeMaterial,
 		CivilisationThemeColor
 	);

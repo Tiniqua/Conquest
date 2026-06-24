@@ -12,6 +12,7 @@ void UConquestCityWorldLabelWidget::SetCityLabel(
 	int32 CurrentHealth,
 	int32 MaxHealth,
 	int32 Strength,
+	float GrowthPercent,
 	UMaterialInterface* CivilisationThemeMaterial,
 	FLinearColor CivilisationThemeColor
 )
@@ -37,6 +38,12 @@ void UConquestCityWorldLabelWidget::SetCityLabel(
 		const int32 ClampedCurrentHealth = FMath::Clamp(CurrentHealth, 0, ClampedMaxHealth);
 		HealthBar->SetPercent(static_cast<float>(ClampedCurrentHealth) / static_cast<float>(ClampedMaxHealth));
 		HealthBar->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	if (GrowthProgressBar)
+	{
+		GrowthProgressBar->SetPercent(FMath::Clamp(GrowthPercent, 0.0f, 1.0f));
+		GrowthProgressBar->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
 	if (ThemeMaterialImage && CivilisationThemeMaterial)

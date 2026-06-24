@@ -57,6 +57,7 @@ public:
 		int32 CurrentHealth,
 		int32 MaxHealth,
 		int32 Strength,
+		float GrowthPercent,
 		UMaterialInterface* CivilisationThemeMaterial = nullptr,
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);
@@ -67,6 +68,7 @@ public:
 		int32 CurrentHealth,
 		int32 MaxHealth,
 		int32 Strength,
+		float GrowthPercent,
 		UMaterialInterface* CivilisationThemeMaterial = nullptr,
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);

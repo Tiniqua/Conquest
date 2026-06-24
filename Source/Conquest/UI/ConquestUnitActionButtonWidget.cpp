@@ -12,6 +12,13 @@ void UConquestUnitActionButtonWidget::NativeConstruct()
 		Button->OnClicked.RemoveDynamic(this, &UConquestUnitActionButtonWidget::HandleClicked);
 		Button->OnClicked.AddDynamic(this, &UConquestUnitActionButtonWidget::HandleClicked);
 	}
+
+	if (TitleText)
+	{
+		TitleText->SetAutoWrapText(true);
+		TitleText->SetJustification(ETextJustify::Center);
+		TitleText->SetMinDesiredWidth(0.0f);
+	}
 }
 
 void UConquestUnitActionButtonWidget::SetupUnitActionButton(FName InActionId, const FText& InTitle)
@@ -21,6 +28,9 @@ void UConquestUnitActionButtonWidget::SetupUnitActionButton(FName InActionId, co
 	if (TitleText)
 	{
 		TitleText->SetText(InTitle);
+		TitleText->SetAutoWrapText(true);
+		TitleText->SetJustification(ETextJustify::Center);
+		TitleText->SetMinDesiredWidth(0.0f);
 	}
 }
 

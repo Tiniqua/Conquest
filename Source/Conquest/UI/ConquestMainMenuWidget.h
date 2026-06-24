@@ -32,7 +32,7 @@ protected:
 	TObjectPtr<UTextBlock> LoadingStatusText = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "1"))
-	int32 MaxSessionSearchResults = 1000;
+	int32 MaxSessionSearchResults = 10000;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "1"))
 	int32 PublicConnections = 8;

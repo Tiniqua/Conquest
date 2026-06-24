@@ -5,7 +5,6 @@
 #include "Conquest/Core/ConquestMultiplayerSessionSubsystem.h"
 #include "ConquestHUDWidget.h"
 #include "Engine/GameInstance.h"
-#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 
 void UConquestMainMenuWidget::InitializeMainMenuWidget(UConquestHUDWidget* InParentHUDWidget)
@@ -150,10 +149,7 @@ void UConquestMainMenuWidget::HandleJoinSessionComplete(bool bWasSuccessful, FSt
 
 	SetLoadingStatus(NSLOCTEXT("Conquest", "MainMenuJoiningGame", "Joining game"));
 
-	if (APlayerController* PlayerController = GetOwningPlayer())
-	{
-		PlayerController->ClientTravel(TravelURL + TEXT("?ConquestJoinSetup=1"), TRAVEL_Absolute);
-	}
+	SetLoadingStatus(NSLOCTEXT("Conquest", "MainMenuJoinTravel", "Joining game"));
 }
 
 void UConquestMainMenuWidget::SetLoadingStatus(const FText& NewLoadingStatus)

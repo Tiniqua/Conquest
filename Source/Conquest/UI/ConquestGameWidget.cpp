@@ -1044,13 +1044,29 @@ void UConquestGameWidget::ShowCombatPreview(const FConquestCombatPreviewData& Pr
 	}
 
 	SetWidgetVisibility(CombatPreviewPanel, ESlateVisibility::Visible);
+	const FText AttackerDisplayName = PreviewData.AttackerName.IsEmpty()
+		? FText::FromString(TEXT("Attacker"))
+		: PreviewData.AttackerName;
+	const FText DefenderDisplayName = PreviewData.DefenderName.IsEmpty()
+		? FText::FromString(TEXT("Defender"))
+		: PreviewData.DefenderName;
+	const bool bHasAttackValues = PreviewData.AttackerAttackValue > 0 && PreviewData.DefenderAttackValue > 0;
+
 	SetText(
 		CombatPreviewTitleText,
-		FText::Format(
-			NSLOCTEXT("Conquest", "CombatPreviewTitleFormat", "{0} vs {1}"),
-			PreviewData.AttackerName.IsEmpty() ? FText::FromString(TEXT("Attacker")) : PreviewData.AttackerName,
-			PreviewData.DefenderName.IsEmpty() ? FText::FromString(TEXT("Defender")) : PreviewData.DefenderName
-		)
+		bHasAttackValues
+			? FText::Format(
+				NSLOCTEXT("Conquest", "CombatPreviewTitleWithAttackFormat", "{0} ATK {1} vs {2} ATK {3}"),
+				AttackerDisplayName,
+				FText::AsNumber(PreviewData.AttackerAttackValue),
+				DefenderDisplayName,
+				FText::AsNumber(PreviewData.DefenderAttackValue)
+			)
+			: FText::Format(
+				NSLOCTEXT("Conquest", "CombatPreviewTitleFormat", "{0} vs {1}"),
+				AttackerDisplayName,
+				DefenderDisplayName
+			)
 	);
 	SetText(CombatPreviewRatingText, PreviewData.RatingText);
 	SetText(
@@ -1065,11 +1081,11 @@ void UConquestGameWidget::ShowCombatPreview(const FConquestCombatPreviewData& Pr
 		CombatPreviewHealthText,
 		FText::Format(
 			NSLOCTEXT("Conquest", "CombatPreviewHealthFormat", "{0} HP: {1}/{2} -> {3}/{2} | {4} HP: {5}/{6} -> {7}/{6}"),
-			PreviewData.AttackerName.IsEmpty() ? FText::FromString(TEXT("Attacker")) : PreviewData.AttackerName,
+			AttackerDisplayName,
 			FText::AsNumber(PreviewData.AttackerCurrentHealth),
 			FText::AsNumber(PreviewData.AttackerMaxHealth),
 			FText::AsNumber(PreviewData.AttackerProjectedHealth),
-			PreviewData.DefenderName.IsEmpty() ? FText::FromString(TEXT("Defender")) : PreviewData.DefenderName,
+			DefenderDisplayName,
 			FText::AsNumber(PreviewData.DefenderCurrentHealth),
 			FText::AsNumber(PreviewData.DefenderMaxHealth),
 			FText::AsNumber(PreviewData.DefenderProjectedHealth)

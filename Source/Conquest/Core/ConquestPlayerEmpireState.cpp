@@ -86,6 +86,11 @@ namespace ConquestUnitCombat
 
 		const float AttackerCombatValue = GetCombatValue(Attacker, EConquestUnitCombatModifierType::Attack);
 		const float DefenderDefenseValue = GetCombatValue(Defender, EConquestUnitCombatModifierType::Defense);
+		Preview.AttackerAttackValue = FMath::Max(1, FMath::CeilToInt(AttackerCombatValue));
+		Preview.DefenderAttackValue = FMath::Max(
+			1,
+			FMath::CeilToInt(GetCombatValue(Defender, EConquestUnitCombatModifierType::Attack))
+		);
 		Preview.DamageDealt = CalculateDeterministicDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
 		Preview.DefenderProjectedHealth = FMath::Clamp(
 			Defender.CurrentHealth - Preview.DamageDealt,
@@ -97,8 +102,11 @@ namespace ConquestUnitCombat
 		Preview.bHasCounterAttack = !Preview.bDefenderKilled && AttackDistance <= 1;
 		if (Preview.bHasCounterAttack)
 		{
-			const float DefenderCounterValue = GetCombatValue(Defender, EConquestUnitCombatModifierType::Attack);
-			Preview.DamageTaken = CalculateDeterministicDamage(DefenderCounterValue, AttackerCombatValue, 25.0f);
+			Preview.DamageTaken = CalculateDeterministicDamage(
+				static_cast<float>(Preview.DefenderAttackValue),
+				AttackerCombatValue,
+				25.0f
+			);
 		}
 
 		Preview.AttackerProjectedHealth = FMath::Clamp(

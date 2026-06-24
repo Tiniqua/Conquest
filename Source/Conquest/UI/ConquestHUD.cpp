@@ -1493,6 +1493,8 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 			PreviewData.DefenderUnitInstanceId = INDEX_NONE;
 			PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
 			PreviewData.DefenderName = NSLOCTEXT("Conquest", "CombatPreviewTileDefenderName", "Border Tile");
+			PreviewData.AttackerAttackValue = FMath::Max(1, FMath::CeilToInt(AttackerCombatValue));
+			PreviewData.DefenderAttackValue = FMath::Max(1, FMath::CeilToInt(TileDefenseValue));
 			PreviewData.AttackerCurrentHealth = SelectedUnit->CurrentHealth;
 			PreviewData.AttackerMaxHealth = SelectedUnit->CachedMaxHealth;
 			PreviewData.DefenderCurrentHealth = TileCombatState.CurrentHealth;
@@ -1565,6 +1567,8 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		PreviewData.DefenderUnitInstanceId = INDEX_NONE;
 		PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
 		PreviewData.DefenderName = FText::FromName(DefenderCity->CityName);
+		PreviewData.AttackerAttackValue = FMath::Max(1, FMath::CeilToInt(AttackerCombatValue));
+		PreviewData.DefenderAttackValue = FMath::Max(1, FMath::CeilToInt(CityDefenseValue));
 		PreviewData.AttackerCurrentHealth = SelectedUnit->CurrentHealth;
 		PreviewData.AttackerMaxHealth = SelectedUnit->CachedMaxHealth;
 		PreviewData.DefenderCurrentHealth = DefenderCity->CurrentHealth;

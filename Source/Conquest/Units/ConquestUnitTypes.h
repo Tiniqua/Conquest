@@ -188,6 +188,12 @@ struct FConquestCombatPreviewData
 	FText DefenderName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 AttackerAttackValue = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	int32 DefenderAttackValue = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
 	int32 DamageDealt = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")

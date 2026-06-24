@@ -88,6 +88,28 @@ namespace
 		return GridModel.IsWaterTileType(TileData.TileType) || TileData.TileType == EHexTileType::Mountain;
 	}
 
+	bool ConquestHUDIsOwnedByOtherPlayer(const FHexTileData& TileData, int32 PlayerId)
+	{
+		return
+			TileData.Gameplay.OwnerPlayerId != INDEX_NONE &&
+			TileData.Gameplay.OwnerPlayerId != PlayerId;
+	}
+
+	bool ConquestHUDIsEnemyCityTile(const AConquestGameState& GameState, int32 PlayerId, const FIntPoint& Coord)
+	{
+		if (!GameState.CityManager)
+		{
+			return false;
+		}
+
+		const int32 CityId = GameState.CityManager->FindCityAtTile(Coord);
+		const FCityState* City = CityId != INDEX_NONE
+			? GameState.CityManager->GetCity(CityId)
+			: nullptr;
+
+		return City && City->OwnerPlayerId != PlayerId;
+	}
+
 	FConquestUnitState* ConquestHUDFindUnitMutable(
 		FConquestPlayerEmpireState& Player,
 		int32 UnitInstanceId
@@ -822,13 +844,16 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 	BestRemainingByCoord.Add(SelectedUnit->TileCoord, SelectedUnit->CurrentMovementPoints);
 	Frontier.Add(SelectedUnit->TileCoord);
 
-	auto IsOccupiedByAnotherUnit = [&Player, SelectedUnit](const FIntPoint& Coord)
+	auto IsOccupiedByAnotherUnit = [ConquestGS, SelectedUnit](const FIntPoint& Coord)
 	{
-		for (const FConquestUnitState& Unit : Player.Units)
+		for (const FConquestPlayerEmpireState& CandidatePlayer : ConquestGS->PlayerEmpires)
 		{
-			if (Unit.UnitInstanceId != SelectedUnit->UnitInstanceId && Unit.TileCoord == Coord)
+			for (const FConquestUnitState& Unit : CandidatePlayer.Units)
 			{
-				return true;
+				if (Unit.UnitInstanceId != SelectedUnit->UnitInstanceId && Unit.TileCoord == Coord)
+				{
+					return true;
+				}
 			}
 		}
 
@@ -878,6 +903,16 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 			}
 
 			const FIntPoint NeighborCoord(NeighborQ, NeighborR);
+			const FHexTileData* NeighborTile = GridModel->GetTile(NeighborCoord);
+			if (
+				!NeighborTile ||
+				ConquestHUDIsOwnedByOtherPlayer(*NeighborTile, Player.PlayerId) ||
+				ConquestHUDIsEnemyCityTile(*ConquestGS, Player.PlayerId, NeighborCoord)
+			)
+			{
+				continue;
+			}
+
 			if (IsOccupiedByAnotherUnit(NeighborCoord))
 			{
 				continue;

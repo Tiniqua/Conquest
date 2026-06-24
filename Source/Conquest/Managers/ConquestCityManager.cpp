@@ -180,6 +180,14 @@ bool UConquestCityManager::IsValidFoundCityTile(const FIntPoint& TileCoord) cons
 		return false;
 	}
 
+	for (const FCityState& City : Cities)
+	{
+		if (City.CenterTile == TileCoord)
+		{
+			return false;
+		}
+	}
+
 	// Reject water and mountains for now.
 	if (
 		GridModel->IsWaterTileType(Tile->TileType) ||

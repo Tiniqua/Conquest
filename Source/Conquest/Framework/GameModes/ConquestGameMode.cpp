@@ -112,6 +112,28 @@ namespace
 		return GridModel.IsWaterTileType(TileData.TileType) || TileData.TileType == EHexTileType::Mountain;
 	}
 
+	bool IsOwnedByOtherPlayer(const FHexTileData& TileData, int32 PlayerId)
+	{
+		return
+			TileData.Gameplay.OwnerPlayerId != INDEX_NONE &&
+			TileData.Gameplay.OwnerPlayerId != PlayerId;
+	}
+
+	bool IsEnemyCityTile(const AConquestGameState& GameState, int32 PlayerId, const FIntPoint& Coord)
+	{
+		if (!GameState.CityManager)
+		{
+			return false;
+		}
+
+		const int32 CityId = GameState.CityManager->FindCityAtTile(Coord);
+		const FCityState* City = CityId != INDEX_NONE
+			? GameState.CityManager->GetCity(CityId)
+			: nullptr;
+
+		return City && City->OwnerPlayerId != PlayerId;
+	}
+
 	int32 GetMoveCost(const FHexGridModel& GridModel, const FIntPoint& FromCoord, const FIntPoint& ToCoord)
 	{
 		const FHexTileData* FromTile = GridModel.GetTile(FromCoord);
@@ -483,6 +505,16 @@ bool AConquestGameMode::MoveUnitForPlayer(int32 PlayerId, int32 UnitInstanceId, 
 			}
 
 			const FIntPoint NeighborCoord(NeighborQ, NeighborR);
+			const FHexTileData* NeighborTile = GridModel->GetTile(NeighborCoord);
+			if (
+				!NeighborTile ||
+				IsOwnedByOtherPlayer(*NeighborTile, PlayerId) ||
+				IsEnemyCityTile(*ConquestGS, PlayerId, NeighborCoord)
+			)
+			{
+				continue;
+			}
+
 			const int32 MoveCost = GetMoveCost(*GridModel, CurrentCoord, NeighborCoord);
 			if (MoveCost == TNumericLimits<int32>::Max())
 			{

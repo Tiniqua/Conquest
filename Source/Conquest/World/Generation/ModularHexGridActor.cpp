@@ -17,7 +17,7 @@
 AModularHexGridActor::AModularHexGridActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	SetReplicates(true);
+	bReplicates = true;
 	bAlwaysRelevant = true;
 
 	static ConstructorHelpers::FClassFinder<UConquestUnitWorldIconWidget> UnitWorldIconWidgetFinder(
@@ -28,13 +28,7 @@ AModularHexGridActor::AModularHexGridActor()
 		UnitWorldIconWidgetClass = UnitWorldIconWidgetFinder.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<UConquestTileHealthBarWidget> TileHealthBarWidgetFinder(
-		TEXT("/Game/UI/WBP_TileHealthBar")
-	);
-	if (TileHealthBarWidgetFinder.Succeeded())
-	{
-		TileHealthBarWidgetClass = TileHealthBarWidgetFinder.Class;
-	}
+	TileHealthBarWidgetClass = UConquestTileHealthBarWidget::StaticClass();
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);

@@ -491,6 +491,27 @@ bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEnd
 				return true;
 			}
 		}
+
+		for (const FCityState& City : CityManager->Cities)
+		{
+			if (City.OwnerPlayerId != PlayerId || City.PendingBorderExpansions <= 0)
+			{
+				continue;
+			}
+
+			if (CityManager->GetExpansionCandidateTiles(City.CityId).Num() <= 0)
+			{
+				continue;
+			}
+
+			OutBlocker.Type = EConquestEndTurnBlockType::CityGrowth;
+			OutBlocker.CityId = City.CityId;
+			OutBlocker.Message = FText::Format(
+				NSLOCTEXT("Conquest", "EndTurnBlockedCityGrowth", "{0} has grown"),
+				FText::FromName(City.CityName)
+			);
+			return true;
+		}
 	}
 
 	for (const FConquestUnitState& Unit : Player.Units)

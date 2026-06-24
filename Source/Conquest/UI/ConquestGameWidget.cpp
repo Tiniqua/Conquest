@@ -858,7 +858,7 @@ void UConquestGameWidget::ShowTileImprovementChoices(
 {
 	PendingTileImprovementChoice = ChoiceData;
 
-	if (!ChoiceData.bIsValid || ImprovementChoices.Num() <= 0)
+	if (!ChoiceData.bIsValid)
 	{
 		ClearTileImprovementChoices();
 		return;

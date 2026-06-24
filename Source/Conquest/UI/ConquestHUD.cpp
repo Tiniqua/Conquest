@@ -611,16 +611,7 @@ bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
 	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
 	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Coord) : nullptr;
 	const int32 PlayerId = ConquestGS->GetHumanPlayer().PlayerId;
-	if (!GridModel || !Tile || Tile->Gameplay.OwnerPlayerId != PlayerId || !Tile->ImprovementId.IsNone())
-	{
-		ClearTileImprovementChoices();
-		return false;
-	}
-
-	TArray<FName> AvailableImprovementIds =
-		ConquestGS->CityManager->GetAvailableTileImprovementIdsForPlayer(PlayerId, Coord);
-
-	if (AvailableImprovementIds.Num() <= 0)
+	if (!GridModel || !Tile || Tile->Gameplay.OwnerPlayerId != PlayerId)
 	{
 		ClearTileImprovementChoices();
 		return false;
@@ -630,46 +621,88 @@ bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
 	GridModel->GetPossibleImprovementsForTile(Q, R, PossibleImprovements);
 
 	TArray<FConquestChoiceButtonData> ImprovementChoices;
-	for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+	if (!Tile->ImprovementId.IsNone())
 	{
-		if (!Improvement || !AvailableImprovementIds.Contains(Improvement->ImprovementId))
-		{
-			continue;
-		}
-
-		const int32 GoldCost = FMath::Max(0, Improvement->PurchaseGoldCost);
-		const bool bCanAfford = ConquestGS->GetHumanPlayer().StoredYields.Gold >= GoldCost;
-
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
-		ChoiceData.ChoiceId = Improvement->ImprovementId;
-		ChoiceData.Title = !Improvement->DisplayName.IsEmpty()
-			? Improvement->DisplayName
-			: FText::FromName(Improvement->ImprovementId);
-		ChoiceData.Cost = GoldCost;
-		ChoiceData.bEnabled = bCanAfford;
-		ChoiceData.Subtitle = FText::Format(
-			NSLOCTEXT("Conquest", "TileImprovementChoiceSubtitle", "{0} Gold | Gain: {1}"),
-			FText::AsNumber(GoldCost),
-			FText::FromString(Improvement->YieldModifier.ToCompactString())
-		);
-
-		if (!bCanAfford)
-		{
-			ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "TileImprovementNotEnoughGold", "Not enough gold");
-			ChoiceData.DetailText = ChoiceData.DisabledReason;
-		}
-
+		ChoiceData.Title = NSLOCTEXT("Conquest", "TileImprovementAlreadyUpgraded", "Tile already upgraded");
+		ChoiceData.Subtitle = FText::FromName(Tile->ImprovementId);
+		ChoiceData.bEnabled = false;
+		ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "TileImprovementAlreadyHasImprovement", "This tile already has an improvement");
+		ChoiceData.DetailText = ChoiceData.DisabledReason;
 		ImprovementChoices.Add(ChoiceData);
+	}
+	else if (PossibleImprovements.Num() <= 0)
+	{
+		FConquestChoiceButtonData ChoiceData;
+		ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
+		ChoiceData.Title = NSLOCTEXT("Conquest", "TileImprovementNoneAvailable", "No upgrades available");
+		ChoiceData.Subtitle = NSLOCTEXT("Conquest", "TileImprovementNoneAvailableSubtitle", "This tile cannot currently be upgraded");
+		ChoiceData.bEnabled = false;
+		ChoiceData.DisabledReason = ChoiceData.Subtitle;
+		ChoiceData.DetailText = ChoiceData.DisabledReason;
+		ImprovementChoices.Add(ChoiceData);
+	}
+	else
+	{
+		const TArray<FName> AvailableImprovementIds =
+			ConquestGS->CityManager->GetAvailableTileImprovementIdsForPlayer(PlayerId, Coord);
+		const int32 StoredGold = ConquestGS->GetHumanPlayer().StoredYields.Gold;
+
+		for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+		{
+			if (!Improvement)
+			{
+				continue;
+			}
+
+			const int32 GoldCost = FMath::Max(0, Improvement->PurchaseGoldCost);
+			const bool bUnlocked = AvailableImprovementIds.Contains(Improvement->ImprovementId);
+			if (!bUnlocked)
+			{
+				continue;
+			}
+
+			const bool bCanAfford = StoredGold >= GoldCost;
+
+			FConquestChoiceButtonData ChoiceData;
+			ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
+			ChoiceData.ChoiceId = Improvement->ImprovementId;
+			ChoiceData.Title = !Improvement->DisplayName.IsEmpty()
+				? Improvement->DisplayName
+				: FText::FromName(Improvement->ImprovementId);
+			ChoiceData.Cost = GoldCost;
+			ChoiceData.bEnabled = bUnlocked && bCanAfford;
+			ChoiceData.Subtitle = FText::Format(
+				NSLOCTEXT("Conquest", "TileImprovementChoiceSubtitle", "{0} Gold | Gain: {1}"),
+				FText::AsNumber(GoldCost),
+				FText::FromString(Improvement->YieldModifier.ToCompactString())
+			);
+
+			if (!bCanAfford)
+			{
+				ChoiceData.DisabledReason = NSLOCTEXT("Conquest", "TileImprovementNotEnoughGold", "Not enough gold");
+				ChoiceData.DetailText = ChoiceData.DisabledReason;
+			}
+
+			ImprovementChoices.Add(ChoiceData);
+		}
 	}
 
 	if (ImprovementChoices.Num() <= 0)
 	{
-		ClearTileImprovementChoices();
-		return false;
+		FConquestChoiceButtonData ChoiceData;
+		ChoiceData.ChoiceType = EConquestChoiceType::TileImprovement;
+		ChoiceData.Title = NSLOCTEXT("Conquest", "TileImprovementNoneUnlocked", "No upgrades available");
+		ChoiceData.Subtitle = NSLOCTEXT("Conquest", "TileImprovementNoneUnlockedSubtitle", "No upgrades are unlocked for this tile");
+		ChoiceData.bEnabled = false;
+		ChoiceData.DisabledReason = ChoiceData.Subtitle;
+		ChoiceData.DetailText = ChoiceData.DisabledReason;
+		ImprovementChoices.Add(ChoiceData);
 	}
 
 	PendingImprovementTileCoord = Coord;
+	PendingExpansionTileCoord = FIntPoint(INT32_MIN, INT32_MIN);
 
 	FConquestTileImprovementChoiceData ChoiceData;
 	ChoiceData.Coord = Coord;
@@ -677,6 +710,7 @@ bool AConquestHUD::ShowTileImprovementChoicesForTile(int32 Q, int32 R)
 
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 	{
+		ActiveGameWidget->ClearTileExpansionConfirmation();
 		ActiveGameWidget->ShowTileImprovementChoices(ChoiceData, ImprovementChoices);
 	}
 

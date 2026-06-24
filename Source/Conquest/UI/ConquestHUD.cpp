@@ -171,6 +171,30 @@ namespace
 
 		return FText::FromName(UnitState.UnitId);
 	}
+
+	void ConquestHUDAppendHappinessCombatModifierText(
+		TArray<FText>& OutModifierTexts,
+		const FText& CombatantLabel,
+		const FConquestPlayerEmpireState& Player
+	)
+	{
+		if (!ConquestHappiness::IsUnhappy(Player.CachedHappiness))
+		{
+			return;
+		}
+
+		const FText PenaltyText = ConquestHappiness::GetPenaltyText(Player.CachedHappiness);
+		if (PenaltyText.IsEmpty())
+		{
+			return;
+		}
+
+		OutModifierTexts.Add(FText::Format(
+			NSLOCTEXT("Conquest", "CombatPreviewModifierFormat", "{0}: {1}"),
+			CombatantLabel,
+			PenaltyText
+		));
+	}
 }
 
 AConquestHUD::AConquestHUD()
@@ -1370,6 +1394,11 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		PreviewData.RatingText = PreviewData.bAttackerKilled
 			? NSLOCTEXT("Conquest", "CombatPreviewCostlyCityAttack", "Costly Attack")
 			: NSLOCTEXT("Conquest", "CombatPreviewSafeCityAttack", "Safe Attack");
+		ConquestHUDAppendHappinessCombatModifierText(
+			PreviewData.ModifierTexts,
+			NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
+			Player
+		);
 
 		if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
 		{
@@ -1388,6 +1417,23 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		ConquestUnitCombat::CalculatePreview(*SelectedUnit, *DefenderUnit, AttackDistance);
 	PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
 	PreviewData.DefenderName = ConquestHUDGetUnitDisplayName(*ConquestGS, *DefenderUnit);
+	ConquestHUDAppendHappinessCombatModifierText(
+		PreviewData.ModifierTexts,
+		NSLOCTEXT("Conquest", "CombatPreviewAttackerLabel", "Attacker"),
+		Player
+	);
+	if (DefenderUnit->OwnerPlayerId != INDEX_NONE)
+	{
+		const FConquestPlayerEmpireState& DefenderPlayer = ConquestGS->GetPlayerEmpire(DefenderUnit->OwnerPlayerId);
+		if (DefenderPlayer.PlayerId == DefenderUnit->OwnerPlayerId)
+		{
+			ConquestHUDAppendHappinessCombatModifierText(
+				PreviewData.ModifierTexts,
+				NSLOCTEXT("Conquest", "CombatPreviewDefenderLabel", "Defender"),
+				DefenderPlayer
+			);
+		}
+	}
 
 	if (!PreviewData.bIsValid)
 	{

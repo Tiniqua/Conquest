@@ -5,8 +5,7 @@ namespace
 	constexpr int32 ConquestHappinessCityCost = 4;
 	constexpr int32 ConquestHappinessPopulationCost = 1;
 	constexpr int32 ConquestSevereUnhappyThreshold = -10;
-	constexpr float ConquestUnhappyPenaltyMultiplier = 0.8f;
-	constexpr float ConquestSevereUnhappyPenaltyMultiplier = 0.6f;
+	constexpr float ConquestUnhappyPenaltyPerPoint = 0.05f;
 }
 
 namespace ConquestUnitCombat
@@ -172,28 +171,21 @@ namespace ConquestHappiness
 
 	float GetPenaltyMultiplier(int32 Happiness)
 	{
-		if (IsSeverelyUnhappy(Happiness))
-		{
-			return ConquestSevereUnhappyPenaltyMultiplier;
-		}
-
-		return IsUnhappy(Happiness)
-			? ConquestUnhappyPenaltyMultiplier
-			: 1.0f;
+		const int32 Unhappiness = FMath::Max(0, -Happiness);
+		return FMath::Clamp(1.0f - (static_cast<float>(Unhappiness) * ConquestUnhappyPenaltyPerPoint), 0.25f, 1.0f);
 	}
 
 	FText GetPenaltyText(int32 Happiness)
 	{
-		if (IsSeverelyUnhappy(Happiness))
+		if (!IsUnhappy(Happiness))
 		{
-			return NSLOCTEXT("Conquest", "SevereUnhappyPenaltyText", "-40% Unhappy");
+			return FText::GetEmpty();
 		}
 
-		if (IsUnhappy(Happiness))
-		{
-			return NSLOCTEXT("Conquest", "UnhappyPenaltyText", "-20% Unhappy");
-		}
-
-		return FText::GetEmpty();
+		const int32 PenaltyPercent = FMath::RoundToInt((1.0f - GetPenaltyMultiplier(Happiness)) * 100.0f);
+		return FText::Format(
+			NSLOCTEXT("Conquest", "UnhappyPenaltyText", "-{0}% Unhappy"),
+			FText::AsNumber(PenaltyPercent)
+		);
 	}
 }

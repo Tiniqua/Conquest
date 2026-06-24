@@ -1035,6 +1035,31 @@ void UConquestGameWidget::ShowCombatPreview(const FConquestCombatPreviewData& Pr
 			? NSLOCTEXT("Conquest", "CombatPreviewCounterAttack", "Melee counterattack expected")
 			: NSLOCTEXT("Conquest", "CombatPreviewNoCounterAttack", "No counterattack expected")
 	);
+
+	if (CombatPreviewModifiersText)
+	{
+		TArray<FString> ModifierLines;
+
+		for (const FText& ModifierText : PreviewData.ModifierTexts)
+		{
+			if (ModifierText.IsEmpty())
+			{
+				continue;
+			}
+
+			ModifierLines.Add(ModifierText.ToString());
+		}
+
+		SetText(CombatPreviewModifiersText, FString::Join(ModifierLines, TEXT("\n")));
+		const ESlateVisibility ModifierVisibility = ModifierLines.Num() > 0
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed;
+		SetWidgetVisibility(CombatPreviewModifiersPanel, ModifierVisibility);
+		SetWidgetVisibility(
+			CombatPreviewModifiersText,
+			ModifierVisibility
+		);
+	}
 }
 
 void UConquestGameWidget::ClearCombatPreview()
@@ -1046,6 +1071,12 @@ void UConquestGameWidget::ClearCombatPreview()
 	ClearText(CombatPreviewDamageText);
 	ClearText(CombatPreviewHealthText);
 	ClearText(CombatPreviewDetailText);
+	if (CombatPreviewModifiersText)
+	{
+		ClearText(CombatPreviewModifiersText);
+		SetWidgetVisibility(CombatPreviewModifiersText, ESlateVisibility::Collapsed);
+	}
+	SetWidgetVisibility(CombatPreviewModifiersPanel, ESlateVisibility::Collapsed);
 }
 
 void UConquestGameWidget::HandleTileExpansionConfirmClicked()

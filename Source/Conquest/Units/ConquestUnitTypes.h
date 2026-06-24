@@ -236,5 +236,8 @@ struct FConquestCombatPreviewData
 	FText InvalidReason;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
+	TArray<FText> ModifierTexts;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Conquest|Combat Preview")
 	bool bIsValid = false;
 };

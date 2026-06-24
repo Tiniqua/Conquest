@@ -510,9 +510,9 @@ bool UConquestGameWidget::IsWaitingForOtherPlayers() const
 	}
 
 	int32 HumanPlayerCount = 0;
-	for (const FConquestLobbyPlayerSlot& Slot : ConquestGS->LobbyPlayerSlots)
+	for (const FConquestLobbyPlayerSlot& LobbySlot : ConquestGS->LobbyPlayerSlots)
 	{
-		if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+		if (LobbySlot.PlayerId != INDEX_NONE && LobbySlot.SlotType == EConquestLobbySlotType::Human)
 		{
 			++HumanPlayerCount;
 		}
@@ -520,9 +520,9 @@ bool UConquestGameWidget::IsWaitingForOtherPlayers() const
 
 	if (HumanPlayerCount <= 0)
 	{
-		for (const FConquestLobbyPlayerSlot& Slot : ConquestGS->ReplicatedConquestState.LobbyPlayerSlots)
+		for (const FConquestLobbyPlayerSlot& LobbySlot : ConquestGS->ReplicatedConquestState.LobbyPlayerSlots)
 		{
-			if (Slot.PlayerId != INDEX_NONE && Slot.SlotType == EConquestLobbySlotType::Human)
+			if (LobbySlot.PlayerId != INDEX_NONE && LobbySlot.SlotType == EConquestLobbySlotType::Human)
 			{
 				++HumanPlayerCount;
 			}

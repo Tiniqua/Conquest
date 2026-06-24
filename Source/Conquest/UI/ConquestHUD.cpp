@@ -1763,15 +1763,10 @@ bool AConquestHUD::FortifySelectedUnit()
 		ConquestPC->RequestUnitAction(SelectedUnit->UnitInstanceId, FName(TEXT("Fortify")));
 	}
 	ClearUnitMovementHighlights();
-	SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
-	if (SelectedUnit->CurrentMovementPoints <= 0)
-	{
-		ClearUnitSelection();
-	}
-	else
-	{
-		RefreshSelectedUnitWidget(*SelectedUnit);
-	}
+	SelectedUnit->bIsFortified = true;
+	SelectedUnit->bIsSleeping = true;
+	SelectedUnit->CurrentMovementPoints = 0;
+	ClearUnitSelection();
 	return true;
 }
 

@@ -673,8 +673,8 @@ bool AConquestGameMode::ApplyUnitActionForPlayer(int32 PlayerId, int32 UnitInsta
 	if (ActionId == FName(TEXT("Fortify")) && Unit->CurrentMovementPoints > 0)
 	{
 		Unit->bIsFortified = true;
-		Unit->bIsSleeping = false;
-		Unit->CurrentMovementPoints = FMath::Max(0, Unit->CurrentMovementPoints - 1);
+		Unit->bIsSleeping = true;
+		Unit->CurrentMovementPoints = 0;
 		bApplied = true;
 	}
 	else if (ActionId == FName(TEXT("DoNothing")) && Unit->CurrentMovementPoints > 0)

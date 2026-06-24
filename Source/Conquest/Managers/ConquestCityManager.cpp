@@ -1305,6 +1305,12 @@ void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
 				1,
 				FMath::Max(1, Unit.CachedMaxHealth)
 			);
+
+			if (Unit.CurrentHealth >= FMath::Max(1, Unit.CachedMaxHealth))
+			{
+				Unit.bIsFortified = false;
+				Unit.bIsSleeping = false;
+			}
 		}
 
 		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr =

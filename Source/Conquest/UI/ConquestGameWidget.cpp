@@ -568,7 +568,7 @@ void UConquestGameWidget::ShowSelectedUnitInfo(const FConquestSelectedUnitWidget
 				{ FName(TEXT("Move")), NSLOCTEXT("Conquest", "UnitActionMove", "Move") },
 				{ FName(TEXT("Attack")), NSLOCTEXT("Conquest", "UnitActionAttack", "Attack") },
 				{ FName(TEXT("Augment")), NSLOCTEXT("Conquest", "UnitActionAugment", "Augment") },
-				{ FName(TEXT("Fortify")), NSLOCTEXT("Conquest", "UnitActionFortify", "Fortify") },
+				{ FName(TEXT("Fortify")), NSLOCTEXT("Conquest", "UnitActionFortifyUntilHealed", "Fortify Until Healed\n+10 HP per turn") },
 				{ FName(TEXT("DoNothing")), NSLOCTEXT("Conquest", "UnitActionDoNothing", "Do Nothing") },
 				{ FName(TEXT("Sleep")), NSLOCTEXT("Conquest", "UnitActionSleep", "Sleep") },
 				{ FName(TEXT("Disband")), NSLOCTEXT("Conquest", "UnitActionDisband", "Disband") }

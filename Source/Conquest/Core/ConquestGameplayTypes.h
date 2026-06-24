@@ -168,6 +168,15 @@ struct FCityState
 	int32 Population = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CurrentHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxHealth = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 CachedStrength = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float FoodStored = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

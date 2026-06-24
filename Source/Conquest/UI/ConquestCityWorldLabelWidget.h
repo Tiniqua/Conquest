@@ -7,6 +7,7 @@
 class UTextBlock;
 class UImage;
 class UMaterialInterface;
+class UProgressBar;
 
 UCLASS()
 class CONQUEST_API UConquestCityWorldLabelWidget : public UUserWidget
@@ -18,6 +19,9 @@ public:
 	void SetCityLabel(
 		const FName& CityName,
 		int32 Population,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		int32 Strength,
 		UMaterialInterface* CivilisationThemeMaterial,
 		FLinearColor CivilisationThemeColor
 	);
@@ -31,6 +35,12 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> PopulationText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> StrengthText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> HealthBar = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> ThemeMaterialImage = nullptr;

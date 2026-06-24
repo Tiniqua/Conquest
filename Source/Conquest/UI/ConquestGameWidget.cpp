@@ -217,6 +217,12 @@ void UConquestGameWidget::NativeConstruct()
 		UnitAugmentCloseButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleUnitAugmentCloseClicked);
 	}
 
+	if (EndGameReturnToMenuButton)
+	{
+		EndGameReturnToMenuButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleEndGameReturnToMenuClicked);
+		EndGameReturnToMenuButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleEndGameReturnToMenuClicked);
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameWidget::HandleConquestStateChanged);
@@ -240,10 +246,12 @@ void UConquestGameWidget::NativeConstruct()
 	ClearTileImprovementChoices();
 	ClearUnitAugmentChoices();
 	ClearCombatPreview();
+	ClearEndGameResult();
 	ClearSelectedUnitInfo();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
+	RefreshEndGameResultFromGameState();
 }
 
 void UConquestGameWidget::NativeDestruct()
@@ -310,6 +318,7 @@ void UConquestGameWidget::HandleConquestStateChanged()
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
 	RefreshSelectedUnitInfoFromGameState();
+	RefreshEndGameResultFromGameState();
 }
 
 void UConquestGameWidget::HandleResearchChanged()
@@ -768,6 +777,37 @@ void UConquestGameWidget::ClearTileExpansionConfirmation()
 	ClearText(TileExpansionYieldText);
 }
 
+void UConquestGameWidget::ShowEndGameResult(bool bLocalPlayerWon)
+{
+	SetWidgetVisibility(EndGamePanel, ESlateVisibility::Visible);
+	SetText(
+		EndGameTitleText,
+		bLocalPlayerWon
+			? NSLOCTEXT("Conquest", "EndGameYouWin", "You Win")
+			: NSLOCTEXT("Conquest", "EndGameYouLose", "You Lose")
+	);
+}
+
+void UConquestGameWidget::ClearEndGameResult()
+{
+	SetWidgetVisibility(EndGamePanel, ESlateVisibility::Collapsed);
+	ClearText(EndGameTitleText);
+}
+
+void UConquestGameWidget::RefreshEndGameResultFromGameState()
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->bGameEnded)
+	{
+		ClearEndGameResult();
+		return;
+	}
+
+	ShowEndGameResult(ConquestGS->WinningPlayerId == ConquestGS->GetLocalPlayerId());
+}
+
 void UConquestGameWidget::ShowTileImprovementChoices(
 	const FConquestTileImprovementChoiceData& ChoiceData,
 	const TArray<FConquestChoiceButtonData>& ImprovementChoices
@@ -996,6 +1036,14 @@ void UConquestGameWidget::HandleTileExpansionCancelClicked()
 	else
 	{
 		ClearTileExpansionConfirmation();
+	}
+}
+
+void UConquestGameWidget::HandleEndGameReturnToMenuClicked()
+{
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestReturnToMainMenu();
 	}
 }
 

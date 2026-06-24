@@ -56,6 +56,30 @@ void AConquestPlayerController::RequestEndTurn()
 	}
 }
 
+void AConquestPlayerController::RequestReturnToMainMenu()
+{
+	if (HasAuthority())
+	{
+		ServerRequestReturnToMainMenu_Implementation();
+	}
+	else
+	{
+		ServerRequestReturnToMainMenu();
+	}
+}
+
+void AConquestPlayerController::RequestRegenerateFirstTurnMap()
+{
+	if (HasAuthority())
+	{
+		ServerRequestRegenerateFirstTurnMap_Implementation();
+	}
+	else
+	{
+		ServerRequestRegenerateFirstTurnMap();
+	}
+}
+
 void AConquestPlayerController::RequestSetCurrentResearch(FName TechId)
 {
 	if (HasAuthority())
@@ -164,6 +188,18 @@ void AConquestPlayerController::RequestAttackUnit(int32 AttackerUnitInstanceId, 
 	}
 }
 
+void AConquestPlayerController::RequestAttackCity(int32 AttackerUnitInstanceId, int32 DefenderCityId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestAttackCity_Implementation(AttackerUnitInstanceId, DefenderCityId);
+	}
+	else
+	{
+		ServerRequestAttackCity(AttackerUnitInstanceId, DefenderCityId);
+	}
+}
+
 void AConquestPlayerController::RequestSetLobbySlotCivilisation(
 	int32 SlotIndex,
 	UConquestCivilisationData* Civilisation
@@ -196,6 +232,22 @@ void AConquestPlayerController::ServerRequestEndTurn_Implementation()
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->EndTurnForPlayer(AssignedPlayerId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestReturnToMainMenu_Implementation()
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->ResetGameToMainMenu();
+	}
+}
+
+void AConquestPlayerController::ServerRequestRegenerateFirstTurnMap_Implementation()
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->RegenerateFirstTurnMapForPlayer(AssignedPlayerId);
 	}
 }
 
@@ -275,6 +327,17 @@ void AConquestPlayerController::ServerRequestAttackUnit_Implementation(
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->AttackUnitForPlayer(AssignedPlayerId, AttackerUnitInstanceId, DefenderUnitInstanceId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestAttackCity_Implementation(
+	int32 AttackerUnitInstanceId,
+	int32 DefenderCityId
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->AttackCityForPlayer(AssignedPlayerId, AttackerUnitInstanceId, DefenderCityId);
 	}
 }
 

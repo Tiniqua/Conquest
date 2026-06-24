@@ -160,6 +160,24 @@ namespace
 				? 2
 				: 1;
 	}
+
+	float GetCityHealthCombatMultiplier(const FCityState& City)
+	{
+		return FMath::Clamp(
+			static_cast<float>(FMath::Max(1, City.CurrentHealth)) /
+			static_cast<float>(FMath::Max(1, City.MaxHealth)),
+			0.01f,
+			1.0f
+		);
+	}
+
+	float GetCityCombatValue(const FCityState& City)
+	{
+		return FMath::Max(
+			1.0f,
+			static_cast<float>(FMath::Max(1, City.CachedStrength)) * GetCityHealthCombatMultiplier(City)
+		);
+	}
 }
 
 AConquestGameMode::AConquestGameMode()
@@ -246,7 +264,7 @@ void AConquestGameMode::SyncAvailableCivilisationsToGameState()
 void AConquestGameMode::AssignPlayerToLobbySlot(int32 PlayerId, const FString& PlayerName)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS)
+	if (!ConquestGS || ConquestGS->bGameEnded)
 	{
 		return;
 	}
@@ -365,6 +383,49 @@ void AConquestGameMode::StartSinglePlayerGame()
 	ConquestGS->TurnManager->EnterAwaitingFirstCity();
 }
 
+bool AConquestGameMode::RegenerateFirstTurnMapForPlayer(int32 PlayerId)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (
+		PlayerId != 0 ||
+		!ConquestGS ||
+		ConquestGS->bGameEnded ||
+		!ConquestGS->TurnManager ||
+		!ConquestGS->ActiveGridActor ||
+		ConquestGS->TurnManager->CurrentTurn != 1
+	)
+	{
+		return false;
+	}
+
+	ConquestGS->ClearUnitVisuals();
+
+	if (ConquestGS->CityManager)
+	{
+		ConquestGS->CityManager->ResetCities();
+	}
+
+	ReadyPlayerIds.Reset();
+	ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Reset();
+	ConquestGS->PlayerStartRegions.Reset();
+	ConquestGS->PlayerEmpires.Reset();
+	ConquestGS->HumanPlayer = FConquestPlayerEmpireState();
+	ConquestGS->HumanPlayer.PlayerId = 0;
+	ConquestGS->EnsurePlayerEmpire(0);
+
+	ConquestGS->ActiveGridActor->RegenerateGridWithNewRandomSeed();
+	InitializeEmpiresFromLobby();
+	for (const int32 ConnectedPlayerId : ConnectedHumanPlayerIds)
+	{
+		ConquestGS->EnsurePlayerEmpire(ConnectedPlayerId);
+	}
+	AssignPlayerStartRegions();
+	ConquestGS->TurnManager->BeginGameSetup();
+	ConquestGS->TurnManager->EnterAwaitingFirstCity();
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
 void AConquestGameMode::EndCurrentTurn()
 {
 	EndTurnForPlayer(0);
@@ -373,7 +434,12 @@ void AConquestGameMode::EndCurrentTurn()
 bool AConquestGameMode::EndTurnForPlayer(int32 PlayerId)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->TurnManager || ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions)
+	if (
+		!ConquestGS ||
+		ConquestGS->bGameEnded ||
+		!ConquestGS->TurnManager ||
+		ConquestGS->TurnManager->CurrentPhase != EConquestTurnPhase::PlayerActions
+	)
 	{
 		return false;
 	}
@@ -408,7 +474,7 @@ bool AConquestGameMode::EndTurnForPlayer(int32 PlayerId)
 bool AConquestGameMode::SetCurrentResearchForPlayer(int32 PlayerId, FName TechId)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->TechManager)
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->TechManager)
 	{
 		return false;
 	}
@@ -424,7 +490,12 @@ bool AConquestGameMode::SetCityProductionForPlayer(
 )
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->CityManager || !DoesPlayerOwnCity(*ConquestGS, PlayerId, CityId))
+	if (
+		!ConquestGS ||
+		ConquestGS->bGameEnded ||
+		!ConquestGS->CityManager ||
+		!DoesPlayerOwnCity(*ConquestGS, PlayerId, CityId)
+	)
 	{
 		return false;
 	}
@@ -445,7 +516,12 @@ bool AConquestGameMode::SetCityProductionForPlayer(
 bool AConquestGameMode::ClaimExpansionTileForPlayer(int32 PlayerId, int32 CityId, FIntPoint Coord)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->CityManager || !DoesPlayerOwnCity(*ConquestGS, PlayerId, CityId))
+	if (
+		!ConquestGS ||
+		ConquestGS->bGameEnded ||
+		!ConquestGS->CityManager ||
+		!DoesPlayerOwnCity(*ConquestGS, PlayerId, CityId)
+	)
 	{
 		return false;
 	}
@@ -456,7 +532,7 @@ bool AConquestGameMode::ClaimExpansionTileForPlayer(int32 PlayerId, int32 CityId
 bool AConquestGameMode::PurchaseTileImprovementForPlayer(int32 PlayerId, FIntPoint Coord, FName ImprovementId)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->CityManager)
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->CityManager)
 	{
 		return false;
 	}
@@ -467,7 +543,7 @@ bool AConquestGameMode::PurchaseTileImprovementForPlayer(int32 PlayerId, FIntPoi
 bool AConquestGameMode::MoveUnitForPlayer(int32 PlayerId, int32 UnitInstanceId, FIntPoint TargetCoord)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->ActiveGridActor)
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->ActiveGridActor)
 	{
 		return false;
 	}
@@ -679,7 +755,13 @@ bool AConquestGameMode::ApplyUnitActionForPlayer(int32 PlayerId, int32 UnitInsta
 bool AConquestGameMode::ApplyUnitAugmentForPlayer(int32 PlayerId, int32 UnitInstanceId, FName AugmentId)
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->ContentManager || !ConquestGS->CityManager || AugmentId.IsNone())
+	if (
+		!ConquestGS ||
+		ConquestGS->bGameEnded ||
+		!ConquestGS->ContentManager ||
+		!ConquestGS->CityManager ||
+		AugmentId.IsNone()
+	)
 	{
 		return false;
 	}
@@ -761,7 +843,7 @@ bool AConquestGameMode::AttackUnitForPlayer(
 )
 {
 	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
-	if (!ConquestGS || !ConquestGS->GetHexGridModel())
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->GetHexGridModel())
 	{
 		return false;
 	}
@@ -829,6 +911,104 @@ bool AConquestGameMode::AttackUnitForPlayer(
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("Attack")));
+	ConquestGS->BroadcastStateChanged();
+	return true;
+}
+
+bool AConquestGameMode::AttackCityForPlayer(
+	int32 PlayerId,
+	int32 AttackerUnitInstanceId,
+	int32 DefenderCityId
+)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->CityManager || !ConquestGS->GetHexGridModel())
+	{
+		return false;
+	}
+
+	FConquestPlayerEmpireState& AttackerPlayer = ConquestGS->GetPlayerEmpireMutable(PlayerId);
+	FConquestUnitState* Attacker = FindUnitMutable(AttackerPlayer, AttackerUnitInstanceId);
+	FCityState* DefenderCity = ConquestGS->CityManager->GetCityMutable(DefenderCityId);
+	if (
+		!Attacker ||
+		!DefenderCity ||
+		Attacker->OwnerPlayerId != PlayerId ||
+		DefenderCity->OwnerPlayerId == PlayerId ||
+		Attacker->CurrentMovementPoints <= 0
+	)
+	{
+		return false;
+	}
+
+	const FHexGridModel* GridModel = ConquestGS->GetHexGridModel();
+	const int32 AttackDistance = GridModel->GetHexDistance(Attacker->TileCoord, DefenderCity->CenterTile);
+	if (AttackDistance <= 0 || AttackDistance > FMath::Max(1, Attacker->CachedAttackRange))
+	{
+		return false;
+	}
+
+	DefenderCity->MaxHealth = FMath::Max(1, DefenderCity->MaxHealth);
+	DefenderCity->CachedStrength = ConquestGS->CityManager->GetCityStrength(*DefenderCity);
+	DefenderCity->CurrentHealth = FMath::Clamp(DefenderCity->CurrentHealth, 0, DefenderCity->MaxHealth);
+
+	const bool bCityAlreadyDefeated = DefenderCity->CurrentHealth <= 0;
+	const bool bMeleeAttack = Attacker->CachedAttackRange <= 1 && AttackDistance <= 1;
+	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(
+		*Attacker,
+		EConquestUnitCombatModifierType::Attack
+	);
+	const float CityDefenseValue = GetCityCombatValue(*DefenderCity);
+	const int32 CityDamage = bCityAlreadyDefeated
+		? 0
+		: ConquestUnitCombat::CalculateDeterministicDamage(AttackerCombatValue, CityDefenseValue, 50.0f);
+
+	DefenderCity->CurrentHealth = FMath::Clamp(
+		DefenderCity->CurrentHealth - CityDamage,
+		0,
+		FMath::Max(1, DefenderCity->MaxHealth)
+	);
+
+	Attacker->CurrentMovementPoints = FMath::Max(0, Attacker->CurrentMovementPoints - 1);
+	Attacker->bIsFortified = false;
+	Attacker->bIsSleeping = false;
+
+	const bool bCityDefeated = DefenderCity->CurrentHealth <= 0;
+	if (!bCityAlreadyDefeated && !bCityDefeated && AttackDistance <= 1)
+	{
+		const int32 AttackerDamage = ConquestUnitCombat::CalculateDeterministicDamage(
+			GetCityCombatValue(*DefenderCity),
+			AttackerCombatValue,
+			25.0f
+		);
+		Attacker->CurrentHealth = FMath::Clamp(
+			Attacker->CurrentHealth - AttackerDamage,
+			0,
+			Attacker->CachedMaxHealth
+		);
+	}
+
+	const bool bAttackerKilled = Attacker->CurrentHealth <= 0;
+	if (bAttackerKilled)
+	{
+		AttackerPlayer.Units.RemoveAll([AttackerUnitInstanceId](const FConquestUnitState& Candidate)
+		{
+			return Candidate.UnitInstanceId == AttackerUnitInstanceId;
+		});
+		DestroyUnitActor(*ConquestGS, AttackerUnitInstanceId);
+	}
+
+	if (!bAttackerKilled && bMeleeAttack && bCityDefeated)
+	{
+		ConquestGS->CityManager->CaptureCity(DefenderCityId, PlayerId);
+		CheckCityOwnershipVictory(*ConquestGS);
+	}
+	else
+	{
+		ConquestGS->CityManager->DamageCity(DefenderCityId, 0);
+	}
+
+	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackCity")));
 	ConquestGS->BroadcastStateChanged();
 	return true;
 }
@@ -936,6 +1116,64 @@ void AConquestGameMode::AssignPlayerStartRegions()
 		PlayerIds.Add(0);
 	}
 
+	TMap<FIntPoint, int32> LandRegionSizeByCoord;
+	TSet<FIntPoint> VisitedLandCoords;
+	int32 LargestLandRegionSize = 0;
+	auto IsStartPassableLand = [GridModel](const FIntPoint& Coord)
+	{
+		const FHexTileData* Tile = GridModel->GetTile(Coord);
+		return
+			Tile &&
+			!GridModel->IsWaterTileType(Tile->TileType) &&
+			Tile->TileType != EHexTileType::Mountain;
+	};
+
+	for (int32 R = 0; R < GridModel->GetGridHeight(); ++R)
+	{
+		for (int32 Q = 0; Q < GridModel->GetGridWidth(); ++Q)
+		{
+			const FIntPoint SeedCoord(Q, R);
+			if (VisitedLandCoords.Contains(SeedCoord) || !IsStartPassableLand(SeedCoord))
+			{
+				continue;
+			}
+
+			TArray<FIntPoint> RegionCoords;
+			TArray<FIntPoint> Frontier;
+			Frontier.Add(SeedCoord);
+			VisitedLandCoords.Add(SeedCoord);
+
+			for (int32 FrontierIndex = 0; FrontierIndex < Frontier.Num(); ++FrontierIndex)
+			{
+				const FIntPoint CurrentCoord = Frontier[FrontierIndex];
+				RegionCoords.Add(CurrentCoord);
+
+				for (int32 Direction = 0; Direction < 6; ++Direction)
+				{
+					int32 NeighborQ = INDEX_NONE;
+					int32 NeighborR = INDEX_NONE;
+					if (!GridModel->GetNeighbourCoord(CurrentCoord.X, CurrentCoord.Y, Direction, NeighborQ, NeighborR))
+					{
+						continue;
+					}
+
+					const FIntPoint NeighborCoord(NeighborQ, NeighborR);
+					if (!VisitedLandCoords.Contains(NeighborCoord) && IsStartPassableLand(NeighborCoord))
+					{
+						VisitedLandCoords.Add(NeighborCoord);
+						Frontier.Add(NeighborCoord);
+					}
+				}
+			}
+
+			LargestLandRegionSize = FMath::Max(LargestLandRegionSize, RegionCoords.Num());
+			for (const FIntPoint& RegionCoord : RegionCoords)
+			{
+				LandRegionSizeByCoord.Add(RegionCoord, RegionCoords.Num());
+			}
+		}
+	}
+
 	TArray<FIntPoint> CandidateCenters;
 	for (int32 R = 0; R < GridModel->GetGridHeight(); ++R)
 	{
@@ -956,39 +1194,74 @@ void AConquestGameMode::AssignPlayerStartRegions()
 		return;
 	}
 
+	if (LargestLandRegionSize > 0)
+	{
+		const int32 MinPreferredLandRegionSize = FMath::Max(
+			StartingRegionRadius * StartingRegionRadius,
+			FMath::RoundToInt(static_cast<float>(LargestLandRegionSize) * 0.15f)
+		);
+		TArray<FIntPoint> LargeLandCandidates = CandidateCenters.FilterByPredicate(
+			[&LandRegionSizeByCoord, MinPreferredLandRegionSize](const FIntPoint& Candidate)
+			{
+				const int32 RegionSize = LandRegionSizeByCoord.FindRef(Candidate);
+				return RegionSize >= MinPreferredLandRegionSize;
+			}
+		);
+
+		if (LargeLandCandidates.Num() >= PlayerIds.Num())
+		{
+			CandidateCenters = MoveTemp(LargeLandCandidates);
+		}
+	}
+
 	const int32 MinDimension = FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight());
-	const int32 PlayerCount = FMath::Max(1, PlayerIds.Num());
-	const int32 DesiredSpacing = FMath::Max(
-		StartingRegionRadius * 2 + 1,
-		FMath::RoundToInt(static_cast<float>(MinDimension) / FMath::Sqrt(static_cast<float>(PlayerCount)))
+	const int32 IdealSpacing = FMath::Clamp(
+		FMath::RoundToInt(static_cast<float>(MinDimension) * 0.25f),
+		StartingRegionRadius + 5,
+		StartingRegionRadius + 10
 	);
+	const int32 MinSpacing = FMath::Max(StartingRegionRadius + 1, IdealSpacing - 3);
+	const int32 MaxPreferredSpacing = IdealSpacing + 5;
 
 	for (const int32 PlayerId : PlayerIds)
 	{
 		FIntPoint SelectedCenter = CandidateCenters[0];
 		float SelectedScore = -TNumericLimits<float>::Max();
 
-		for (int32 AttemptSpacing = DesiredSpacing; AttemptSpacing >= StartingRegionRadius + 1; --AttemptSpacing)
+		auto TrySelectCandidate = [&](bool bRequireMinimumSpacing, bool bRequireMaximumSpacing)
 		{
 			for (const FIntPoint& Candidate : CandidateCenters)
 			{
-				bool bTooClose = false;
+				int32 ClosestStartDistance = TNumericLimits<int32>::Max();
 				for (const FConquestPlayerStartRegion& ExistingRegion : ConquestGS->PlayerStartRegions)
 				{
-					if (GridModel->GetHexDistance(ExistingRegion.Center, Candidate) < AttemptSpacing)
-					{
-						bTooClose = true;
-						break;
-					}
+					ClosestStartDistance = FMath::Min(
+						ClosestStartDistance,
+						GridModel->GetHexDistance(ExistingRegion.Center, Candidate)
+					);
 				}
 
-				if (bTooClose)
+				if (
+					ClosestStartDistance != TNumericLimits<int32>::Max() &&
+					(
+						(bRequireMinimumSpacing && ClosestStartDistance < MinSpacing) ||
+						(bRequireMaximumSpacing && ClosestStartDistance > MaxPreferredSpacing)
+					)
+				)
 				{
 					continue;
 				}
 
 				const float CandidateScore =
-					ScoreStartRegionCandidate(*ConquestGS, Candidate, ConquestGS->PlayerStartRegions) +
+					ScoreStartRegionCandidate(
+						*ConquestGS,
+						Candidate,
+						ConquestGS->PlayerStartRegions,
+						LandRegionSizeByCoord,
+						LargestLandRegionSize,
+						IdealSpacing,
+						MaxPreferredSpacing
+					) +
 					FMath::FRandRange(0.0f, 0.01f);
 				if (CandidateScore > SelectedScore)
 				{
@@ -996,26 +1269,18 @@ void AConquestGameMode::AssignPlayerStartRegions()
 					SelectedScore = CandidateScore;
 				}
 			}
+		};
 
-			if (SelectedScore > -TNumericLimits<float>::Max())
-			{
-				break;
-			}
+		TrySelectCandidate(true, true);
+
+		if (SelectedScore <= -TNumericLimits<float>::Max())
+		{
+			TrySelectCandidate(true, false);
 		}
 
 		if (SelectedScore <= -TNumericLimits<float>::Max())
 		{
-			for (const FIntPoint& Candidate : CandidateCenters)
-			{
-				const float CandidateScore =
-					ScoreStartRegionCandidate(*ConquestGS, Candidate, ConquestGS->PlayerStartRegions) +
-					FMath::FRandRange(0.0f, 0.01f);
-				if (CandidateScore > SelectedScore)
-				{
-					SelectedCenter = Candidate;
-					SelectedScore = CandidateScore;
-				}
-			}
+			TrySelectCandidate(false, false);
 		}
 
 		FConquestPlayerStartRegion StartRegion;
@@ -1044,7 +1309,11 @@ bool AConquestGameMode::IsValidStartRegionCenter(const AConquestGameState& Conqu
 float AConquestGameMode::ScoreStartRegionCandidate(
 	const AConquestGameState& ConquestGS,
 	const FIntPoint& Coord,
-	const TArray<FConquestPlayerStartRegion>& ExistingRegions
+	const TArray<FConquestPlayerStartRegion>& ExistingRegions,
+	const TMap<FIntPoint, int32>& LandRegionSizeByCoord,
+	int32 LargestLandRegionSize,
+	int32 IdealSpacing,
+	int32 MaxPreferredSpacing
 ) const
 {
 	const FHexGridModel* GridModel = ConquestGS.GetHexGridModel();
@@ -1066,11 +1335,12 @@ float AConquestGameMode::ScoreStartRegionCandidate(
 			);
 		}
 
-		const float DistanceScale = FMath::Max(
-			1.0f,
-			static_cast<float>(FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight()))
-		);
-		Score += (static_cast<float>(ClosestStartDistance) / DistanceScale) * 1000.0f;
+		const int32 DistanceFromIdeal = FMath::Abs(ClosestStartDistance - IdealSpacing);
+		Score += FMath::Max(0.0f, 1.0f - (static_cast<float>(DistanceFromIdeal) / 8.0f)) * 1000.0f;
+		if (ClosestStartDistance > MaxPreferredSpacing)
+		{
+			Score -= static_cast<float>(ClosestStartDistance - MaxPreferredSpacing) * 140.0f;
+		}
 	}
 
 	const int32 EdgeDistance = FMath::Min(
@@ -1082,6 +1352,20 @@ float AConquestGameMode::ScoreStartRegionCandidate(
 		static_cast<float>(FMath::Min(GridModel->GetGridWidth(), GridModel->GetGridHeight())) * 0.5f
 	);
 	Score += FMath::Clamp(static_cast<float>(EdgeDistance) / MaxEdgeDistance, 0.0f, 1.0f) * 650.0f;
+
+	if (LargestLandRegionSize > 0)
+	{
+		const float LandRegionRatio = FMath::Clamp(
+			static_cast<float>(LandRegionSizeByCoord.FindRef(Coord)) / static_cast<float>(LargestLandRegionSize),
+			0.0f,
+			1.0f
+		);
+		Score += LandRegionRatio * 700.0f;
+		if (LandRegionRatio < 0.15f)
+		{
+			Score -= (0.15f - LandRegionRatio) * 2200.0f;
+		}
+	}
 
 	int32 CheckedTiles = 0;
 	int32 PoorTerrainTiles = 0;
@@ -1290,4 +1574,106 @@ bool AConquestGameMode::CanPlayerEndTurn(
 ) const
 {
 	return ConquestGS.CanPlayerEndTurnFromState(PlayerId, OutBlockReason);
+}
+
+int32 AConquestGameMode::GetParticipatingPlayerCount(const AConquestGameState& ConquestGS) const
+{
+	TSet<int32> PlayerIds;
+	for (const FConquestLobbyPlayerSlot& Slot : ConquestGS.LobbyPlayerSlots)
+	{
+		if (Slot.PlayerId != INDEX_NONE && Slot.SlotType != EConquestLobbySlotType::Closed)
+		{
+			PlayerIds.Add(Slot.PlayerId);
+		}
+	}
+
+	for (const FConquestPlayerEmpireState& PlayerEmpire : ConquestGS.PlayerEmpires)
+	{
+		if (PlayerEmpire.PlayerId != INDEX_NONE)
+		{
+			PlayerIds.Add(PlayerEmpire.PlayerId);
+		}
+	}
+
+	return PlayerIds.Num();
+}
+
+bool AConquestGameMode::CheckCityOwnershipVictory(AConquestGameState& ConquestGS)
+{
+	if (ConquestGS.bGameEnded || !ConquestGS.CityManager || GetParticipatingPlayerCount(ConquestGS) <= 1)
+	{
+		return false;
+	}
+
+	int32 WinningPlayerId = INDEX_NONE;
+	for (const FCityState& City : ConquestGS.CityManager->Cities)
+	{
+		if (City.OwnerPlayerId == INDEX_NONE)
+		{
+			return false;
+		}
+
+		if (WinningPlayerId == INDEX_NONE)
+		{
+			WinningPlayerId = City.OwnerPlayerId;
+		}
+		else if (WinningPlayerId != City.OwnerPlayerId)
+		{
+			return false;
+		}
+	}
+
+	if (WinningPlayerId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	ConquestGS.bGameEnded = true;
+	ConquestGS.WinningPlayerId = WinningPlayerId;
+	ConquestGS.PushReplicatedState();
+	ConquestGS.BroadcastStateChanged();
+	return true;
+}
+
+void AConquestGameMode::ResetGameToMainMenu()
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS)
+	{
+		return;
+	}
+
+	ConquestGS->ClearUnitVisuals();
+
+	if (ConquestGS->ActiveGridActor)
+	{
+		ConquestGS->ActiveGridActor->Destroy();
+		ConquestGS->ActiveGridActor = nullptr;
+	}
+
+	if (ConquestGS->CityManager)
+	{
+		ConquestGS->CityManager->ResetCities();
+	}
+
+	if (ConquestGS->TurnManager)
+	{
+		ConquestGS->TurnManager->CurrentTurn = 1;
+		ConquestGS->TurnManager->CurrentPhase = EConquestTurnPhase::None;
+	}
+
+	ReadyPlayerIds.Reset();
+	ConquestGS->LobbyPlayerSlots.Reset();
+	ConquestGS->PlayerCivilisations.Reset();
+	ConquestGS->PlayerStartRegions.Reset();
+	ConquestGS->PlayerEmpires.Reset();
+	ConquestGS->HumanPlayer = FConquestPlayerEmpireState();
+	ConquestGS->HumanPlayer.PlayerId = 0;
+	ConquestGS->EnsurePlayerEmpire(0);
+	ConquestGS->bGameEnded = false;
+	ConquestGS->WinningPlayerId = INDEX_NONE;
+	ConquestGS->ReplicatedConquestState = FConquestReplicatedGameState();
+	ConquestGS->PushReplicatedState();
+	ConquestGS->BroadcastStateChanged();
+	ConquestGS->MulticastReturnToMainMenu();
 }

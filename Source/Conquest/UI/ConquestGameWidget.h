@@ -234,6 +234,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Combat Preview")
 	void ClearCombatPreview();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game")
+	void ShowEndGameResult(bool bLocalPlayerWon);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Game")
+	void ClearEndGameResult();
+
 	UFUNCTION(BlueprintPure, Category = "Conquest|Combat Preview")
 	FConquestCombatPreviewData GetCombatPreviewData() const { return CurrentCombatPreviewData; }
 
@@ -433,6 +439,15 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CombatPreviewDetailText = nullptr;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> EndGamePanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EndGameTitleText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> EndGameReturnToMenuButton = nullptr;
+
 private:
 	static void SetText(UTextBlock* TextBlock, const FText& Text);
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
@@ -447,6 +462,7 @@ private:
 	void RefreshSelectedUnitInfoFromGameState();
 	bool FocusNextRequiredEndTurnAction();
 	bool IsUnitActionEnabled(FName ActionId, const FConquestSelectedUnitWidgetData& UnitData) const;
+	void RefreshEndGameResultFromGameState();
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
@@ -474,6 +490,9 @@ private:
 
 	UFUNCTION()
 	void HandleUnitActionClicked(FName ActionId);
+
+	UFUNCTION()
+	void HandleEndGameReturnToMenuClicked();
 
 	UFUNCTION()
 	void HandleResearchChanged();

@@ -52,6 +52,9 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	NewCity.CityName = ResolveCityName(PlayerId, CityName);
 	NewCity.CenterTile = TileCoord;
 	NewCity.Population = 1;
+	NewCity.MaxHealth = 100;
+	NewCity.CurrentHealth = NewCity.MaxHealth;
+	RefreshCityCombatStats(NewCity);
 	NewCity.FoodStored = 0.0f;
 	NewCity.CachedFoodRequiredForNextPopulation = GetFoodRequiredForNextPopulation(NewCity);
 	NewCity.bNeedsProductionChoice = true;
@@ -104,6 +107,9 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 			NewCity.CenterTile,
 			NewCity.CityName,
 			NewCity.Population,
+			NewCity.CurrentHealth,
+			NewCity.MaxHealth,
+			NewCity.CachedStrength,
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);
@@ -116,6 +122,12 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	GameStateRef->BroadcastStateChanged();
 
 	return true;
+}
+
+void UConquestCityManager::ResetCities()
+{
+	Cities.Reset();
+	NextCityId = 1;
 }
 
 int32 UConquestCityManager::FindCityAtTile(const FIntPoint& Coord) const
@@ -419,6 +431,95 @@ bool UConquestCityManager::AssignCitizenToTile(FCityState& City, const FIntPoint
 	NewAssignment.Citizens = 1;
 	City.WorkedTileAssignments.Add(NewAssignment);
 	SyncWorkedTilesFromAssignments(City);
+	return true;
+}
+
+int32 UConquestCityManager::GetCityStrength(const FCityState& City) const
+{
+	return FMath::Max(1, 10 + FMath::Max(0, City.Population - 1) * 2);
+}
+
+void UConquestCityManager::RefreshCityCombatStats(FCityState& City)
+{
+	City.MaxHealth = FMath::Max(1, City.MaxHealth);
+	City.CachedStrength = GetCityStrength(City);
+	City.CurrentHealth = FMath::Clamp(City.CurrentHealth, 0, City.MaxHealth);
+}
+
+void UConquestCityManager::HealCityAtStartOfTurn(FCityState& City)
+{
+	RefreshCityCombatStats(City);
+	if (City.CurrentHealth < City.MaxHealth)
+	{
+		City.CurrentHealth = FMath::Min(City.MaxHealth, City.CurrentHealth + 10);
+	}
+}
+
+bool UConquestCityManager::DamageCity(int32 CityId, int32 DamageAmount)
+{
+	FCityState* City = GetCityMutable(CityId);
+	if (!City || DamageAmount < 0)
+	{
+		return false;
+	}
+
+	RefreshCityCombatStats(*City);
+	City->CurrentHealth = FMath::Clamp(City->CurrentHealth - DamageAmount, 0, City->MaxHealth);
+	UpdateCityWorldLabel(*City);
+	OnCityChanged.Broadcast(City->CityId);
+
+	if (GameStateRef)
+	{
+		GameStateRef->BroadcastStateChanged();
+	}
+
+	return true;
+}
+
+bool UConquestCityManager::CaptureCity(int32 CityId, int32 NewOwnerPlayerId)
+{
+	FCityState* City = GetCityMutable(CityId);
+	if (!GameStateRef || !City || NewOwnerPlayerId == INDEX_NONE || City->OwnerPlayerId == NewOwnerPlayerId)
+	{
+		return false;
+	}
+
+	const int32 PreviousOwnerPlayerId = City->OwnerPlayerId;
+	FConquestPlayerEmpireState& PreviousOwner = GameStateRef->GetPlayerEmpireMutable(PreviousOwnerPlayerId);
+	PreviousOwner.CityIds.Remove(CityId);
+
+	FConquestPlayerEmpireState& NewOwner = GameStateRef->GetPlayerEmpireMutable(NewOwnerPlayerId);
+	NewOwner.CityIds.AddUnique(CityId);
+
+	City->OwnerPlayerId = NewOwnerPlayerId;
+	City->CurrentHealth = 0;
+	RefreshCityCombatStats(*City);
+
+	if (FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable())
+	{
+		for (const FIntPoint& Coord : City->OwnedTiles)
+		{
+			if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+			{
+				Tile->Gameplay.OwnerPlayerId = NewOwnerPlayerId;
+				Tile->Gameplay.OwningCityId = City->CityId;
+				if (Tile->Gameplay.WorkedByCityId == City->CityId)
+				{
+					Tile->Gameplay.bIsWorked = true;
+				}
+			}
+		}
+	}
+
+	AutoAssignWorkedTiles(*City);
+	RecalculateCityYields(*City);
+	RecalculateEmpireYields(PreviousOwnerPlayerId);
+	RecalculateEmpireYields(NewOwnerPlayerId);
+	UpdateOwnedTileVisuals(PreviousOwnerPlayerId);
+	UpdateOwnedTileVisuals(NewOwnerPlayerId);
+	UpdateCityWorldLabel(*City);
+	OnCityChanged.Broadcast(City->CityId);
+	GameStateRef->BroadcastStateChanged();
 	return true;
 }
 
@@ -880,6 +981,9 @@ void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
 		City.CenterTile,
 		City.CityName,
 		City.Population,
+		City.CurrentHealth,
+		City.MaxHealth,
+		City.CachedStrength,
 		CivilisationThemeMaterial,
 		CivilisationThemeColor
 	);
@@ -966,8 +1070,10 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 		}
 
 		AutoAssignWorkedTiles(City);
+		HealCityAtStartOfTurn(City);
 		RecalculateCityYields(City);
 		ProcessCityGrowth(City);
+		RefreshCityCombatStats(City);
 		ProcessCityProduction(City);
 		RecalculateCityYields(City);
 		UpdateCityWorldLabel(City);
@@ -1004,6 +1110,7 @@ void UConquestCityManager::ProcessCityGrowth(FCityState& City)
 		City.Population += 1;
 		City.PendingBorderExpansions += 1;
 		City.CachedFoodRequiredForNextPopulation = GetFoodRequiredForNextPopulation(City);
+		RefreshCityCombatStats(City);
 		OnCityNeedsBorderExpansion.Broadcast(City.CityId);
 		AutoAssignWorkedTiles(City);
 	}

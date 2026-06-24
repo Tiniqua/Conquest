@@ -39,6 +39,9 @@ public:
 	bool FoundCity(int32 PlayerId, const FIntPoint& TileCoord, FName CityName);
 
 	UFUNCTION(BlueprintCallable)
+	void ResetCities();
+
+	UFUNCTION(BlueprintCallable)
 	int32 FindCityAtTile(const FIntPoint& Coord) const;
 
 	UFUNCTION(BlueprintCallable)
@@ -86,6 +89,15 @@ public:
 	UFUNCTION(BlueprintCallable)
 	bool RefreshCityYields(int32 CityId);
 
+	UFUNCTION(BlueprintCallable)
+	int32 GetCityStrength(const FCityState& City) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool DamageCity(int32 CityId, int32 DamageAmount);
+
+	UFUNCTION(BlueprintCallable)
+	bool CaptureCity(int32 CityId, int32 NewOwnerPlayerId);
+
 	UFUNCTION(BlueprintPure)
 	int32 GetFoodRequiredForNextPopulation(const FCityState& City) const;
 	
@@ -122,6 +134,8 @@ private:
 	void SyncWorkedTilesFromAssignments(FCityState& City);
 	int32 GetAssignedCitizensForTile(const FCityState& City, const FIntPoint& Coord) const;
 	bool AssignCitizenToTile(FCityState& City, const FIntPoint& Coord);
+	void RefreshCityCombatStats(FCityState& City);
+	void HealCityAtStartOfTurn(FCityState& City);
 	void RecalculateCityYields(FCityState& City);
 	FHexYield GetProductionProjectYieldBonus(const FCityState& City) const;
 	void RecalculateEmpireYields(int32 PlayerId);

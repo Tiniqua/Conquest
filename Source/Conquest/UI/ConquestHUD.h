@@ -212,6 +212,7 @@ protected:
 	bool bLocalFogInitialized = false;
 	int32 LocalFogPlayerId = INDEX_NONE;
 	bool bStartingCameraFocused = false;
+	FIntPoint LastStartingCameraFocusCoord = FIntPoint(INT32_MIN, INT32_MIN);
 
 	void ConfigureMenuInputMode();
 	void ConfigureGameInputMode();

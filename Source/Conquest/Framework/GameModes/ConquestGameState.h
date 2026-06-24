@@ -99,6 +99,12 @@ struct FConquestReplicatedGameState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FConquestPlayerStartRegion> PlayerStartRegions;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bGameEnded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 WinningPlayerId = INDEX_NONE;
 };
 
 UCLASS()
@@ -171,6 +177,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
 	TArray<FConquestPlayerStartRegion> PlayerStartRegions;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Game")
+	bool bGameEnded = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Game")
+	int32 WinningPlayerId = INDEX_NONE;
 
 	UPROPERTY(ReplicatedUsing=OnRep_ReplicatedConquestState, BlueprintReadOnly, Category="Conquest|Replication")
 	FConquestReplicatedGameState ReplicatedConquestState;
@@ -249,6 +261,9 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyUnitAction(int32 UnitInstanceId, int32 PlayerId, FName ActionId);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastReturnToMainMenu();
 	
 	UPROPERTY(ReplicatedUsing=OnRep_ActiveGridActor, BlueprintReadWrite, Category="Conquest|Map")
 	TObjectPtr<AModularHexGridActor> ActiveGridActor;
@@ -258,6 +273,7 @@ public:
 
 	void RebuildCityVisualsFromReplicatedState();
 	void RebuildUnitVisualsFromReplicatedState();
+	void ClearUnitVisuals();
 
 	FHexGridModel* GetHexGridModelMutable();
 	const FHexGridModel* GetHexGridModel() const;

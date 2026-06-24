@@ -686,16 +686,14 @@ void AConquestPawn::ToggleHexGridOverlay()
 
 void AConquestPawn::RegenerateMapWithNewSeed()
 {
-	AModularHexGridActor* HexGridActor = FindHexGridActor();
-	if (!HexGridActor)
+	AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetController());
+	if (!ConquestPC || !ConquestPC->IsLocalController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RegenerateMapWithNewSeed failed: no ModularHexGridActor found."));
 		return;
 	}
 
 	ClearHoveredTileInfoWidget();
-
-	HexGridActor->RegenerateGridWithNewRandomSeed();
+	ConquestPC->RequestRegenerateFirstTurnMap();
 }
 
 void AConquestPawn::HandleEnterShortcut()

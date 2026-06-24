@@ -65,6 +65,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
 	bool AttackUnitForPlayer(int32 PlayerId, int32 AttackerUnitInstanceId, int32 DefenderUnitInstanceId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Unit")
+	bool AttackCityForPlayer(int32 PlayerId, int32 AttackerUnitInstanceId, int32 DefenderCityId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Game")
+	void ResetGameToMainMenu();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Game Setup")
+	bool RegenerateFirstTurnMapForPlayer(int32 PlayerId);
+
 	UFUNCTION(BlueprintCallable)
 	bool CanEndCurrentTurn(UPARAM(ref) FText& OutBlockReason) const;
 
@@ -91,7 +100,11 @@ private:
 	float ScoreStartRegionCandidate(
 		const AConquestGameState& ConquestGS,
 		const FIntPoint& Coord,
-		const TArray<FConquestPlayerStartRegion>& ExistingRegions
+		const TArray<FConquestPlayerStartRegion>& ExistingRegions,
+		const TMap<FIntPoint, int32>& LandRegionSizeByCoord,
+		int32 LargestLandRegionSize,
+		int32 IdealSpacing,
+		int32 MaxPreferredSpacing
 	) const;
 	bool IsTileInPlayerStartRegion(const AConquestGameState& ConquestGS, int32 PlayerId, const FIntPoint& Coord) const;
 	bool HaveAllHumanPlayersFoundedStartingCities(const AConquestGameState& ConquestGS) const;
@@ -99,4 +112,6 @@ private:
 	TArray<int32> GetHumanPlayerIds(const AConquestGameState& ConquestGS) const;
 	bool DoesPlayerOwnCity(const AConquestGameState& ConquestGS, int32 PlayerId, int32 CityId) const;
 	bool CanPlayerEndTurn(const AConquestGameState& ConquestGS, int32 PlayerId, FText& OutBlockReason) const;
+	bool CheckCityOwnershipVictory(AConquestGameState& ConquestGS);
+	int32 GetParticipatingPlayerCount(const AConquestGameState& ConquestGS) const;
 };

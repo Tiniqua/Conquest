@@ -52,6 +52,9 @@ public:
 		const FIntPoint& Coord,
 		FName CityName,
 		int32 Population,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		int32 Strength,
 		UMaterialInterface* CivilisationThemeMaterial = nullptr,
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);
@@ -59,6 +62,9 @@ public:
 		int32 CityId,
 		FName CityName,
 		int32 Population,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		int32 Strength,
 		UMaterialInterface* CivilisationThemeMaterial = nullptr,
 		FLinearColor CivilisationThemeColor = FLinearColor::White
 	);

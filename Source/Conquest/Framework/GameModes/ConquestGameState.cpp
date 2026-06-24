@@ -5,6 +5,7 @@
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
+#include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
 #include "Kismet/GameplayStatics.h"
@@ -104,6 +105,8 @@ void AConquestGameState::PushReplicatedState()
 	ReplicatedConquestState.LobbyPlayerSlots = LobbyPlayerSlots;
 	ReplicatedConquestState.AvailableCivilisations = AvailableCivilisations;
 	ReplicatedConquestState.PlayerStartRegions = PlayerStartRegions;
+	ReplicatedConquestState.bGameEnded = bGameEnded;
+	ReplicatedConquestState.WinningPlayerId = WinningPlayerId;
 
 	if (TurnManager)
 	{
@@ -125,6 +128,8 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 	LobbyPlayerSlots = ReplicatedConquestState.LobbyPlayerSlots;
 	AvailableCivilisations = ReplicatedConquestState.AvailableCivilisations;
 	PlayerStartRegions = ReplicatedConquestState.PlayerStartRegions;
+	bGameEnded = ReplicatedConquestState.bGameEnded;
+	WinningPlayerId = ReplicatedConquestState.WinningPlayerId;
 	PlayerCivilisations.Reset();
 
 	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
@@ -587,6 +592,9 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 			City.CenterTile,
 			City.CityName,
 			City.Population,
+			City.CurrentHealth,
+			City.MaxHealth,
+			City.CachedStrength,
 			CivilisationThemeMaterial,
 			CivilisationThemeColor
 		);
@@ -710,6 +718,20 @@ void AConquestGameState::RebuildUnitVisualsFromReplicatedState()
 	}
 }
 
+void AConquestGameState::ClearUnitVisuals()
+{
+	for (TPair<int32, TObjectPtr<AConquestUnitActor>>& Pair : UnitActorsByInstanceId)
+	{
+		if (AConquestUnitActor* UnitActor = Pair.Value.Get())
+		{
+			UnitActor->Destroy();
+		}
+	}
+
+	UnitActorsByInstanceId.Reset();
+	SelectedUnitInstanceId = INDEX_NONE;
+}
+
 FHexGridModel* AConquestGameState::GetHexGridModelMutable()
 {
 	return ActiveGridActor ? &ActiveGridActor->GetMutableGridModel() : nullptr;
@@ -748,4 +770,17 @@ void AConquestGameState::MulticastNotifyUnitAction_Implementation(
 )
 {
 	OnConquestUnitAction.Broadcast(UnitInstanceId, PlayerId, ActionId);
+}
+
+void AConquestGameState::MulticastReturnToMainMenu_Implementation()
+{
+	ClearUnitVisuals();
+
+	if (APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+		{
+			ConquestHUD->ShowMainMenu();
+		}
+	}
 }

@@ -112,6 +112,24 @@ namespace
 		return City && City->OwnerPlayerId != PlayerId;
 	}
 
+	float ConquestHUDGetCityHealthCombatMultiplier(const FCityState& City)
+	{
+		return FMath::Clamp(
+			static_cast<float>(FMath::Max(1, City.CurrentHealth)) /
+			static_cast<float>(FMath::Max(1, City.MaxHealth)),
+			0.01f,
+			1.0f
+		);
+	}
+
+	float ConquestHUDGetCityCombatValue(const FCityState& City)
+	{
+		return FMath::Max(
+			1.0f,
+			static_cast<float>(FMath::Max(1, City.CachedStrength)) * ConquestHUDGetCityHealthCombatMultiplier(City)
+		);
+	}
+
 	FConquestUnitState* ConquestHUDFindUnitMutable(
 		FConquestPlayerEmpireState& Player,
 		int32 UnitInstanceId
@@ -1160,7 +1178,37 @@ bool AConquestHUD::TryAttackSelectedUnitAtTile(int32 Q, int32 R)
 
 	if (DefenderUnitInstanceId == INDEX_NONE)
 	{
-		return false;
+		if (!ConquestGS->CityManager)
+		{
+			return false;
+		}
+
+		const int32 DefenderCityId = ConquestGS->CityManager->FindCityAtTile(TargetCoord);
+		const FCityState* DefenderCity = DefenderCityId != INDEX_NONE
+			? ConquestGS->CityManager->GetCity(DefenderCityId)
+			: nullptr;
+		if (!DefenderCity || DefenderCity->OwnerPlayerId == Player.PlayerId)
+		{
+			return false;
+		}
+
+		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
+		{
+			ConquestPC->RequestAttackCity(SelectedUnit->UnitInstanceId, DefenderCityId);
+		}
+
+		SelectedUnit->CurrentMovementPoints = FMath::Max(0, SelectedUnit->CurrentMovementPoints - 1);
+		ClearUnitAttackHighlights();
+		if (SelectedUnit->CurrentMovementPoints <= 0)
+		{
+			ClearUnitSelection();
+		}
+		else
+		{
+			RefreshSelectedUnitWidget(*SelectedUnit);
+		}
+
+		return true;
 	}
 
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayerController()))
@@ -1241,7 +1289,75 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 
 	if (!DefenderUnit)
 	{
-		ClearCombatPreview();
+		const int32 DefenderCityId = ConquestGS->CityManager
+			? ConquestGS->CityManager->FindCityAtTile(TargetCoord)
+			: INDEX_NONE;
+		const FCityState* DefenderCity = DefenderCityId != INDEX_NONE && ConquestGS->CityManager
+			? ConquestGS->CityManager->GetCity(DefenderCityId)
+			: nullptr;
+		if (!DefenderCity || DefenderCity->OwnerPlayerId == Player.PlayerId)
+		{
+			ClearCombatPreview();
+			return false;
+		}
+
+		const int32 AttackDistance = ConquestGS->GetHexGridModel()->GetHexDistance(
+			SelectedUnit->TileCoord,
+			DefenderCity->CenterTile
+		);
+		const float AttackerCombatValue =
+			ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
+		const float CityDefenseValue = ConquestHUDGetCityCombatValue(*DefenderCity);
+
+		FConquestCombatPreviewData PreviewData;
+		PreviewData.AttackerUnitInstanceId = SelectedUnit->UnitInstanceId;
+		PreviewData.DefenderUnitInstanceId = INDEX_NONE;
+		PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
+		PreviewData.DefenderName = FText::FromName(DefenderCity->CityName);
+		PreviewData.AttackerCurrentHealth = SelectedUnit->CurrentHealth;
+		PreviewData.AttackerMaxHealth = SelectedUnit->CachedMaxHealth;
+		PreviewData.DefenderCurrentHealth = DefenderCity->CurrentHealth;
+		PreviewData.DefenderMaxHealth = DefenderCity->MaxHealth;
+		PreviewData.AttackDistance = AttackDistance;
+		PreviewData.DamageDealt = DefenderCity->CurrentHealth <= 0
+			? 0
+			: ConquestUnitCombat::CalculateDeterministicDamage(AttackerCombatValue, CityDefenseValue, 50.0f);
+		PreviewData.DefenderProjectedHealth = FMath::Clamp(
+			DefenderCity->CurrentHealth - PreviewData.DamageDealt,
+			0,
+			FMath::Max(1, DefenderCity->MaxHealth)
+		);
+		PreviewData.bDefenderKilled = PreviewData.DefenderProjectedHealth <= 0;
+		PreviewData.bHasCounterAttack = DefenderCity->CurrentHealth > 0 && !PreviewData.bDefenderKilled && AttackDistance <= 1;
+		if (PreviewData.bHasCounterAttack)
+		{
+			PreviewData.DamageTaken = ConquestUnitCombat::CalculateDeterministicDamage(
+				ConquestHUDGetCityCombatValue(*DefenderCity),
+				AttackerCombatValue,
+				25.0f
+			);
+		}
+		PreviewData.AttackerProjectedHealth = FMath::Clamp(
+			SelectedUnit->CurrentHealth - PreviewData.DamageTaken,
+			0,
+			SelectedUnit->CachedMaxHealth
+		);
+		PreviewData.bAttackerKilled = PreviewData.AttackerProjectedHealth <= 0;
+		PreviewData.bCanAttack = true;
+		PreviewData.bIsValid = true;
+		PreviewData.Rating = PreviewData.bAttackerKilled
+			? EConquestCombatPreviewRating::Costly
+			: EConquestCombatPreviewRating::Safe;
+		PreviewData.RatingText = PreviewData.bAttackerKilled
+			? NSLOCTEXT("Conquest", "CombatPreviewCostlyCityAttack", "Costly Attack")
+			: NSLOCTEXT("Conquest", "CombatPreviewSafeCityAttack", "Safe Attack");
+
+		if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+		{
+			ActiveGameWidget->ShowCombatPreview(PreviewData);
+			return true;
+		}
+
 		return false;
 	}
 
@@ -1811,11 +1927,24 @@ void AConquestHUD::ApplyLocalFogOfWar()
 		bLocalFogInitialized = true;
 		LocalFogPlayerId = LocalPlayerId;
 		bStartingCameraFocused = false;
+		LastStartingCameraFocusCoord = FIntPoint(INT32_MIN, INT32_MIN);
 	}
 
 	FConquestPlayerStartRegion StartRegion;
 	if (GetLocalStartingRegion(StartRegion))
 	{
+		if (LastStartingCameraFocusCoord != StartRegion.Center)
+		{
+			ConquestGS->ActiveGridActor->ResetLocalFogOfWar(true);
+			bStartingCameraFocused = false;
+			LastStartingCameraFocusCoord = StartRegion.Center;
+			PendingStartingCityCoord = FIntPoint(INT32_MIN, INT32_MIN);
+			if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
+			{
+				ActiveGameWidget->ClearTileExpansionConfirmation();
+			}
+		}
+
 		ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, 7);
 	}
 
@@ -1907,11 +2036,11 @@ void AConquestHUD::RequestStartGame(const FConquestGameSetupSettings& SetupSetti
 		return;
 	}
 
-	if (SpawnedHexGridActor)
+	if (IsValid(SpawnedHexGridActor))
 	{
 		SpawnedHexGridActor->Destroy();
-		SpawnedHexGridActor = nullptr;
 	}
+	SpawnedHexGridActor = nullptr;
 
 	AModularHexGridActor* NewGridActor = World->SpawnActorDeferred<AModularHexGridActor>(
 		HexGridActorClass,

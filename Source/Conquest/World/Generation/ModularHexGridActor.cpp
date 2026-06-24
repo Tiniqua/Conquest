@@ -293,6 +293,9 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 	const FIntPoint& Coord,
 	FName CityName,
 	int32 Population,
+	int32 CurrentHealth,
+	int32 MaxHealth,
+	int32 Strength,
 	UMaterialInterface* CivilisationThemeMaterial,
 	FLinearColor CivilisationThemeColor
 )
@@ -346,13 +349,25 @@ void AModularHexGridActor::AddOrUpdateCityWorldLabel(
 	LabelComponent->SetRelativeTransform(BuildCityWorldLabelTransform(Coord));
 	LabelComponent->InitWidget();
 	LabelComponent->SetVisibility(bShouldRemainVisible);
-	UpdateCityWorldLabel(CityId, CityName, Population, CivilisationThemeMaterial, CivilisationThemeColor);
+	UpdateCityWorldLabel(
+		CityId,
+		CityName,
+		Population,
+		CurrentHealth,
+		MaxHealth,
+		Strength,
+		CivilisationThemeMaterial,
+		CivilisationThemeColor
+	);
 }
 
 void AModularHexGridActor::UpdateCityWorldLabel(
 	int32 CityId,
 	FName CityName,
 	int32 Population,
+	int32 CurrentHealth,
+	int32 MaxHealth,
+	int32 Strength,
 	UMaterialInterface* CivilisationThemeMaterial,
 	FLinearColor CivilisationThemeColor
 )
@@ -366,7 +381,15 @@ void AModularHexGridActor::UpdateCityWorldLabel(
 
 	if (UConquestCityWorldLabelWidget* LabelWidget = Cast<UConquestCityWorldLabelWidget>(LabelComponent->GetWidget()))
 	{
-		LabelWidget->SetCityLabel(CityName, Population, CivilisationThemeMaterial, CivilisationThemeColor);
+		LabelWidget->SetCityLabel(
+			CityName,
+			Population,
+			CurrentHealth,
+			MaxHealth,
+			Strength,
+			CivilisationThemeMaterial,
+			CivilisationThemeColor
+		);
 	}
 }
 
@@ -1168,6 +1191,11 @@ void AModularHexGridActor::RebuildGrid()
 void AModularHexGridActor::RegenerateGridWithNewRandomSeed()
 {
 	GenerationSettings.RandomSeed = FMath::RandRange(1, TNumericLimits<int32>::Max() - 1);
+	if (HasAuthority())
+	{
+		ReplicatedSetupSettings.RandomSeed = GenerationSettings.RandomSeed;
+		ForceNetUpdate();
+	}
 
 	UE_LOG(
 		LogTemp,

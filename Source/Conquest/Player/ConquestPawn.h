@@ -29,6 +29,8 @@ public:
 	void HandlePrimaryPressed();
 	void HandlePrimaryReleased();
 	void HandlePrimaryClick();
+	void HandleSecondaryPressed();
+	void HandleSecondaryReleased();
 	void HandleSecondaryClick();
 	bool GetTileUnderMouse(AModularHexGridActor*& OutGridActor, int32& OutQ, int32& OutR, FHexTileData& OutTileData) const;
 
@@ -149,6 +151,7 @@ protected:
 	bool bPrimaryMouseDown = false;
 	bool bPrimaryDragPanning = false;
 	bool bPrimaryPressStartedOverWorld = false;
+	bool bSecondaryClickHandledOnPress = false;
 	FVector2D PrimaryPressMousePosition = FVector2D::ZeroVector;
 	FVector2D LastDragMousePosition = FVector2D::ZeroVector;
 	bool bHasSmoothedCameraTarget = false;

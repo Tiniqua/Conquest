@@ -256,7 +256,8 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAxis(TEXT("Zoom"), this, &AConquestPawn::Zoom);
 	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Pressed, this, &AConquestPawn::HandlePrimaryPressed);
 	PlayerInputComponent->BindAction(TEXT("PrimaryClick"), IE_Released, this, &AConquestPawn::HandlePrimaryReleased);
-	PlayerInputComponent->BindAction(TEXT("SecondaryClick"), IE_Pressed, this, &AConquestPawn::HandleSecondaryClick);
+	PlayerInputComponent->BindAction(TEXT("SecondaryClick"), IE_Pressed, this, &AConquestPawn::HandleSecondaryPressed);
+	PlayerInputComponent->BindAction(TEXT("SecondaryClick"), IE_Released, this, &AConquestPawn::HandleSecondaryReleased);
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
@@ -502,10 +503,23 @@ void AConquestPawn::HandlePrimaryPressed()
 
 void AConquestPawn::HandlePrimaryReleased()
 {
+	bool bReleaseOnlyWorldClick = false;
+	if (!bPrimaryMouseDown && !bPrimaryDragPanning)
+	{
+		AModularHexGridActor* HexGridActor = nullptr;
+		int32 Q = INDEX_NONE;
+		int32 R = INDEX_NONE;
+		FHexTileData TileData;
+		bReleaseOnlyWorldClick = GetTileUnderMouse(HexGridActor, Q, R, TileData);
+	}
+
 	const bool bShouldRunClick =
-		bPrimaryMouseDown &&
-		!bPrimaryDragPanning &&
-		(!bEnableLeftMouseDragPan || bPrimaryPressStartedOverWorld);
+		(
+			bPrimaryMouseDown &&
+			!bPrimaryDragPanning &&
+			(!bEnableLeftMouseDragPan || bPrimaryPressStartedOverWorld)
+		) ||
+		bReleaseOnlyWorldClick;
 
 	bPrimaryMouseDown = false;
 	bPrimaryDragPanning = false;
@@ -517,6 +531,22 @@ void AConquestPawn::HandlePrimaryReleased()
 	{
 		HandlePrimaryClick();
 	}
+}
+
+void AConquestPawn::HandleSecondaryPressed()
+{
+	bSecondaryClickHandledOnPress = true;
+	HandleSecondaryClick();
+}
+
+void AConquestPawn::HandleSecondaryReleased()
+{
+	if (!bSecondaryClickHandledOnPress)
+	{
+		HandleSecondaryClick();
+	}
+
+	bSecondaryClickHandledOnPress = false;
 }
 
 void AConquestPawn::HandlePrimaryClick()

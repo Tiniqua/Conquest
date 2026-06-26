@@ -1,6 +1,15 @@
 #include "ConquestPlayerController.h"
 
+#include "Conquest/Core/ConquestCheats.h"
+#include "Conquest/Core/ConquestContentManager.h"
+#include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
+#include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestPhilosophyManager.h"
+#include "Conquest/Managers/ConquestTechManager.h"
+#include "Conquest/World/Generation/HexGridModel.h"
+#include "Conquest/World/Generation/HexImprovementTypes.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -15,6 +24,7 @@ namespace
 
 AConquestPlayerController::AConquestPlayerController()
 {
+	CheatClass = UConquestCheats::StaticClass();
 	bShowMouseCursor = false;
 	bEnableClickEvents = false;
 	bEnableMouseOverEvents = false;
@@ -25,6 +35,13 @@ AConquestPlayerController::AConquestPlayerController()
 void AConquestPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+
+#if !UE_BUILD_SHIPPING
+	if (IsLocalController() && !CheatManager)
+	{
+		EnableCheats();
+	}
+#endif
 
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
@@ -258,6 +275,54 @@ void AConquestPlayerController::RequestSetLobbyReady(bool bReady)
 	}
 }
 
+void AConquestPlayerController::RequestCheatImproveAllResources()
+{
+	if (HasAuthority())
+	{
+		ServerRequestCheatImproveAllResources_Implementation();
+	}
+	else
+	{
+		ServerRequestCheatImproveAllResources();
+	}
+}
+
+void AConquestPlayerController::RequestCheatGrantTech(FName TechId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestCheatGrantTech_Implementation(TechId);
+	}
+	else
+	{
+		ServerRequestCheatGrantTech(TechId);
+	}
+}
+
+void AConquestPlayerController::RequestCheatGrantPhilosophy(FName PhilosophyId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestCheatGrantPhilosophy_Implementation(PhilosophyId);
+	}
+	else
+	{
+		ServerRequestCheatGrantPhilosophy(PhilosophyId);
+	}
+}
+
+void AConquestPlayerController::RequestCheatSpawnUnit(FName UnitId, FIntPoint TileCoord)
+{
+	if (HasAuthority())
+	{
+		ServerRequestCheatSpawnUnit_Implementation(UnitId, TileCoord);
+	}
+	else
+	{
+		ServerRequestCheatSpawnUnit(UnitId, TileCoord);
+	}
+}
+
 void AConquestPlayerController::ServerRequestEndTurn_Implementation()
 {
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
@@ -408,4 +473,180 @@ void AConquestPlayerController::ServerRequestSetLobbyReady_Implementation(bool b
 	{
 		ConquestGM->SetLobbyReadyForPlayer(AssignedPlayerId, bReady);
 	}
+}
+
+void AConquestPlayerController::ServerRequestCheatImproveAllResources_Implementation()
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->ActiveGridActor)
+	{
+		return;
+	}
+
+	FHexGridModel& GridModel = ConquestGS->ActiveGridActor->GetMutableGridModel();
+	int32 ImprovedCount = 0;
+	TArray<const FHexImprovementDefinition*> AllImprovements;
+	GridModel.GetAllImprovementDefinitions(AllImprovements);
+
+	auto FindResourceMatchedImprovement = [&AllImprovements](FName ResourceId) -> const FHexImprovementDefinition*
+	{
+		if (ResourceId.IsNone())
+		{
+			return nullptr;
+		}
+
+		for (const FHexImprovementDefinition* Improvement : AllImprovements)
+		{
+			if (
+				Improvement &&
+				Improvement->bRequiresResource &&
+				Improvement->RequiredResources.Contains(ResourceId)
+			)
+			{
+				return Improvement;
+			}
+		}
+
+		for (const FHexImprovementDefinition* Improvement : AllImprovements)
+		{
+			if (Improvement && Improvement->RequiredResources.Contains(ResourceId))
+			{
+				return Improvement;
+			}
+		}
+
+		return nullptr;
+	};
+
+	for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+	{
+		for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+		{
+			const FHexTileData* Tile = GridModel.GetTile(Q, R);
+			if (!Tile || !Tile->Resource.HasResource())
+			{
+				continue;
+			}
+
+			if (!Tile->ImprovementId.IsNone())
+			{
+				++ImprovedCount;
+				continue;
+			}
+
+			TArray<const FHexImprovementDefinition*> PossibleImprovements;
+			GridModel.GetPossibleImprovementsForTile(Q, R, PossibleImprovements);
+
+			const FHexImprovementDefinition* BestImprovement = nullptr;
+			for (const FHexImprovementDefinition* Improvement : PossibleImprovements)
+			{
+				if (
+					Improvement &&
+					Improvement->bRequiresResource &&
+					Improvement->RequiredResources.Contains(Tile->Resource.ResourceId)
+				)
+				{
+					BestImprovement = Improvement;
+					break;
+				}
+			}
+
+			if (!BestImprovement && PossibleImprovements.Num() > 0)
+			{
+				BestImprovement = PossibleImprovements[0];
+			}
+
+			if (!BestImprovement)
+			{
+				BestImprovement = FindResourceMatchedImprovement(Tile->Resource.ResourceId);
+			}
+
+			if (!BestImprovement)
+			{
+				continue;
+			}
+
+			const bool bAppliedNormally = ConquestGS->ActiveGridActor->SetTileImprovement(Q, R, BestImprovement->ImprovementId);
+			const bool bAppliedUnchecked = bAppliedNormally || GridModel.SetTileImprovementUnchecked(Q, R, BestImprovement->ImprovementId);
+			if (bAppliedUnchecked)
+			{
+				++ImprovedCount;
+			}
+		}
+	}
+
+	if (ImprovedCount > 0)
+	{
+		ConquestGS->ActiveGridActor->RefreshPlacedTileVisualMeshes();
+		ConquestGS->BroadcastStateChanged();
+	}
+}
+
+void AConquestPlayerController::ServerRequestCheatGrantTech_Implementation(FName TechId)
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->ContentManager || TechId.IsNone() || !ConquestGS->ContentManager->FindTech(TechId))
+	{
+		return;
+	}
+
+	FConquestPlayerEmpireState& PlayerEmpire = ConquestGS->GetPlayerEmpireMutable(AssignedPlayerId);
+	PlayerEmpire.ResearchedTechIds.AddUnique(TechId);
+	PlayerEmpire.ResearchProgressCache.RemoveAll([TechId](const FConquestResearchProgressCacheEntry& Entry)
+	{
+		return Entry.TechId == TechId;
+	});
+	if (PlayerEmpire.CurrentResearchId == TechId)
+	{
+		PlayerEmpire.CurrentResearchId = NAME_None;
+		PlayerEmpire.CurrentResearchProgress = 0.0f;
+	}
+
+	if (ConquestGS->CityManager)
+	{
+		ConquestGS->CityManager->RecalculateEmpireYields(AssignedPlayerId);
+	}
+
+	if (ConquestGS->TechManager)
+	{
+		ConquestGS->TechManager->OnResearchChanged.Broadcast();
+	}
+
+	ConquestGS->BroadcastStateChanged();
+}
+
+void AConquestPlayerController::ServerRequestCheatGrantPhilosophy_Implementation(FName PhilosophyId)
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->ContentManager || PhilosophyId.IsNone() || !ConquestGS->ContentManager->FindPhilosophy(PhilosophyId))
+	{
+		return;
+	}
+
+	FConquestPlayerEmpireState& PlayerEmpire = ConquestGS->GetPlayerEmpireMutable(AssignedPlayerId);
+	PlayerEmpire.AdoptedPhilosophyIds.AddUnique(PhilosophyId);
+	PlayerEmpire.AdoptedPhilosophyTenets = PlayerEmpire.AdoptedPhilosophyIds.Num();
+
+	if (ConquestGS->CityManager)
+	{
+		ConquestGS->CityManager->RecalculateEmpireYields(AssignedPlayerId);
+	}
+
+	if (ConquestGS->PhilosophyManager)
+	{
+		ConquestGS->PhilosophyManager->OnPhilosophiesChanged.Broadcast();
+	}
+
+	ConquestGS->BroadcastStateChanged();
+}
+
+void AConquestPlayerController::ServerRequestCheatSpawnUnit_Implementation(FName UnitId, FIntPoint TileCoord)
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return;
+	}
+
+	ConquestGS->CityManager->CheatSpawnUnitForPlayerAtTile(AssignedPlayerId, UnitId, TileCoord);
 }

@@ -73,6 +73,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Lobby")
 	void RequestSetLobbyReady(bool bReady);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Cheats")
+	void RequestCheatImproveAllResources();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Cheats")
+	void RequestCheatGrantTech(FName TechId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Cheats")
+	void RequestCheatGrantPhilosophy(FName PhilosophyId);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Cheats")
+	void RequestCheatSpawnUnit(FName UnitId, FIntPoint TileCoord);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -129,6 +141,18 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSetLobbyReady(bool bReady);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCheatImproveAllResources();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCheatGrantTech(FName TechId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCheatGrantPhilosophy(FName PhilosophyId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCheatSpawnUnit(FName UnitId, FIntPoint TileCoord);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

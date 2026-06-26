@@ -288,10 +288,49 @@ bool FHexGridModel::SetTileImprovement(int32 Q, int32 R, FName ImprovementId)
 	return true;
 }
 
+bool FHexGridModel::SetTileImprovementUnchecked(int32 Q, int32 R, FName ImprovementId)
+{
+	if (!IsValidTile(Q, R))
+	{
+		return false;
+	}
+
+	FHexTileData& Tile = Tiles[GetTileIndex(Q, R)];
+	if (!ImprovementId.IsNone() && !FindImprovementDefinition(ImprovementId))
+	{
+		return false;
+	}
+
+	Tile.ImprovementId = ImprovementId;
+	ResolveTileYields();
+	return true;
+}
+
 const FHexResourceDefinition* FHexGridModel::FindResourceDefinition(FName ResourceId) const
 {
 	const UHexResourceSetData* ResourceData = ResourceSetData.Get();
 	return ResourceData ? ResourceData->FindResource(ResourceId) : nullptr;
+}
+
+void FHexGridModel::GetAllImprovementDefinitions(TArray<const FHexImprovementDefinition*>& OutImprovements) const
+{
+	OutImprovements.Reset();
+
+	const UDataTable* ImprovementData = ImprovementTable.Get();
+	if (!ImprovementData)
+	{
+		return;
+	}
+
+	TArray<FHexImprovementDefinition*> Rows;
+	ImprovementData->GetAllRows(TEXT("GetAllImprovementDefinitions"), Rows);
+	for (const FHexImprovementDefinition* Row : Rows)
+	{
+		if (Row && !Row->ImprovementId.IsNone())
+		{
+			OutImprovements.Add(Row);
+		}
+	}
 }
 
 const FHexImprovementDefinition* FHexGridModel::FindImprovementDefinition(FName ImprovementId) const

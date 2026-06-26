@@ -1391,6 +1391,49 @@ int32 UConquestCityManager::CreateUnitFromProduction(const FCityState& City, FNa
 	return NewUnit.UnitInstanceId;
 }
 
+int32 UConquestCityManager::CheatSpawnUnitForPlayerAtTile(int32 PlayerId, FName UnitId, const FIntPoint& TileCoord)
+{
+	if (!GameStateRef || !GameStateRef->ContentManager || UnitId.IsNone())
+	{
+		return INDEX_NONE;
+	}
+
+	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
+	if (!GridModel || !GridModel->IsValidTile(TileCoord.X, TileCoord.Y))
+	{
+		return INDEX_NONE;
+	}
+
+	const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(UnitId);
+	if (!UnitRow)
+	{
+		return INDEX_NONE;
+	}
+
+	FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpireMutable(PlayerId);
+	if (Player.PlayerId != PlayerId)
+	{
+		return INDEX_NONE;
+	}
+
+	FConquestUnitState NewUnit;
+	NewUnit.UnitInstanceId = Player.NextUnitInstanceId++;
+	NewUnit.OwnerPlayerId = PlayerId;
+	NewUnit.UnitId = UnitRow->UnitId;
+	NewUnit.SourceCityId = INDEX_NONE;
+	NewUnit.TileCoord = TileCoord;
+	NewUnit.CurrentHealth = UnitRow->MaxHealth;
+
+	RecalculateUnitStats(NewUnit);
+	NewUnit.CurrentMovementPoints = NewUnit.CachedMovementPoints;
+
+	Player.Units.Add(NewUnit);
+	SpawnUnitActorForState(NewUnit);
+	GameStateRef->BroadcastStateChanged();
+
+	return NewUnit.UnitInstanceId;
+}
+
 void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
 {
 	if (!GameStateRef || !GameStateRef->ContentManager)

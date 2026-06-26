@@ -46,9 +46,11 @@ public:
 	const FHexTileData* GetTile(const FIntPoint& Coord) const;
 
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
+	bool SetTileImprovementUnchecked(int32 Q, int32 R, FName ImprovementId);
 	const FHexResourceDefinition* FindResourceDefinition(FName ResourceId) const;
 	void GetPossibleImprovementsForTile(int32 Q, int32 R, TArray<const FHexImprovementDefinition*>& OutImprovements) const;
 	void GetPossibleImprovementIdsForTile(int32 Q, int32 R, TArray<FName>& OutImprovementIds) const;
+	void GetAllImprovementDefinitions(TArray<const FHexImprovementDefinition*>& OutImprovements) const;
 	const FHexImprovementDefinition* FindImprovementDefinition(FName ImprovementId) const;
 
 	FVector GetHexCenter(int32 Q, int32 R) const;

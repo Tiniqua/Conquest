@@ -4,6 +4,7 @@
 #include "Engine/DataTable.h"
 #include "Conquest/Core/ConquestContentTypes.h"
 #include "Conquest/Core/ConquestModifierTypes.h"
+#include "Conquest/World/Generation/ConquestProceduralPlaceholderTypes.h"
 #include "Conquest/World/Generation/HexYieldTypes.h"
 #include "ConquestBuildingTypes.generated.h"
 
@@ -83,6 +84,9 @@ struct FConquestBuildingRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 RequiredPhilosophyTenets = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	FConquestProceduralPlaceholderVisual ProceduralVisual;
 
 	FName GetResolvedId() const
 	{

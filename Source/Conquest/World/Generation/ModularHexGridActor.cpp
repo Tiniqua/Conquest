@@ -1,6 +1,7 @@
 #include "ModularHexGridActor.h"
 
 #include "ConquestGameSetupTypes.h"
+#include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "HexMapTypePresets.h"
@@ -13,6 +14,7 @@
 #include "Conquest/UI/ConquestTileHealthBarWidget.h"
 #include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/Crc.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -125,6 +127,15 @@ AModularHexGridActor::AModularHexGridActor()
 	ExpansionCandidateMesh->bCastStaticShadow = false;
 	ExpansionCandidateMesh->CastShadow = false;
 	ExpansionCandidateMesh->TranslucencySortPriority = 6;
+
+	ProceduralPlaceholderMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralPlaceholderMesh"));
+	ProceduralPlaceholderMesh->SetupAttachment(SceneRoot);
+	ProceduralPlaceholderMesh->bUseAsyncCooking = true;
+	ProceduralPlaceholderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ProceduralPlaceholderMesh->SetGenerateOverlapEvents(false);
+	ProceduralPlaceholderMesh->bCastDynamicShadow = true;
+	ProceduralPlaceholderMesh->bCastStaticShadow = true;
+	ProceduralPlaceholderMesh->CastShadow = true;
 	
 	if (HoverHighlightMesh)
 	{
@@ -569,6 +580,593 @@ void AModularHexGridActor::ClearCityPlaceholders()
 
 	CityWorldLabelComponents.Reset();
 	ClearTileHealthBars();
+}
+
+void AModularHexGridActor::ClearProceduralPlaceholderVisuals()
+{
+	if (ProceduralPlaceholderMesh)
+	{
+		ProceduralPlaceholderMesh->ClearAllMeshSections();
+	}
+
+	ProceduralPlaceholderSectionMaterials.Reset();
+}
+
+int32 AModularHexGridActor::ResolveProceduralPlaceholderMaterialIndex(UMaterialInterface* Material)
+{
+	UMaterialInterface* EffectiveMaterial = Material ? Material : DefaultProceduralPlaceholderMaterial.Get();
+	for (int32 MaterialIndex = 0; MaterialIndex < ProceduralPlaceholderSectionMaterials.Num(); ++MaterialIndex)
+	{
+		if (ProceduralPlaceholderSectionMaterials[MaterialIndex].Get() == EffectiveMaterial)
+		{
+			return MaterialIndex;
+		}
+	}
+
+	return ProceduralPlaceholderSectionMaterials.Add(EffectiveMaterial);
+}
+
+FVector AModularHexGridActor::ProjectLocalPointToTerrain(const FVector& LocalPoint, const FIntPoint& FallbackTileCoord) const
+{
+	if (UWorld* World = GetWorld())
+	{
+		const FVector WorldTraceStart = GetActorTransform().TransformPosition(LocalPoint + FVector(0.0f, 0.0f, 10000.0f));
+		const FVector WorldTraceEnd = GetActorTransform().TransformPosition(LocalPoint - FVector(0.0f, 0.0f, 10000.0f));
+
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ProceduralPlaceholderTerrainTrace), false, this);
+		if (World->LineTraceSingleByChannel(HitResult, WorldTraceStart, WorldTraceEnd, ECC_Visibility, QueryParams))
+		{
+			return GetActorTransform().InverseTransformPosition(HitResult.ImpactPoint);
+		}
+	}
+
+	if (const FHexTileData* Tile = GridModel.GetTile(FallbackTileCoord))
+	{
+		return FVector(LocalPoint.X, LocalPoint.Y, Tile->Height);
+	}
+
+	return LocalPoint;
+}
+
+FConquestProceduralPlaceholderVisual AModularHexGridActor::ResolveProceduralPlaceholderPreset(
+	const FConquestProceduralPlaceholderVisual& Visual
+) const
+{
+	FConquestProceduralPlaceholderVisual Result = Visual;
+	const bool bUsesDefaultHeight = FMath::IsNearlyEqual(Visual.MeshHeight, 80.0f);
+
+	switch (Visual.Preset)
+	{
+	case EConquestPlaceholderVisualPreset::Farm:
+		Result.Shape = EConquestPlaceholderShape::Box;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 6);
+		Result.MeshHeight = bUsesDefaultHeight ? 10.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.18f, 0.55f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.96f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Edges;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Mine:
+		Result.Shape = EConquestPlaceholderShape::Pyramid;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 3);
+		Result.MeshHeight = bUsesDefaultHeight ? 90.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.38f, 0.38f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.78f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Center;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Quarry:
+		Result.Shape = EConquestPlaceholderShape::HexPrism;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 4);
+		Result.MeshHeight = bUsesDefaultHeight ? 26.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.3f, 0.3f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.82f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Random;
+		break;
+
+	case EConquestPlaceholderVisualPreset::LumberMill:
+		Result.Shape = EConquestPlaceholderShape::Box;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 5);
+		Result.MeshHeight = bUsesDefaultHeight ? 18.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.55f, 0.11f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.9f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Random;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Plantation:
+		Result.Shape = EConquestPlaceholderShape::Cylinder;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 8);
+		Result.MeshHeight = bUsesDefaultHeight ? 38.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.13f, 0.13f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.98f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Random;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Pasture:
+		Result.Shape = EConquestPlaceholderShape::Box;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 6);
+		Result.MeshHeight = bUsesDefaultHeight ? 16.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.12f, 0.42f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.96f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Edges;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Camp:
+		Result.Shape = EConquestPlaceholderShape::Pyramid;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 3);
+		Result.MeshHeight = bUsesDefaultHeight ? 42.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.22f, 0.22f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.9f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Center;
+		break;
+
+	case EConquestPlaceholderVisualPreset::FishingBoat:
+		Result.Shape = EConquestPlaceholderShape::Box;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 2);
+		Result.MeshHeight = bUsesDefaultHeight ? 18.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.34f, 0.16f, 1.0f)
+			: Visual.ShapeScale;
+		Result.ShapeScaleRate = FMath::Min(Result.ShapeScaleRate, 0.85f);
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Random;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Fort:
+		Result.Shape = EConquestPlaceholderShape::HexPrism;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 1);
+		Result.MeshHeight = bUsesDefaultHeight ? 70.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.56f, 0.56f, 1.0f)
+			: Visual.ShapeScale;
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Center;
+		break;
+
+	case EConquestPlaceholderVisualPreset::WatchTower:
+		Result.Shape = EConquestPlaceholderShape::Box;
+		Result.ShapeInstances = FMath::Max(Result.ShapeInstances, 1);
+		Result.MeshHeight = bUsesDefaultHeight ? 130.0f : Visual.MeshHeight;
+		Result.ShapeScale = Visual.ShapeScale == FVector(0.35f, 0.35f, 1.0f)
+			? FVector(0.16f, 0.16f, 1.0f)
+			: Visual.ShapeScale;
+		Result.PlacementBias = EConquestPlaceholderPlacementBias::Center;
+		break;
+
+	case EConquestPlaceholderVisualPreset::Custom:
+	default:
+		break;
+	}
+
+	return Result;
+}
+
+void AModularHexGridActor::AppendProceduralPlaceholderShape(
+	const FConquestProceduralPlaceholderVisual& Visual,
+	const FTransform& ShapeTransform,
+	int32 MaterialIndex,
+	TArray<FVector>& Vertices,
+	TArray<int32>& Triangles,
+	TArray<FVector>& Normals,
+	TArray<FVector2D>& UVs,
+	TArray<FColor>& VertexColors,
+	TArray<FProcMeshTangent>& Tangents,
+	TArray<int32>& MaterialIndices
+)
+{
+	auto AddVertex = [&](const FVector& LocalVertex, const FVector& LocalNormal, const FVector2D& UV)
+	{
+		Vertices.Add(ShapeTransform.GetLocation() + ShapeTransform.GetRotation().RotateVector(LocalVertex));
+		Normals.Add(ShapeTransform.GetRotation().RotateVector(LocalNormal).GetSafeNormal());
+		UVs.Add(UV);
+		VertexColors.Add(FColor::White);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		return Vertices.Num() - 1;
+	};
+
+	auto AddTriangle = [&](int32 A, int32 B, int32 C)
+	{
+		Triangles.Add(A);
+		Triangles.Add(B);
+		Triangles.Add(C);
+		MaterialIndices.Add(MaterialIndex);
+	};
+
+	auto AddQuad = [&](const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& Normal)
+	{
+		const int32 StartIndex = Vertices.Num();
+		AddVertex(A, Normal, FVector2D(0.0f, 0.0f));
+		AddVertex(B, Normal, FVector2D(1.0f, 0.0f));
+		AddVertex(C, Normal, FVector2D(1.0f, 1.0f));
+		AddVertex(D, Normal, FVector2D(0.0f, 1.0f));
+		AddTriangle(StartIndex, StartIndex + 1, StartIndex + 2);
+		AddTriangle(StartIndex, StartIndex + 2, StartIndex + 3);
+	};
+
+	const FVector Scale = ShapeTransform.GetScale3D();
+	const float HalfX = FMath::Max(1.0f, Scale.X);
+	const float HalfY = FMath::Max(1.0f, Scale.Y);
+	const float Height = FMath::Max(1.0f, Scale.Z);
+	const FVector Top(0.0f, 0.0f, Height);
+
+	if (Visual.Shape == EConquestPlaceholderShape::Pyramid)
+	{
+		const FVector A(-HalfX, -HalfY, 0.0f);
+		const FVector B(HalfX, -HalfY, 0.0f);
+		const FVector C(HalfX, HalfY, 0.0f);
+		const FVector D(-HalfX, HalfY, 0.0f);
+
+		AddQuad(D, C, B, A, FVector::DownVector);
+		const int32 IA = AddVertex(A, FVector(-1.0f, -1.0f, 1.0f).GetSafeNormal(), FVector2D(0.0f, 0.0f));
+		const int32 IB = AddVertex(B, FVector(1.0f, -1.0f, 1.0f).GetSafeNormal(), FVector2D(1.0f, 0.0f));
+		const int32 IC = AddVertex(C, FVector(1.0f, 1.0f, 1.0f).GetSafeNormal(), FVector2D(1.0f, 1.0f));
+		const int32 ID = AddVertex(D, FVector(-1.0f, 1.0f, 1.0f).GetSafeNormal(), FVector2D(0.0f, 1.0f));
+		const int32 ITop = AddVertex(Top, FVector::UpVector, FVector2D(0.5f, 0.5f));
+		AddTriangle(IA, IB, ITop);
+		AddTriangle(IB, IC, ITop);
+		AddTriangle(IC, ID, ITop);
+		AddTriangle(ID, IA, ITop);
+		return;
+	}
+
+	const int32 Sides = Visual.Shape == EConquestPlaceholderShape::Box
+		? 4
+		: (Visual.Shape == EConquestPlaceholderShape::HexPrism ? 6 : 10);
+	const float StartAngle = Visual.Shape == EConquestPlaceholderShape::Box ? PI * 0.25f : 0.0f;
+
+	TArray<int32> BottomIndices;
+	TArray<int32> TopIndices;
+	TArray<FVector> BottomLocalVertices;
+	TArray<FVector> TopLocalVertices;
+	for (int32 SideIndex = 0; SideIndex < Sides; ++SideIndex)
+	{
+		const float Angle = StartAngle + (static_cast<float>(SideIndex) / static_cast<float>(Sides)) * TWO_PI;
+		const FVector Normal(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+		const FVector Bottom(Normal.X * HalfX, Normal.Y * HalfY, 0.0f);
+		const FVector TopVertex(Normal.X * HalfX, Normal.Y * HalfY, Height);
+
+		BottomLocalVertices.Add(Bottom);
+		TopLocalVertices.Add(TopVertex);
+		BottomIndices.Add(AddVertex(Bottom, FVector::DownVector, FVector2D::ZeroVector));
+		TopIndices.Add(AddVertex(TopVertex, FVector::UpVector, FVector2D::ZeroVector));
+	}
+
+	const int32 BottomCenter = AddVertex(FVector::ZeroVector, FVector::DownVector, FVector2D(0.5f, 0.5f));
+	const int32 TopCenter = AddVertex(Top, FVector::UpVector, FVector2D(0.5f, 0.5f));
+
+	for (int32 SideIndex = 0; SideIndex < Sides; ++SideIndex)
+	{
+		const int32 NextIndex = (SideIndex + 1) % Sides;
+		AddTriangle(BottomCenter, BottomIndices[NextIndex], BottomIndices[SideIndex]);
+		AddTriangle(TopCenter, TopIndices[SideIndex], TopIndices[NextIndex]);
+
+		const FVector SideNormal = (BottomLocalVertices[SideIndex] + BottomLocalVertices[NextIndex]).GetSafeNormal();
+		const int32 A = AddVertex(BottomLocalVertices[SideIndex], SideNormal, FVector2D(0.0f, 0.0f));
+		const int32 B = AddVertex(BottomLocalVertices[NextIndex], SideNormal, FVector2D(1.0f, 0.0f));
+		const int32 C = AddVertex(TopLocalVertices[NextIndex], SideNormal, FVector2D(1.0f, 1.0f));
+		const int32 D = AddVertex(TopLocalVertices[SideIndex], SideNormal, FVector2D(0.0f, 1.0f));
+		AddTriangle(A, B, C);
+		AddTriangle(A, C, D);
+	}
+}
+
+void AModularHexGridActor::AppendProceduralPlaceholderForTile(
+	const FConquestProceduralPlaceholderVisual& Visual,
+	const FIntPoint& TileCoord,
+	FName StableId,
+	const FIntPoint& CityCenter,
+	int32 CityDistance,
+	TArray<FVector>& Vertices,
+	TArray<int32>& Triangles,
+	TArray<FVector>& Normals,
+	TArray<FVector2D>& UVs,
+	TArray<FColor>& VertexColors,
+	TArray<FProcMeshTangent>& Tangents,
+	TArray<int32>& MaterialIndices
+)
+{
+	if (!Visual.ShouldRender() || !GridModel.IsValidTile(TileCoord.X, TileCoord.Y))
+	{
+		return;
+	}
+
+	const FConquestProceduralPlaceholderVisual EffectiveVisual = ResolveProceduralPlaceholderPreset(Visual);
+	const FVector TileCenter = GridModel.GetHexCenter(TileCoord.X, TileCoord.Y);
+	const float HexRadius = FMath::Max(1.0f, GridModel.GetHexRadius());
+	const int32 InstanceCount = FMath::Clamp(EffectiveVisual.ShapeInstances, 1, 32);
+	const uint32 CoordHash = HashCombine(
+		static_cast<uint32>(TileCoord.X),
+		static_cast<uint32>(TileCoord.Y)
+	);
+	const uint32 StableIdHash = StableId.IsNone()
+		? 0u
+		: FCrc::StrCrc32(*StableId.ToString());
+	const int32 Seed = static_cast<int32>(HashCombine(
+		CoordHash,
+		HashCombine(StableIdHash, static_cast<uint32>(InstanceCount))
+	));
+	FRandomStream RandomStream(Seed);
+
+	for (int32 InstanceIndex = 0; InstanceIndex < InstanceCount; ++InstanceIndex)
+	{
+		FVector Offset = FVector::ZeroVector;
+		if (EffectiveVisual.PlacementBias == EConquestPlaceholderPlacementBias::Edges)
+		{
+			const int32 EdgeIndex = InstanceIndex % 6;
+			Offset = GridModel.GetHexCornerOffset(EdgeIndex) * 0.72f;
+		}
+		else if (EffectiveVisual.PlacementBias == EConquestPlaceholderPlacementBias::Random)
+		{
+			const float Radius = HexRadius * 0.58f * FMath::Sqrt(RandomStream.FRand());
+			const float Angle = RandomStream.FRandRange(0.0f, TWO_PI);
+			Offset = FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+		}
+		else if (EffectiveVisual.PlacementBias == EConquestPlaceholderPlacementBias::CityBiased)
+		{
+			FVector ToCity = GridModel.GetHexCenter(CityCenter.X, CityCenter.Y) - TileCenter;
+			ToCity.Z = 0.0f;
+			if (!ToCity.Normalize())
+			{
+				const float Angle = (static_cast<float>(InstanceIndex) / static_cast<float>(InstanceCount)) * TWO_PI;
+				ToCity = FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+			}
+			const float BiasDistance = CityDistance <= 0 ? HexRadius * 0.28f : HexRadius * 0.42f;
+			const float JitterAngle = RandomStream.FRandRange(-PI * 0.18f, PI * 0.18f);
+			Offset = ToCity.RotateAngleAxis(FMath::RadiansToDegrees(JitterAngle), FVector::UpVector) * BiasDistance;
+		}
+		else if (InstanceCount > 1)
+		{
+			const float Radius = HexRadius * 0.22f;
+			const float Angle = (static_cast<float>(InstanceIndex) / static_cast<float>(InstanceCount)) * TWO_PI;
+			Offset = FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+		}
+
+		FVector SurfaceLocation = TileCenter + Offset;
+		if (EffectiveVisual.bAlignToTerrain)
+		{
+			SurfaceLocation = ProjectLocalPointToTerrain(SurfaceLocation, TileCoord);
+		}
+		else if (const FHexTileData* Tile = GridModel.GetTile(TileCoord))
+		{
+			SurfaceLocation.Z = Tile->Height;
+		}
+
+		const float InstanceScale = FMath::Pow(FMath::Clamp(EffectiveVisual.ShapeScaleRate, 0.01f, 1.0f), InstanceIndex);
+		const float WidthScale = EffectiveVisual.bCoversFullTile ? 0.78f : FMath::Max(0.01f, EffectiveVisual.ShapeScale.X) * 0.5f;
+		const float DepthScale = EffectiveVisual.bCoversFullTile ? 0.78f : FMath::Max(0.01f, EffectiveVisual.ShapeScale.Y) * 0.5f;
+		const FVector ShapeSize(
+			HexRadius * WidthScale * InstanceScale,
+			HexRadius * DepthScale * InstanceScale,
+			FMath::Max(1.0f, EffectiveVisual.MeshHeight * FMath::Max(0.01f, EffectiveVisual.ShapeScale.Z) * InstanceScale)
+		);
+
+		UMaterialInterface* Material = EffectiveVisual.Materials.IsValidIndex(InstanceIndex)
+			? EffectiveVisual.Materials[InstanceIndex].Get()
+			: (EffectiveVisual.Materials.Num() > 0 ? EffectiveVisual.Materials[0].Get() : nullptr);
+		const int32 MaterialIndex = ResolveProceduralPlaceholderMaterialIndex(Material);
+
+		FRotator Rotation = EffectiveVisual.MeshRotation;
+		Rotation.Yaw += RandomStream.FRandRange(-18.0f, 18.0f);
+
+		AppendProceduralPlaceholderShape(
+			EffectiveVisual,
+			FTransform(Rotation, SurfaceLocation + EffectiveVisual.MeshOffset, ShapeSize),
+			MaterialIndex,
+			Vertices,
+			Triangles,
+			Normals,
+			UVs,
+			VertexColors,
+			Tangents,
+			MaterialIndices
+		);
+	}
+}
+
+void AModularHexGridActor::RebuildProceduralPlaceholderVisuals(
+	const TArray<FCityState>& Cities,
+	const UDataTable* BuildingTable
+)
+{
+	ClearProceduralPlaceholderVisuals();
+
+	if (!ProceduralPlaceholderMesh)
+	{
+		return;
+	}
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<int32> MaterialIndices;
+
+	const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
+	for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
+	{
+		const FHexTileData& Tile = Tiles[TileIndex];
+		if (Tile.ImprovementId.IsNone())
+		{
+			continue;
+		}
+
+		const FHexImprovementDefinition* Improvement = GridModel.FindImprovementDefinition(Tile.ImprovementId);
+		if (!Improvement || !Improvement->ProceduralVisual.ShouldRender())
+		{
+			continue;
+		}
+
+		int32 Q = INDEX_NONE;
+		int32 R = INDEX_NONE;
+		if (GridModel.GetCoordFromIndex(TileIndex, Q, R))
+		{
+			AppendProceduralPlaceholderForTile(
+				Improvement->ProceduralVisual,
+				FIntPoint(Q, R),
+				Improvement->ImprovementId,
+				FIntPoint(Q, R),
+				0,
+				Vertices,
+				Triangles,
+				Normals,
+				UVs,
+				VertexColors,
+				Tangents,
+				MaterialIndices
+			);
+		}
+	}
+
+	for (const FCityState& City : Cities)
+	{
+		auto FindBuildingRow = [BuildingTable](FName BuildingId) -> const FConquestBuildingRow*
+		{
+			if (!BuildingTable || BuildingId.IsNone())
+			{
+				return nullptr;
+			}
+
+			if (const FConquestBuildingRow* Row = BuildingTable->FindRow<FConquestBuildingRow>(
+				BuildingId,
+				TEXT("ProceduralBuildingVisual"),
+				false
+			))
+			{
+				return Row;
+			}
+
+			TArray<FConquestBuildingRow*> Rows;
+			BuildingTable->GetAllRows(TEXT("ProceduralBuildingVisual"), Rows);
+			for (const FConquestBuildingRow* Row : Rows)
+			{
+				if (Row && Row->BuildingId == BuildingId)
+				{
+					return Row;
+				}
+			}
+
+			return nullptr;
+		};
+
+		TArray<FIntPoint> PlacementTiles = City.OwnedTiles;
+		if (PlacementTiles.Num() <= 0)
+		{
+			PlacementTiles.Add(City.CenterTile);
+		}
+
+		PlacementTiles.Sort([this, &City](const FIntPoint& A, const FIntPoint& B)
+		{
+			const int32 DistanceA = GridModel.GetHexDistance(City.CenterTile, A);
+			const int32 DistanceB = GridModel.GetHexDistance(City.CenterTile, B);
+			if (DistanceA != DistanceB)
+			{
+				return DistanceA < DistanceB;
+			}
+
+			if (A.X != B.X)
+			{
+				return A.X < B.X;
+			}
+
+			return A.Y < B.Y;
+		});
+
+		int32 VisualBuildingIndex = 0;
+		for (const FName BuildingId : City.ConstructedBuildingIds)
+		{
+			const FConquestBuildingRow* BuildingRow = FindBuildingRow(BuildingId);
+			if (!BuildingRow || !BuildingRow->ProceduralVisual.ShouldRender() || BuildingRow->bIsProject)
+			{
+				continue;
+			}
+
+			const bool bUseCenterTile =
+				BuildingRow->BuildingId == FName(TEXT("CityCentre")) ||
+				BuildingRow->ProceduralVisual.bCoversFullTile ||
+				PlacementTiles.Num() <= 1;
+			const int32 PlacementIndex = bUseCenterTile
+				? 0
+				: (VisualBuildingIndex % PlacementTiles.Num());
+			const FIntPoint PlacementCoord = PlacementTiles.IsValidIndex(PlacementIndex)
+				? PlacementTiles[PlacementIndex]
+				: City.CenterTile;
+			const int32 CityDistance = GridModel.GetHexDistance(City.CenterTile, PlacementCoord);
+
+			AppendProceduralPlaceholderForTile(
+				BuildingRow->ProceduralVisual,
+				PlacementCoord,
+				BuildingRow->BuildingId,
+				City.CenterTile,
+				CityDistance,
+				Vertices,
+				Triangles,
+				Normals,
+				UVs,
+				VertexColors,
+				Tangents,
+				MaterialIndices
+			);
+
+			++VisualBuildingIndex;
+		}
+	}
+
+	const int32 SectionCount = FMath::Max(1, ProceduralPlaceholderSectionMaterials.Num());
+	for (int32 SectionIndex = 0; SectionIndex < SectionCount; ++SectionIndex)
+	{
+		TArray<int32> SectionTriangles;
+		for (int32 TriangleIndex = 0; TriangleIndex < MaterialIndices.Num(); ++TriangleIndex)
+		{
+			if (MaterialIndices[TriangleIndex] != SectionIndex)
+			{
+				continue;
+			}
+
+			const int32 SourceTriangleIndex = TriangleIndex * 3;
+			if (Triangles.IsValidIndex(SourceTriangleIndex + 2))
+			{
+				SectionTriangles.Add(Triangles[SourceTriangleIndex]);
+				SectionTriangles.Add(Triangles[SourceTriangleIndex + 1]);
+				SectionTriangles.Add(Triangles[SourceTriangleIndex + 2]);
+			}
+		}
+
+		if (SectionTriangles.Num() <= 0)
+		{
+			continue;
+		}
+
+		ProceduralPlaceholderMesh->CreateMeshSection(
+			SectionIndex,
+			Vertices,
+			SectionTriangles,
+			Normals,
+			UVs,
+			VertexColors,
+			Tangents,
+			false
+		);
+
+		if (ProceduralPlaceholderSectionMaterials.IsValidIndex(SectionIndex) && ProceduralPlaceholderSectionMaterials[SectionIndex])
+		{
+			ProceduralPlaceholderMesh->SetMaterial(SectionIndex, ProceduralPlaceholderSectionMaterials[SectionIndex]);
+		}
+	}
 }
 
 void AModularHexGridActor::RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial)
@@ -2398,6 +2996,7 @@ void AModularHexGridActor::RebuildGrid()
 	}
 
 	ClearCityPlaceholders();
+	ClearProceduralPlaceholderVisuals();
 	if (CivilisationBorderMesh)
 	{
 		CivilisationBorderMesh->ClearAllMeshSections();
@@ -2755,6 +3354,20 @@ void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
 		GridModel,
 		ImprovementMeshComponents
 	);
+
+	if (const AConquestGameState* ConquestGameState = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		if (ConquestGameState->CityManager)
+		{
+			RebuildProceduralPlaceholderVisuals(
+				ConquestGameState->CityManager->Cities,
+				ConquestGameState->BuildingTable
+			);
+			return;
+		}
+	}
+
+	RebuildProceduralPlaceholderVisuals(TArray<FCityState>(), nullptr);
 }
 
 bool AModularHexGridActor::GetTileAtWorldLocation(

@@ -93,6 +93,9 @@ public:
 	void RecalculateUnitStats(FConquestUnitState& Unit) const;
 
 	UFUNCTION(BlueprintCallable)
+	int32 CheatSpawnUnitForPlayerAtTile(int32 PlayerId, FName UnitId, const FIntPoint& TileCoord);
+
+	UFUNCTION(BlueprintCallable)
 	bool RefreshCityYields(int32 CityId);
 
 	UFUNCTION(BlueprintCallable)

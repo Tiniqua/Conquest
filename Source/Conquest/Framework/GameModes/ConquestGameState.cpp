@@ -90,7 +90,7 @@ namespace
 			int32 R = INDEX_NONE;
 			if (GridModel.GetCoordFromIndex(TileIndex, Q, R))
 			{
-				bChangedAnyImprovement |= GridModel.SetTileImprovement(Q, R, NAME_None);
+				bChangedAnyImprovement |= GridModel.SetTileImprovementUnchecked(Q, R, NAME_None);
 			}
 		}
 
@@ -98,7 +98,12 @@ namespace
 		{
 			if (!ReplicatedImprovement.ImprovementId.IsNone())
 			{
-				bChangedAnyImprovement |= GridModel.SetTileImprovement(
+				const bool bAppliedNormally = GridModel.SetTileImprovement(
+					ReplicatedImprovement.Coord.X,
+					ReplicatedImprovement.Coord.Y,
+					ReplicatedImprovement.ImprovementId
+				);
+				bChangedAnyImprovement |= bAppliedNormally || GridModel.SetTileImprovementUnchecked(
 					ReplicatedImprovement.Coord.X,
 					ReplicatedImprovement.Coord.Y,
 					ReplicatedImprovement.ImprovementId
@@ -203,6 +208,7 @@ void AConquestGameState::BroadcastStateChanged()
 	if (HasAuthority())
 	{
 		PushReplicatedState();
+		RebuildCityVisualsFromReplicatedState();
 		RebuildUnitVisualsFromReplicatedState();
 	}
 
@@ -850,6 +856,8 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 			);
 		}
 	}
+
+	ActiveGridActor->RebuildProceduralPlaceholderVisuals(CityManager->Cities, BuildingTable);
 }
 
 void AConquestGameState::RebuildUnitVisualsFromReplicatedState()

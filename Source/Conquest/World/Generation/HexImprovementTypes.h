@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataTable.h"
+#include "ConquestProceduralPlaceholderTypes.h"
 #include "HexResourceTypes.h"
 #include "HexImprovementTypes.generated.h"
 
@@ -103,6 +104,9 @@ struct FHexImprovementDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Visual")
 	TObjectPtr<UMaterialInterface> IconMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Procedural Visual")
+	FConquestProceduralPlaceholderVisual ProceduralVisual;
 
 	bool IsValidForTile(const FHexTileData& Tile, bool bTileIsWater) const
 	{

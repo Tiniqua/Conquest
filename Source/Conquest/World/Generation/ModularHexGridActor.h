@@ -7,6 +7,7 @@
 #include "HexFeatureGenerator.h"
 #include "HexFeatureMeshBuilder.h"
 #include "HexImprovementMeshBuilder.h"
+#include "ConquestProceduralPlaceholderTypes.h"
 #include "GameFramework/Actor.h"
 #include "HexGridModel.h"
 #include "HexMapGenerator.h"
@@ -14,6 +15,7 @@
 #include "HexMeshBuilder.h"
 #include "HexSimpleRiverGenerator.h"
 #include "HexTileResourceMeshBuilder.h"
+#include "ProceduralMeshComponent.h"
 #include "ModularHexGridActor.generated.h"
 
 class USceneComponent;
@@ -29,6 +31,7 @@ class UHexTileResourceData;
 class UHexResourceSetData;
 class UDataTable;
 class FLifetimeProperty;
+struct FConquestBuildingRow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTileYieldLensTransitionFinished, EConquestYieldType, YieldType);
 
@@ -81,6 +84,7 @@ public:
 	void RemoveTileHealthBar(const FIntPoint& Coord);
 	void ClearTileHealthBars();
 	void ClearCityPlaceholders();
+	void RebuildProceduralPlaceholderVisuals(const TArray<FCityState>& Cities, const UDataTable* BuildingTable);
 	void ClearCivilisationBorders();
 	void RebuildCivilisationBorders(int32 OwnerPlayerId, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
 	void RebuildCivilisationBordersForTiles(const TArray<FIntPoint>& OwnedTiles, UMaterialInterface* BorderMaterial, UMaterialInterface* BorderFillMaterial = nullptr);
@@ -417,6 +421,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
 	FLinearColor CultureYieldColor = FLinearColor(0.75f, 0.2f, 0.95f, 1.0f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Procedural Visuals")
+	TObjectPtr<UProceduralMeshComponent> ProceduralPlaceholderMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Procedural Visuals")
+	TObjectPtr<UMaterialInterface> DefaultProceduralPlaceholderMaterial = nullptr;
 	
 protected:
 	virtual void BeginPlay() override;
@@ -522,6 +532,9 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ImprovementMeshComponents;
 
 	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInterface>> ProceduralPlaceholderSectionMaterials;
+
+	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldBorderMaterialInstances;
 
 	UPROPERTY()
@@ -535,6 +548,38 @@ private:
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
 	void RebuildPlacedTileVisualMeshes();
+	void ClearProceduralPlaceholderVisuals();
+	FConquestProceduralPlaceholderVisual ResolveProceduralPlaceholderPreset(
+		const FConquestProceduralPlaceholderVisual& Visual
+	) const;
+	void AppendProceduralPlaceholderForTile(
+		const FConquestProceduralPlaceholderVisual& Visual,
+		const FIntPoint& TileCoord,
+		FName StableId,
+		const FIntPoint& CityCenter,
+		int32 CityDistance,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents,
+		TArray<int32>& MaterialIndices
+	);
+	void AppendProceduralPlaceholderShape(
+		const FConquestProceduralPlaceholderVisual& Visual,
+		const FTransform& ShapeTransform,
+		int32 MaterialIndex,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents,
+		TArray<int32>& MaterialIndices
+	);
+	FVector ProjectLocalPointToTerrain(const FVector& LocalPoint, const FIntPoint& FallbackTileCoord) const;
+	int32 ResolveProceduralPlaceholderMaterialIndex(UMaterialInterface* Material);
 	void RebuildFogOfWarMesh();
 	void ClearTileYieldOverlay();
 	void BuildAllTileYieldOverlays();

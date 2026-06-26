@@ -7,13 +7,347 @@
 #include "Components/ComboBoxString.h"
 #include "Components/SpinBox.h"
 #include "Components/TextBlock.h"
+#include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
+#include "Conquest/Core/ConquestContentManager.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Player/ConquestPlayerController.h"
+#include "Conquest/Units/ConquestUnitTypes.h"
 #include "ConquestHUDWidget.h"
 #include "Misc/Guid.h"
+
+namespace
+{
+	FString ConquestSetupEnumValueToString(const UEnum* Enum, int64 Value)
+	{
+		if (!Enum)
+		{
+			return TEXT("Unknown");
+		}
+
+		FString Name = Enum->GetDisplayNameTextByValue(Value).ToString();
+		if (Name.IsEmpty())
+		{
+			Name = Enum->GetNameStringByValue(Value);
+		}
+		return Name;
+	}
+
+	FString ConquestSetupFormatSignedInt(int32 Value)
+	{
+		return Value > 0
+			? FString::Printf(TEXT("+%d"), Value)
+			: FString::Printf(TEXT("%d"), Value);
+	}
+
+	FString ConquestSetupFormatSignedFloat(float Value)
+	{
+		return Value > 0.0f
+			? FString::Printf(TEXT("+%.1f"), Value)
+			: FString::Printf(TEXT("%.1f"), Value);
+	}
+
+	FString ConquestSetupFormatPercent(float Value)
+	{
+		return FString::Printf(TEXT("%+.0f%%"), Value * 100.0f);
+	}
+
+	void ConquestSetupAppendLine(TArray<FString>& Lines, const FString& Line)
+	{
+		if (!Line.IsEmpty())
+		{
+			Lines.Add(Line);
+		}
+	}
+
+	FString ConquestSetupFormatYield(const FHexYield& Yield)
+	{
+		TArray<FString> Parts;
+		if (Yield.Food != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Food"), *ConquestSetupFormatSignedInt(Yield.Food)));
+		}
+		if (Yield.Production != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Production"), *ConquestSetupFormatSignedInt(Yield.Production)));
+		}
+		if (Yield.Gold != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Gold"), *ConquestSetupFormatSignedInt(Yield.Gold)));
+		}
+		if (Yield.Science != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Science"), *ConquestSetupFormatSignedInt(Yield.Science)));
+		}
+		if (Yield.Culture != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Culture"), *ConquestSetupFormatSignedInt(Yield.Culture)));
+		}
+		return FString::Join(Parts, TEXT(", "));
+	}
+
+	FString ConquestSetupFormatModifier(const FConquestModifierDefinition& Modifier)
+	{
+		if (!Modifier.Description.IsEmpty())
+		{
+			return Modifier.Description.ToString();
+		}
+
+		const FString OperationName = ConquestSetupEnumValueToString(
+			StaticEnum<EConquestModifierOperation>(),
+			static_cast<int64>(Modifier.Operation)
+		);
+		const FString AttributeName = ConquestSetupEnumValueToString(
+			StaticEnum<EConquestModifierAttribute>(),
+			static_cast<int64>(Modifier.Attribute)
+		);
+		const FString ScopeName = ConquestSetupEnumValueToString(
+			StaticEnum<EConquestModifierTargetScope>(),
+			static_cast<int64>(Modifier.TargetScope)
+		);
+
+		FString ValueText;
+		switch (Modifier.Operation)
+		{
+		case EConquestModifierOperation::AddPercent:
+			ValueText = ConquestSetupFormatPercent(Modifier.Value);
+			break;
+		case EConquestModifierOperation::Multiply:
+			ValueText = FString::Printf(TEXT("x%.2f"), Modifier.Value);
+			break;
+		default:
+			ValueText = ConquestSetupFormatSignedFloat(Modifier.Value);
+			break;
+		}
+
+		FString Result = FString::Printf(TEXT("%s %s to %s"), *ValueText, *AttributeName, *ScopeName);
+		if (Modifier.CountSource != EConquestModifierCountSource::None)
+		{
+			const FString CountSourceName = ConquestSetupEnumValueToString(
+				StaticEnum<EConquestModifierCountSource>(),
+				static_cast<int64>(Modifier.CountSource)
+			);
+			Result += FString::Printf(TEXT(" per %d %s"), FMath::Max(1, Modifier.CountDivisor), *CountSourceName);
+		}
+		if (Modifier.Conditions.Num() > 0)
+		{
+			Result += FString::Printf(TEXT(" (%d condition%s)"), Modifier.Conditions.Num(), Modifier.Conditions.Num() == 1 ? TEXT("") : TEXT("s"));
+		}
+		if (!OperationName.IsEmpty() && Modifier.Operation == EConquestModifierOperation::Override)
+		{
+			Result += FString::Printf(TEXT(" [%s]"), *OperationName);
+		}
+		return Result;
+	}
+
+	FString ConquestSetupFormatUnitStats(const FConquestUnitRow& Unit)
+	{
+		TArray<FString> Parts;
+		Parts.Add(FString::Printf(
+			TEXT("Cost %d | Str %d | Range %d | HP %d | Regen %d | Move %d | Upkeep %d"),
+			Unit.ProductionCost,
+			Unit.Strength,
+			Unit.AttackRange,
+			Unit.MaxHealth,
+			Unit.HealthRegenPerTurn,
+			Unit.MovementPoints,
+			Unit.GoldMaintenancePerTurn
+		));
+		if (!Unit.RequiredTechId.IsNone())
+		{
+			Parts.Add(FString::Printf(TEXT("Requires %s"), *Unit.RequiredTechId.ToString()));
+		}
+		if (!Unit.UpgradesToUnitId.IsNone())
+		{
+			Parts.Add(FString::Printf(TEXT("Upgrades to %s (%d Gold)"), *Unit.UpgradesToUnitId.ToString(), Unit.UpgradeGoldCost));
+		}
+		if (!Unit.UpgradeUnlockedByTechId.IsNone())
+		{
+			Parts.Add(FString::Printf(TEXT("Upgrade tech %s"), *Unit.UpgradeUnlockedByTechId.ToString()));
+		}
+		if (Unit.bCanFoundCity)
+		{
+			Parts.Add(TEXT("Can found cities"));
+		}
+		if (Unit.AllowedAugmentIds.Num() > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%d allowed augment%s"), Unit.AllowedAugmentIds.Num(), Unit.AllowedAugmentIds.Num() == 1 ? TEXT("") : TEXT("s")));
+		}
+		if (Unit.Modifiers.Num() > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%d modifier%s"), Unit.Modifiers.Num(), Unit.Modifiers.Num() == 1 ? TEXT("") : TEXT("s")));
+		}
+		return FString::Join(Parts, TEXT(" | "));
+	}
+
+	FString ConquestSetupFormatUnitDiff(const FConquestUnitRow& Unit, const FConquestUnitRow& BaseUnit)
+	{
+		TArray<FString> Parts;
+		if (Unit.ProductionCost != BaseUnit.ProductionCost)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Cost"), *ConquestSetupFormatSignedInt(Unit.ProductionCost - BaseUnit.ProductionCost)));
+		}
+		if (Unit.Strength != BaseUnit.Strength)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Atk"), *ConquestSetupFormatSignedInt(Unit.Strength - BaseUnit.Strength)));
+		}
+		if (Unit.AttackRange != BaseUnit.AttackRange)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Range"), *ConquestSetupFormatSignedInt(Unit.AttackRange - BaseUnit.AttackRange)));
+		}
+		if (Unit.MaxHealth != BaseUnit.MaxHealth)
+		{
+			Parts.Add(FString::Printf(TEXT("%s HP"), *ConquestSetupFormatSignedInt(Unit.MaxHealth - BaseUnit.MaxHealth)));
+		}
+		if (Unit.HealthRegenPerTurn != BaseUnit.HealthRegenPerTurn)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Regen"), *ConquestSetupFormatSignedInt(Unit.HealthRegenPerTurn - BaseUnit.HealthRegenPerTurn)));
+		}
+		if (Unit.MovementPoints != BaseUnit.MovementPoints)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Move"), *ConquestSetupFormatSignedInt(Unit.MovementPoints - BaseUnit.MovementPoints)));
+		}
+		if (Unit.GoldMaintenancePerTurn != BaseUnit.GoldMaintenancePerTurn)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Upkeep"), *ConquestSetupFormatSignedInt(Unit.GoldMaintenancePerTurn - BaseUnit.GoldMaintenancePerTurn)));
+		}
+		if (Unit.bCanFoundCity != BaseUnit.bCanFoundCity)
+		{
+			Parts.Add(Unit.bCanFoundCity ? TEXT("Can found cities") : TEXT("Cannot found cities"));
+		}
+		if (Unit.RequiredTechId != BaseUnit.RequiredTechId)
+		{
+			Parts.Add(FString::Printf(TEXT("Requires %s"), Unit.RequiredTechId.IsNone() ? TEXT("no tech") : *Unit.RequiredTechId.ToString()));
+		}
+		if (Unit.UpgradesToUnitId != BaseUnit.UpgradesToUnitId)
+		{
+			Parts.Add(FString::Printf(TEXT("Upgrades to %s"), Unit.UpgradesToUnitId.IsNone() ? TEXT("nothing") : *Unit.UpgradesToUnitId.ToString()));
+		}
+		if (Unit.AllowedAugmentIds.Num() != BaseUnit.AllowedAugmentIds.Num())
+		{
+			Parts.Add(FString::Printf(TEXT("%+d allowed augments"), Unit.AllowedAugmentIds.Num() - BaseUnit.AllowedAugmentIds.Num()));
+		}
+		if (Unit.Modifiers.Num() != BaseUnit.Modifiers.Num())
+		{
+			Parts.Add(FString::Printf(TEXT("%+d modifier entries"), Unit.Modifiers.Num() - BaseUnit.Modifiers.Num()));
+		}
+		return Parts.Num() > 0 ? FString::Join(Parts, TEXT(", ")) : TEXT("No stat changes");
+	}
+
+	FString ConquestSetupFormatBuildingStats(const FConquestBuildingRow& Building)
+	{
+		TArray<FString> Parts;
+		Parts.Add(FString::Printf(TEXT("Cost %d"), Building.ProductionCost));
+		Parts.Add(ConquestSetupEnumValueToString(
+			StaticEnum<EConquestProductionCategory>(),
+			static_cast<int64>(Building.ProductionCategory)
+		));
+		if (!Building.RequiredTechId.IsNone())
+		{
+			Parts.Add(FString::Printf(TEXT("Requires %s"), *Building.RequiredTechId.ToString()));
+		}
+		const FString YieldText = ConquestSetupFormatYield(Building.FlatCityYieldBonus);
+		if (!YieldText.IsEmpty())
+		{
+			Parts.Add(YieldText);
+		}
+		if (Building.HappinessBonus != 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Happiness"), *ConquestSetupFormatSignedInt(Building.HappinessBonus)));
+		}
+		if (Building.StrategicResourceCapBonuses.Num() > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%d resource cap bonus%s"), Building.StrategicResourceCapBonuses.Num(), Building.StrategicResourceCapBonuses.Num() == 1 ? TEXT("") : TEXT("es")));
+		}
+		if (Building.UnlockedTileImprovementIds.Num() > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("Unlocks %d improvement%s"), Building.UnlockedTileImprovementIds.Num(), Building.UnlockedTileImprovementIds.Num() == 1 ? TEXT("") : TEXT("s")));
+		}
+		if (Building.Modifiers.Num() > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("%d modifier%s"), Building.Modifiers.Num(), Building.Modifiers.Num() == 1 ? TEXT("") : TEXT("s")));
+		}
+		if (Building.bGrantedOnCityFounding)
+		{
+			Parts.Add(TEXT("Granted on founding"));
+		}
+		if (Building.bIsWorldWonder)
+		{
+			Parts.Add(TEXT("World Wonder"));
+		}
+		if (Building.bIsNationalWonder)
+		{
+			Parts.Add(TEXT("National Wonder"));
+		}
+		if (Building.bIsProject)
+		{
+			Parts.Add(TEXT("Project"));
+		}
+		return FString::Join(Parts, TEXT(" | "));
+	}
+
+	FString ConquestSetupFormatBuildingDiff(const FConquestBuildingRow& Building, const FConquestBuildingRow& BaseBuilding)
+	{
+		TArray<FString> Parts;
+		if (Building.ProductionCost != BaseBuilding.ProductionCost)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Cost"), *ConquestSetupFormatSignedInt(Building.ProductionCost - BaseBuilding.ProductionCost)));
+		}
+
+		FHexYield YieldDiff;
+		YieldDiff.Food = Building.FlatCityYieldBonus.Food - BaseBuilding.FlatCityYieldBonus.Food;
+		YieldDiff.Production = Building.FlatCityYieldBonus.Production - BaseBuilding.FlatCityYieldBonus.Production;
+		YieldDiff.Gold = Building.FlatCityYieldBonus.Gold - BaseBuilding.FlatCityYieldBonus.Gold;
+		YieldDiff.Science = Building.FlatCityYieldBonus.Science - BaseBuilding.FlatCityYieldBonus.Science;
+		YieldDiff.Culture = Building.FlatCityYieldBonus.Culture - BaseBuilding.FlatCityYieldBonus.Culture;
+		const FString YieldDiffText = ConquestSetupFormatYield(YieldDiff);
+		if (!YieldDiffText.IsEmpty())
+		{
+			Parts.Add(YieldDiffText);
+		}
+		if (Building.HappinessBonus != BaseBuilding.HappinessBonus)
+		{
+			Parts.Add(FString::Printf(TEXT("%s Happiness"), *ConquestSetupFormatSignedInt(Building.HappinessBonus - BaseBuilding.HappinessBonus)));
+		}
+		if (Building.RequiredTechId != BaseBuilding.RequiredTechId)
+		{
+			Parts.Add(FString::Printf(TEXT("Requires %s"), Building.RequiredTechId.IsNone() ? TEXT("no tech") : *Building.RequiredTechId.ToString()));
+		}
+		if (Building.ProductionCategory != BaseBuilding.ProductionCategory)
+		{
+			Parts.Add(FString::Printf(
+				TEXT("Category %s"),
+				*ConquestSetupEnumValueToString(StaticEnum<EConquestProductionCategory>(), static_cast<int64>(Building.ProductionCategory))
+			));
+		}
+		if (Building.Modifiers.Num() != BaseBuilding.Modifiers.Num())
+		{
+			Parts.Add(FString::Printf(TEXT("%+d modifier entries"), Building.Modifiers.Num() - BaseBuilding.Modifiers.Num()));
+		}
+		if (Building.UnlockedTileImprovementIds.Num() != BaseBuilding.UnlockedTileImprovementIds.Num())
+		{
+			Parts.Add(FString::Printf(TEXT("%+d unlocked improvements"), Building.UnlockedTileImprovementIds.Num() - BaseBuilding.UnlockedTileImprovementIds.Num()));
+		}
+		return Parts.Num() > 0 ? FString::Join(Parts, TEXT(", ")) : TEXT("No stat changes");
+	}
+
+	FString ConquestSetupGetUnitName(const FConquestUnitRow* Unit, FName FallbackId)
+	{
+		return Unit && !Unit->DisplayName.IsEmpty()
+			? Unit->DisplayName.ToString()
+			: FallbackId.ToString();
+	}
+
+	FString ConquestSetupGetBuildingName(const FConquestBuildingRow* Building, FName FallbackId)
+	{
+		return Building && !Building->DisplayName.IsEmpty()
+			? Building->DisplayName.ToString()
+			: FallbackId.ToString();
+	}
+}
 
 void UConquestGameSetupWidget::InitializeGameSetupWidget(UConquestHUDWidget* InParentHUDWidget)
 {
@@ -25,6 +359,7 @@ void UConquestGameSetupWidget::InitializeGameSetupWidget(UConquestHUDWidget* InP
 	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
 	UpdateMapSizeTooltip();
+	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
 }
 
 void UConquestGameSetupWidget::NativeConstruct()
@@ -71,6 +406,7 @@ void UConquestGameSetupWidget::NativeConstruct()
 	ApplyDefaultAdvancedValues();
 	UpdateMapSizeTooltip();
 	RefreshReadyStatus();
+	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
 
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
@@ -619,6 +955,7 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 				}
 				OnLobbySlotsChanged(LobbyPlayerSlots);
 				RefreshReadyStatus();
+				RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
 				return;
 			}
 		}
@@ -675,6 +1012,7 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 	OnLobbySlotsChanged(LobbyPlayerSlots);
 	PushLobbySlotsToServerIfAuthority();
 	RefreshReadyStatus();
+	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
 }
 
 void UConquestGameSetupWidget::RefreshCivilisationOptions()
@@ -723,6 +1061,7 @@ void UConquestGameSetupWidget::RefreshCivilisationOptions()
 	}
 
 	OnCivilisationOptionsChanged();
+	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
 }
 
 bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation)
@@ -733,6 +1072,7 @@ bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConque
 	}
 
 	LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation;
+	RefreshCivilisationInfo(Civilisation);
 	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
 	RefreshCivilisationComboBox(ComboBoxes.IsValidIndex(SlotIndex) ? ComboBoxes[SlotIndex] : nullptr, SlotIndex);
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
@@ -922,10 +1262,175 @@ void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotInde
 	if (TObjectPtr<UConquestCivilisationData>* Civilisation = OptionToCivilisation.Find(SelectedItem))
 	{
 		LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation->Get();
+		RefreshCivilisationInfo(Civilisation->Get());
 		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 		{
 			ConquestPC->RequestSetLobbySlotCivilisation(SlotIndex, Civilisation->Get());
 		}
+	}
+}
+
+const UConquestCivilisationData* UConquestGameSetupWidget::GetDefaultPreviewCivilisation() const
+{
+	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+	const int32 LocalPlayerId = ConquestPC ? ConquestPC->GetAssignedPlayerId() : 0;
+
+	if (const FConquestLobbyPlayerSlot* LocalSlot = LobbyPlayerSlots.FindByPredicate(
+		[LocalPlayerId](const FConquestLobbyPlayerSlot& CandidateSlot)
+		{
+			return CandidateSlot.PlayerId == LocalPlayerId && CandidateSlot.Civilisation;
+		}))
+	{
+		return LocalSlot->Civilisation;
+	}
+
+	if (LobbyPlayerSlots.Num() > 0 && LobbyPlayerSlots[0].Civilisation)
+	{
+		return LobbyPlayerSlots[0].Civilisation;
+	}
+
+	return AvailableCivilisations.Num() > 0 ? AvailableCivilisations[0].Get() : nullptr;
+}
+
+void UConquestGameSetupWidget::RefreshCivilisationInfo(const UConquestCivilisationData* Civilisation)
+{
+	const FString CivName = Civilisation
+		? (Civilisation->CivilisationName.IsEmpty() ? Civilisation->GetName() : Civilisation->CivilisationName.ToString())
+		: TEXT("No civilisation selected");
+	const FString LeaderName = Civilisation && !Civilisation->LeaderName.IsEmpty()
+		? Civilisation->LeaderName.ToString()
+		: TEXT("Unknown leader");
+
+	TArray<FString> AbilityLines;
+	TArray<FString> UnitLines;
+	TArray<FString> BuildingLines;
+
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	const UConquestContentManager* ContentManager = ConquestGS ? ConquestGS->ContentManager : nullptr;
+
+	if (Civilisation)
+	{
+		if (!Civilisation->AbilityDescription.IsEmpty())
+		{
+			AbilityLines.Add(Civilisation->AbilityDescription.ToString());
+		}
+
+		for (const FConquestModifierDefinition& Modifier : Civilisation->Modifiers)
+		{
+			ConquestSetupAppendLine(AbilityLines, ConquestSetupFormatModifier(Modifier));
+		}
+
+		for (const FConquestContentOverride& Override : Civilisation->UnitOverrides)
+		{
+			const FName ReplacementId = !Override.ReplacementId.IsNone() ? Override.ReplacementId : NAME_None;
+			const FName BaseId = !Override.ReplacesId.IsNone() ? Override.ReplacesId : NAME_None;
+			const FConquestUnitRow* Unit = ContentManager ? ContentManager->FindUnit(ReplacementId) : nullptr;
+			const FName RowReplacementId = Unit && !Unit->ReplacesUnitId.IsNone() ? Unit->ReplacesUnitId : BaseId;
+			const FConquestUnitRow* BaseUnit = ContentManager ? ContentManager->FindUnit(RowReplacementId) : nullptr;
+
+			FString Line = FString::Printf(
+				TEXT("%s - %s"),
+				*ConquestSetupGetUnitName(Unit, ReplacementId),
+				Unit ? *ConquestSetupFormatUnitStats(*Unit) : TEXT("Missing unit row")
+			);
+			if (Unit && BaseUnit)
+			{
+				Line += FString::Printf(
+					TEXT("\n  Replaces - %s (%s)"),
+					*ConquestSetupGetUnitName(BaseUnit, RowReplacementId),
+					*ConquestSetupFormatUnitDiff(*Unit, *BaseUnit)
+				);
+			}
+			else if (!RowReplacementId.IsNone())
+			{
+				Line += FString::Printf(TEXT("\n  Replaces - %s"), *RowReplacementId.ToString());
+			}
+			if (Unit && Unit->Modifiers.Num() > 0)
+			{
+				TArray<FString> ModifierLines;
+				for (const FConquestModifierDefinition& Modifier : Unit->Modifiers)
+				{
+					ModifierLines.Add(ConquestSetupFormatModifier(Modifier));
+				}
+				Line += FString::Printf(TEXT("\n  Bonuses - %s"), *FString::Join(ModifierLines, TEXT("; ")));
+			}
+			UnitLines.Add(Line);
+		}
+
+		for (const FConquestContentOverride& Override : Civilisation->BuildingOverrides)
+		{
+			const FName ReplacementId = !Override.ReplacementId.IsNone() ? Override.ReplacementId : NAME_None;
+			const FName BaseId = !Override.ReplacesId.IsNone() ? Override.ReplacesId : NAME_None;
+			const FConquestBuildingRow* Building = ContentManager ? ContentManager->FindBuilding(ReplacementId) : nullptr;
+			const FName RowReplacementId = Building && !Building->ReplacesBuildingId.IsNone() ? Building->ReplacesBuildingId : BaseId;
+			const FConquestBuildingRow* BaseBuilding = ContentManager ? ContentManager->FindBuilding(RowReplacementId) : nullptr;
+
+			FString Line = FString::Printf(
+				TEXT("%s - %s"),
+				*ConquestSetupGetBuildingName(Building, ReplacementId),
+				Building ? *ConquestSetupFormatBuildingStats(*Building) : TEXT("Missing building row")
+			);
+			if (Building && BaseBuilding)
+			{
+				Line += FString::Printf(
+					TEXT("\n  Replaces - %s (%s)"),
+					*ConquestSetupGetBuildingName(BaseBuilding, RowReplacementId),
+					*ConquestSetupFormatBuildingDiff(*Building, *BaseBuilding)
+				);
+			}
+			else if (!RowReplacementId.IsNone())
+			{
+				Line += FString::Printf(TEXT("\n  Replaces - %s"), *RowReplacementId.ToString());
+			}
+			if (Building && Building->Modifiers.Num() > 0)
+			{
+				TArray<FString> ModifierLines;
+				for (const FConquestModifierDefinition& Modifier : Building->Modifiers)
+				{
+					ModifierLines.Add(ConquestSetupFormatModifier(Modifier));
+				}
+				Line += FString::Printf(TEXT("\n  Bonuses - %s"), *FString::Join(ModifierLines, TEXT("; ")));
+			}
+			BuildingLines.Add(Line);
+		}
+	}
+
+	const FString AbilityText = AbilityLines.Num() > 0 ? FString::Join(AbilityLines, TEXT("\n")) : TEXT("No listed civilisation ability");
+	const FString UnitsText = UnitLines.Num() > 0 ? FString::Join(UnitLines, TEXT("\n\n")) : TEXT("No unique units");
+	const FString BuildingsText = BuildingLines.Num() > 0 ? FString::Join(BuildingLines, TEXT("\n\n")) : TEXT("No unique buildings");
+
+	if (CivInfoNameText)
+	{
+		CivInfoNameText->SetText(FText::FromString(CivName));
+	}
+	if (CivInfoLeaderText)
+	{
+		CivInfoLeaderText->SetText(FText::FromString(LeaderName));
+	}
+	if (CivInfoAbilityText)
+	{
+		CivInfoAbilityText->SetText(FText::FromString(AbilityText));
+	}
+	if (CivInfoUniqueUnitsText)
+	{
+		CivInfoUniqueUnitsText->SetText(FText::FromString(UnitsText));
+	}
+	if (CivInfoUniqueBuildingsText)
+	{
+		CivInfoUniqueBuildingsText->SetText(FText::FromString(BuildingsText));
+	}
+	if (CivInfoText)
+	{
+		CivInfoText->SetText(FText::FromString(FString::Printf(
+			TEXT("%s\n%s\n\n%s\n\nUnique Units\n%s\n\nUnique Buildings\n%s"),
+			*CivName,
+			*LeaderName,
+			*AbilityText,
+			*UnitsText,
+			*BuildingsText
+		)));
 	}
 }
 

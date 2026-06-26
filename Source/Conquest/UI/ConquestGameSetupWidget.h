@@ -111,6 +111,24 @@ protected:
 	TObjectPtr<UComboBoxString> CivSlot11ComboBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoNameText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoLeaderText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoAbilityText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoUniqueUnitsText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CivInfoUniqueBuildingsText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCheckBox> GenerateResourcesCheckBox = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -293,6 +311,8 @@ private:
 	void RefreshReadyStatus();
 	TArray<UComboBoxString*> GetCivilisationComboBoxes() const;
 	FString GetCivilisationOptionName(const UConquestCivilisationData* Civilisation, int32 OptionIndex) const;
+	void RefreshCivilisationInfo(const UConquestCivilisationData* Civilisation);
+	const UConquestCivilisationData* GetDefaultPreviewCivilisation() const;
 
 	UPROPERTY(Transient)
 	int32 SelectedRandomSeed = 1337;

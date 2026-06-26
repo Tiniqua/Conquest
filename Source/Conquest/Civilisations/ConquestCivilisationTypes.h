@@ -39,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FText LeaderName;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(MultiLine=true))
+	FText AbilityDescription;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Civilisation|Theme")
 	TObjectPtr<UMaterialInterface> BorderMaterial = nullptr;
 

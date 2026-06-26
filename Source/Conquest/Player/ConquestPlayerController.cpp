@@ -99,6 +99,18 @@ void AConquestPlayerController::RequestSetCurrentResearch(FName TechId)
 	}
 }
 
+void AConquestPlayerController::RequestAdoptPhilosophy(FName PhilosophyId)
+{
+	if (HasAuthority())
+	{
+		ServerRequestAdoptPhilosophy_Implementation(PhilosophyId);
+	}
+	else
+	{
+		ServerRequestAdoptPhilosophy(PhilosophyId);
+	}
+}
+
 void AConquestPlayerController::RequestSetCityProduction(int32 CityId, ECityProductionType ProductionType, FName ProductionId)
 {
 	if (HasAuthority())
@@ -275,6 +287,14 @@ void AConquestPlayerController::ServerRequestSetCurrentResearch_Implementation(F
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->SetCurrentResearchForPlayer(AssignedPlayerId, TechId);
+	}
+}
+
+void AConquestPlayerController::ServerRequestAdoptPhilosophy_Implementation(FName PhilosophyId)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->AdoptPhilosophyForPlayer(AssignedPlayerId, PhilosophyId);
 	}
 }
 

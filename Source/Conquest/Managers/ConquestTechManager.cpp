@@ -72,6 +72,11 @@ void UConquestTechManager::ProcessResearchAtStartOfTurn(int32 PlayerId)
 		ClearCachedResearchProgress(Player, CurrentResearch->TechId);
 		Player.CurrentResearchId = NAME_None;
 		Player.CurrentResearchProgress = 0.0f;
+
+		if (GameStateRef->CityManager)
+		{
+			GameStateRef->CityManager->RecalculateEmpireYields(PlayerId);
+		}
 	}
 
 	OnResearchChanged.Broadcast();

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "Conquest/Core/ConquestContentTypes.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Conquest/World/Generation/HexYieldTypes.h"
 #include "ConquestBuildingTypes.generated.h"
 
@@ -55,6 +56,9 @@ struct FConquestBuildingRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FName> UnlockedTileImprovementIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bGrantedOnCityFounding = false;

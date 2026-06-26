@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataTable.h"
 #include "HexResourceTypes.h"
 #include "HexImprovementTypes.generated.h"
@@ -45,6 +46,9 @@ struct FHexImprovementDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Combat", meta = (ClampMin = "0.0"))
 	float UnitDefenderModifierBonus = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Improvement|Rules")
 	TArray<EHexTileType> ValidTileTypes;

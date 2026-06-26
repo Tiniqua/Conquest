@@ -188,6 +188,9 @@ public:
 	void HandleResearchClicked();
 
 	UFUNCTION()
+	void HandlePhilosophyClicked();
+
+	UFUNCTION()
 	void HandleTurnChanged(int32 NewTurn);
 
 	UFUNCTION()
@@ -213,6 +216,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Research")
 	FText GetCurrentResearchStatusText() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Philosophy")
+	void RefreshPhilosophyInfo();
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Philosophy")
+	FText GetCurrentPhilosophyStatusText() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Unit")
 	void ShowSelectedUnitInfo(const FConquestSelectedUnitWidgetData& UnitData);
@@ -333,6 +342,9 @@ protected:
 	TObjectPtr<UButton> ResearchButton = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> PhilosophyButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TurnText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -397,6 +409,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CurrentResearchText = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CurrentPhilosophyText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> TileExpansionConfirmPanel = nullptr;
@@ -541,6 +556,9 @@ private:
 
 	UFUNCTION()
 	void HandleResearchChanged();
+
+	UFUNCTION()
+	void HandlePhilosophiesChanged();
 
 	UFUNCTION()
 	void HandleFoodYieldLensClicked();

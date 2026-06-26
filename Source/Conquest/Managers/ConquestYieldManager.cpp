@@ -4,6 +4,7 @@
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
 #include "Conquest/World/Generation/HexGridModel.h"
 #include "Conquest/World/Generation/HexResourceSetData.h"
 #include "Conquest/World/Generation/HexResourceTypes.h"
@@ -109,8 +110,6 @@ FHexYield UConquestYieldManager::CalculateCityBuildingYields(const FCityState& C
 
 			continue;
 		}
-
-		Result += BuildingRow->FlatCityYieldBonus;
 	}
 
 	return Result;
@@ -169,10 +168,20 @@ FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(co
 				continue;
 			}
 
-			Result += ScaleYield(
-				CalculateTileYield(*Tile),
-				GetTileCitizenYieldMultiplier(Assignment.Citizens)
-			);
+			FHexYield TileYield = CalculateTileYield(*Tile);
+			if (GameStateRef->ModifierManager)
+			{
+				FConquestModifierContext TileContext;
+				TileContext.Scope = EConquestModifierTargetScope::Tile;
+				TileContext.PlayerId = City.OwnerPlayerId;
+				TileContext.CityId = City.CityId;
+				TileContext.TileCoord = Assignment.Coord;
+				TileContext.bHasTileCoord = true;
+				TileContext.bIgnoreHappinessPenalty = true;
+				TileYield = GameStateRef->ModifierManager->ApplyYieldModifiers(TileContext, TileYield);
+			}
+
+			Result += ScaleYield(TileYield, GetTileCitizenYieldMultiplier(Assignment.Citizens));
 		}
 	}
 	else
@@ -185,8 +194,31 @@ FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(co
 				continue;
 			}
 
-			Result += CalculateTileYield(*Tile);
+			FHexYield TileYield = CalculateTileYield(*Tile);
+			if (GameStateRef->ModifierManager)
+			{
+				FConquestModifierContext TileContext;
+				TileContext.Scope = EConquestModifierTargetScope::Tile;
+				TileContext.PlayerId = City.OwnerPlayerId;
+				TileContext.CityId = City.CityId;
+				TileContext.TileCoord = Coord;
+				TileContext.bHasTileCoord = true;
+				TileContext.bIgnoreHappinessPenalty = true;
+				TileYield = GameStateRef->ModifierManager->ApplyYieldModifiers(TileContext, TileYield);
+			}
+
+			Result += TileYield;
 		}
+	}
+
+	if (GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext CityContext;
+		CityContext.Scope = EConquestModifierTargetScope::City;
+		CityContext.PlayerId = City.OwnerPlayerId;
+		CityContext.CityId = City.CityId;
+		CityContext.bIgnoreHappinessPenalty = true;
+		Result = GameStateRef->ModifierManager->ApplyYieldModifiers(CityContext, Result);
 	}
 
 	return Result;
@@ -194,10 +226,18 @@ FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(co
 
 FHexYield UConquestYieldManager::CalculateCityTotalYields(const FCityState& City) const
 {
-	return ApplyUnhappyYieldPenalty(
-		CalculateCityTotalYieldsBeforeUnhappyPenalty(City),
-		City.OwnerPlayerId
-	);
+	FHexYield Result = CalculateCityTotalYieldsBeforeUnhappyPenalty(City);
+	if (GameStateRef && GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext CityContext;
+		CityContext.Scope = EConquestModifierTargetScope::City;
+		CityContext.PlayerId = City.OwnerPlayerId;
+		CityContext.CityId = City.CityId;
+		CityContext.bOnlyHappinessPenalty = true;
+		return GameStateRef->ModifierManager->ApplyYieldModifiers(CityContext, Result);
+	}
+
+	return ApplyUnhappyYieldPenalty(Result, City.OwnerPlayerId);
 }
 
 FHexYield UConquestYieldManager::CalculateEmpireYieldPerTurnBeforeUnhappyPenalty(int32 PlayerId) const
@@ -336,11 +376,24 @@ int32 UConquestYieldManager::CalculateEmpireHappiness(int32 PlayerId) const
 	}
 
 	const FConquestPlayerEmpireState& Player = GameStateRef->GetPlayerEmpire(PlayerId);
-	return Player.BaseHappiness +
-		LuxuryHappiness +
-		BuildingHappiness -
+	const int32 BaseValue =
+		Player.BaseHappiness -
 		(CityCount * ConquestHappiness::GetCityCost()) -
 		(Population * ConquestHappiness::GetPopulationCost());
+
+	if (GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext Context;
+		Context.Scope = EConquestModifierTargetScope::Empire;
+		Context.PlayerId = PlayerId;
+		return GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::Happiness,
+			static_cast<float>(BaseValue)
+		);
+	}
+
+	return BaseValue + LuxuryHappiness + BuildingHappiness;
 }
 
 int32 UConquestYieldManager::RecalculateEmpireHappiness(int32 PlayerId) const
@@ -413,12 +466,29 @@ int32 UConquestYieldManager::RecalculateEmpireHappiness(int32 PlayerId) const
 	Player.CachedPopulationHappinessCost = Population * ConquestHappiness::GetPopulationCost();
 	Player.CachedBuildingHappiness = BuildingHappiness;
 	Player.CachedLuxuryHappiness = LuxuryHappiness;
-	Player.CachedHappiness =
-		Player.BaseHappiness +
-		Player.CachedLuxuryHappiness +
-		Player.CachedBuildingHappiness -
+	const int32 BaseValue =
+		Player.BaseHappiness -
 		Player.CachedCityHappinessCost -
 		Player.CachedPopulationHappinessCost;
+
+	if (GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext Context;
+		Context.Scope = EConquestModifierTargetScope::Empire;
+		Context.PlayerId = PlayerId;
+		Player.CachedHappiness = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::Happiness,
+			static_cast<float>(BaseValue)
+		);
+	}
+	else
+	{
+		Player.CachedHappiness =
+			BaseValue +
+			Player.CachedLuxuryHappiness +
+			Player.CachedBuildingHappiness;
+	}
 
 	return Player.CachedHappiness;
 }

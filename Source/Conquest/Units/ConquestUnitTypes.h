@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataTable.h"
 #include "ConquestUnitTypes.generated.h"
 
@@ -90,6 +91,9 @@ struct FConquestUnitAugmentRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FConquestStrategicResourceCost> ResourceCosts;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 };
 
 USTRUCT(BlueprintType)
@@ -147,6 +151,9 @@ struct FConquestUnitRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actions")
 	TArray<FName> AllowedAugmentIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<UStaticMesh> UnitMesh = nullptr;

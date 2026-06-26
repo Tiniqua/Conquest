@@ -158,6 +158,9 @@ struct FConquestPlayerEmpireState
 	TArray<FName> ResearchedTechIds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> AdoptedPhilosophyIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FName CurrentResearchId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -172,6 +175,11 @@ struct FConquestPlayerEmpireState
 	bool HasResearched(FName TechId) const
 	{
 		return !TechId.IsNone() && ResearchedTechIds.Contains(TechId);
+	}
+
+	bool HasAdoptedPhilosophy(FName PhilosophyId) const
+	{
+		return !PhilosophyId.IsNone() && AdoptedPhilosophyIds.Contains(PhilosophyId);
 	}
 
 	FConquestStrategicResourceStockpile* FindStrategicResource(FName ResourceId)

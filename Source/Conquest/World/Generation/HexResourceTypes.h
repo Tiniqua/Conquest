@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataAsset.h"
 #include "HexTileTypes.h"
 #include "HexResourceTypes.generated.h"
@@ -32,6 +33,9 @@ struct FHexResourceDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Yield")
 	FHexYield YieldModifier;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 
 	// Civ V style luxuries default to +4 happiness.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resource|Happiness", meta = (ClampMin = "0"))

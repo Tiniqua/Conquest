@@ -8,6 +8,7 @@
 #include "ConquestHUD.generated.h"
 
 class UConquestResearchPanelWidget;
+class UConquestPhilosophyPanelWidget;
 class UConquestCityPanelWidget;
 class UConquestHUDWidget;
 class UConquestMainMenuWidget;
@@ -53,6 +54,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
 	TSubclassOf<UConquestResearchPanelWidget> ResearchPanelWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestPhilosophyPanelWidget> PhilosophyPanelWidgetClass;
+
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UConquestGameWidget> GameWidget;
 
@@ -61,6 +65,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UConquestResearchPanelWidget> ResearchPanelWidget;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UConquestPhilosophyPanelWidget> PhilosophyPanelWidget;
 
 	UFUNCTION(BlueprintCallable)
 	void ShowCityPanel(int32 CityId);
@@ -73,6 +80,15 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void HideResearchPanel();
+
+	UFUNCTION(BlueprintCallable)
+	void ShowPhilosophyPanel();
+
+	UFUNCTION(BlueprintCallable)
+	void HidePhilosophyPanel();
+
+	UFUNCTION(BlueprintCallable)
+	void CloseEndTurnBlockingMenus();
 
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Starting City")
 	void BeginStartingRegionSelection();

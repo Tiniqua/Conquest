@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataAsset.h"
 #include "ConquestCivilisationTypes.generated.h"
 
@@ -70,4 +71,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FConquestContentOverride> UnitOverrides;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Civilisation|Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 };

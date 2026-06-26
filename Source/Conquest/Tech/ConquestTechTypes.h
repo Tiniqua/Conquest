@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataTable.h"
 #include "ConquestTechTypes.generated.h"
 
@@ -47,4 +48,7 @@ struct FConquestTechRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FName> UnlockedTileImprovementIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 };

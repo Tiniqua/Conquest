@@ -12,6 +12,7 @@
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
 #include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/UI/ConquestChoiceButtonWidget.h"
 #include "Conquest/UI/ConquestHUD.h"
@@ -414,13 +415,22 @@ void UConquestCityPanelWidget::BuildBuildingChoices(AConquestGameState& GS)
 
 		const int32 Turns =
 			GS.CityManager->EstimateTurnsToBuildById(CityId, BuildingId);
+		const FCityState* City = GS.CityManager->GetCity(CityId);
+		const int32 ProductionCost = City && GS.ModifierManager
+			? GS.ModifierManager->CalculateProductionCost(
+				*City,
+				ECityProductionType::Building,
+				BuildingRow->BuildingId,
+				BuildingRow->ProductionCost
+			)
+			: BuildingRow->ProductionCost;
 
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::ProductionBuilding;
 		ChoiceData.ChoiceId = BuildingId;
 		ChoiceData.Payload = nullptr;
 		ChoiceData.Title = BuildingRow->DisplayName;
-		ChoiceData.Cost = BuildingRow->ProductionCost;
+		ChoiceData.Cost = ProductionCost;
 		ChoiceData.Turns = Turns;
 		ChoiceData.bEnabled = true;
 		ChoiceData.DetailText = BuildingRow->Description;
@@ -429,14 +439,14 @@ void UConquestCityPanelWidget::BuildBuildingChoices(AConquestGameState& GS)
 		{
 			ChoiceData.Subtitle = FText::Format(
 				NSLOCTEXT("Conquest", "ProductionChoiceNoTurns", "{0} Production"),
-				FText::AsNumber(BuildingRow->ProductionCost)
+				FText::AsNumber(ProductionCost)
 			);
 		}
 		else
 		{
 			ChoiceData.Subtitle = FText::Format(
 				NSLOCTEXT("Conquest", "ProductionChoiceTurns", "{0} Production | {1} Turns"),
-				FText::AsNumber(BuildingRow->ProductionCost),
+				FText::AsNumber(ProductionCost),
 				FText::AsNumber(Turns)
 			);
 		}
@@ -493,13 +503,22 @@ void UConquestCityPanelWidget::BuildUnitChoices(AConquestGameState& GS)
 
 		const int32 Turns =
 			GS.CityManager->EstimateTurnsToTrainUnitById(CityId, UnitId);
+		const FCityState* City = GS.CityManager->GetCity(CityId);
+		const int32 ProductionCost = City && GS.ModifierManager
+			? GS.ModifierManager->CalculateProductionCost(
+				*City,
+				ECityProductionType::Unit,
+				UnitRow->UnitId,
+				UnitRow->ProductionCost
+			)
+			: UnitRow->ProductionCost;
 
 		FConquestChoiceButtonData ChoiceData;
 		ChoiceData.ChoiceType = EConquestChoiceType::ProductionUnit;
 		ChoiceData.ChoiceId = UnitId;
 		ChoiceData.Payload = nullptr;
 		ChoiceData.Title = UnitRow->DisplayName;
-		ChoiceData.Cost = UnitRow->ProductionCost;
+		ChoiceData.Cost = ProductionCost;
 		ChoiceData.Turns = Turns;
 		ChoiceData.bEnabled = true;
 		ChoiceData.DetailText = UnitRow->Description;
@@ -508,14 +527,14 @@ void UConquestCityPanelWidget::BuildUnitChoices(AConquestGameState& GS)
 		{
 			ChoiceData.Subtitle = FText::Format(
 				NSLOCTEXT("Conquest", "UnitProductionChoiceNoTurns", "Unit | {0} Production"),
-				FText::AsNumber(UnitRow->ProductionCost)
+				FText::AsNumber(ProductionCost)
 			);
 		}
 		else
 		{
 			ChoiceData.Subtitle = FText::Format(
 				NSLOCTEXT("Conquest", "UnitProductionChoiceTurns", "Unit | {0} Production | {1} Turns"),
-				FText::AsNumber(UnitRow->ProductionCost),
+				FText::AsNumber(ProductionCost),
 				FText::AsNumber(Turns)
 			);
 		}

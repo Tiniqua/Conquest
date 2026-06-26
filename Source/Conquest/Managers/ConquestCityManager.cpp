@@ -6,6 +6,7 @@
 #include "Conquest/Buildings/ConquestBuildingTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
@@ -21,9 +22,6 @@ namespace
 	const FName ConquestProductionProjectGoldFocus(TEXT("GoldFocus"));
 	const FName ConquestProductionProjectCultureFocus(TEXT("CultureFocus"));
 	const FName ConquestProductionProjectScienceFocus(TEXT("ScienceFocus"));
-	const FName ConquestUnhappyAttackModifierId(TEXT("Happiness_Unhappy_Attack"));
-	const FName ConquestUnhappyDefenseModifierId(TEXT("Happiness_Unhappy_Defense"));
-	const FName ConquestTileDefenseModifierId(TEXT("Tile_Defense_Modifier"));
 	constexpr int32 ConquestDefaultOwnedTileHealth = 100;
 	constexpr int32 ConquestDefaultOwnedTileHealRate = 5;
 
@@ -382,12 +380,56 @@ void UConquestCityManager::RefreshOwnedTileCombatState(
 		Improvement = GridModel->FindImprovementDefinition(Tile->ImprovementId);
 	}
 
-	if (Improvement)
+	if (GameStateRef && GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext Context;
+		Context.Scope = EConquestModifierTargetScope::OwnedTileCombat;
+		Context.PlayerId = City.OwnerPlayerId;
+		Context.CityId = City.CityId;
+		Context.TileCoord = TileCombatState.Coord;
+		Context.bHasTileCoord = true;
+
+		TileCombatState.MaxHealth = FMath::Max(
+			1,
+			GameStateRef->ModifierManager->CalculateModifiedIntValue(
+				Context,
+				EConquestModifierAttribute::OwnedTileMaxHealth,
+				static_cast<float>(TileCombatState.MaxHealth)
+			)
+		);
+		TileCombatState.CombatStrength = FMath::Max(
+			0,
+			GameStateRef->ModifierManager->CalculateModifiedIntValue(
+				Context,
+				EConquestModifierAttribute::OwnedTileCombatStrength,
+				static_cast<float>(TileCombatState.CombatStrength)
+			)
+		);
+		TileCombatState.HealRatePerTurn = FMath::Max(
+			0,
+			GameStateRef->ModifierManager->CalculateModifiedIntValue(
+				Context,
+				EConquestModifierAttribute::OwnedTileHealRate,
+				static_cast<float>(TileCombatState.HealRatePerTurn)
+			)
+		);
+		TileCombatState.DefenderModifier = FMath::Max(
+			0.0f,
+			GameStateRef->ModifierManager->CalculateModifiedValue(
+				Context,
+				EConquestModifierAttribute::OwnedTileDefenderModifier,
+				TileCombatState.DefenderModifier
+			)
+		);
+	}
+	else if (Improvement)
 	{
 		TileCombatState.CombatStrength += FMath::Max(0, Improvement->TileCombatStrengthBonus);
 		TileCombatState.HealRatePerTurn += FMath::Max(0, Improvement->TileHealRateBonus);
 		TileCombatState.DefenderModifier += FMath::Max(0.0f, Improvement->UnitDefenderModifierBonus);
 	}
+
+	TileCombatState.CurrentHealth = FMath::Clamp(TileCombatState.CurrentHealth, 0, TileCombatState.MaxHealth);
 
 	if (FHexGridModel* MutableGridModel = GameStateRef ? GameStateRef->GetHexGridModelMutable() : nullptr)
 	{
@@ -622,7 +664,24 @@ bool UConquestCityManager::IsTileImprovementUnlockedForPlayer(int32 PlayerId, FN
 
 int32 UConquestCityManager::GetCityStrength(const FCityState& City) const
 {
-	return FMath::Max(1, 10 + FMath::Max(0, City.Population - 1) * 2);
+	const int32 BaseStrength = 10 + FMath::Max(0, City.Population - 1) * 2;
+	if (GameStateRef && GameStateRef->ModifierManager)
+	{
+		FConquestModifierContext Context;
+		Context.Scope = EConquestModifierTargetScope::City;
+		Context.PlayerId = City.OwnerPlayerId;
+		Context.CityId = City.CityId;
+		return FMath::Max(
+			1,
+			GameStateRef->ModifierManager->CalculateModifiedIntValue(
+				Context,
+				EConquestModifierAttribute::CityStrength,
+				static_cast<float>(BaseStrength)
+			)
+		);
+	}
+
+	return FMath::Max(1, BaseStrength);
 }
 
 void UConquestCityManager::RefreshCityCombatStats(FCityState& City)
@@ -637,7 +696,23 @@ void UConquestCityManager::HealCityAtStartOfTurn(FCityState& City)
 	RefreshCityCombatStats(City);
 	if (City.CurrentHealth < City.MaxHealth)
 	{
-		City.CurrentHealth = FMath::Min(City.MaxHealth, City.CurrentHealth + 10);
+		int32 HealPerTurn = 10;
+		if (GameStateRef && GameStateRef->ModifierManager)
+		{
+			FConquestModifierContext Context;
+			Context.Scope = EConquestModifierTargetScope::City;
+			Context.PlayerId = City.OwnerPlayerId;
+			Context.CityId = City.CityId;
+			HealPerTurn = FMath::Max(
+				0,
+				GameStateRef->ModifierManager->CalculateModifiedIntValue(
+					Context,
+					EConquestModifierAttribute::CityHealPerTurn,
+					static_cast<float>(HealPerTurn)
+				)
+			);
+		}
+		City.CurrentHealth = FMath::Min(City.MaxHealth, City.CurrentHealth + HealPerTurn);
 	}
 }
 
@@ -1106,9 +1181,36 @@ void UConquestCityManager::RecalculateStrategicResourceEconomy(int32 PlayerId)
 						Stockpile->ResourceId = CapBonus.ResourceId;
 					}
 
-					Stockpile->Cap += CapBonus.CapBonus;
+					if (!GameStateRef->ModifierManager)
+					{
+						Stockpile->Cap += CapBonus.CapBonus;
+					}
 				}
 			}
+		}
+	}
+
+	if (GameStateRef->ModifierManager)
+	{
+		for (FConquestStrategicResourceStockpile& Stockpile : Player.StrategicResources)
+		{
+			if (Stockpile.ResourceId.IsNone())
+			{
+				continue;
+			}
+
+			FConquestModifierContext Context;
+			Context.Scope = EConquestModifierTargetScope::StrategicResource;
+			Context.PlayerId = PlayerId;
+			Context.ResourceId = Stockpile.ResourceId;
+			Stockpile.Cap = FMath::Max(
+				0,
+				GameStateRef->ModifierManager->CalculateModifiedIntValue(
+					Context,
+					EConquestModifierAttribute::StrategicResourceCap,
+					static_cast<float>(Stockpile.Cap)
+				)
+			);
 		}
 	}
 
@@ -1162,78 +1264,86 @@ void UConquestCityManager::RecalculateUnitStats(FConquestUnitState& Unit) const
 	Unit.CachedHealthRegenPerTurn = UnitRow->HealthRegenPerTurn;
 	Unit.CachedMovementPoints = UnitRow->MovementPoints;
 	Unit.CachedGoldMaintenancePerTurn = UnitRow->GoldMaintenancePerTurn;
-	Unit.CombatModifiers.RemoveAll([](const FConquestUnitCombatModifier& Modifier)
-	{
-		return
-			Modifier.ModifierId == ConquestUnhappyAttackModifierId ||
-			Modifier.ModifierId == ConquestUnhappyDefenseModifierId ||
-			Modifier.ModifierId == ConquestTileDefenseModifierId;
-	});
 
-	for (const FConquestUnitAugmentState& Augment : Unit.Augments)
+	if (GameStateRef->ModifierManager)
 	{
-		switch (Augment.ModifiedStat)
+		FConquestModifierContext Context;
+		Context.Scope = EConquestModifierTargetScope::Unit;
+		Context.PlayerId = Unit.OwnerPlayerId;
+		Context.UnitInstanceId = Unit.UnitInstanceId;
+		Context.UnitId = Unit.UnitId;
+		Context.TileCoord = Unit.TileCoord;
+		Context.bHasTileCoord = true;
+
+		Unit.CachedStrength = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitStrength,
+			static_cast<float>(Unit.CachedStrength)
+		);
+		Unit.CachedAttackRange = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitAttackRange,
+			static_cast<float>(Unit.CachedAttackRange)
+		);
+		Unit.CachedMaxHealth = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitMaxHealth,
+			static_cast<float>(Unit.CachedMaxHealth)
+		);
+		Unit.CachedHealthRegenPerTurn = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitHealthRegen,
+			static_cast<float>(Unit.CachedHealthRegenPerTurn)
+		);
+		Unit.CachedMovementPoints = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitMovementPoints,
+			static_cast<float>(Unit.CachedMovementPoints)
+		);
+		Unit.CachedGoldMaintenancePerTurn = GameStateRef->ModifierManager->CalculateModifiedIntValue(
+			Context,
+			EConquestModifierAttribute::UnitGoldMaintenance,
+			static_cast<float>(Unit.CachedGoldMaintenancePerTurn)
+		);
+		GameStateRef->ModifierManager->BuildUnitCombatModifiers(Unit, Unit.CombatModifiers);
+	}
+	else
+	{
+		Unit.CombatModifiers.Reset();
+		for (const FConquestUnitAugmentState& Augment : Unit.Augments)
 		{
-		case EConquestUnitAugmentStat::Strength:
-			Unit.CachedStrength += Augment.FlatBonus;
-			break;
-		case EConquestUnitAugmentStat::AttackRange:
-			Unit.CachedAttackRange += Augment.FlatBonus;
-			break;
-		case EConquestUnitAugmentStat::MaxHealth:
-			Unit.CachedMaxHealth += Augment.FlatBonus;
-			break;
-		case EConquestUnitAugmentStat::HealthRegen:
-			Unit.CachedHealthRegenPerTurn += Augment.FlatBonus;
-			break;
-		case EConquestUnitAugmentStat::Movement:
-			Unit.CachedMovementPoints += Augment.FlatBonus;
-			break;
-		case EConquestUnitAugmentStat::AttackMultiplier:
-		case EConquestUnitAugmentStat::DefenseMultiplier:
-			break;
-		default:
-			break;
+			switch (Augment.ModifiedStat)
+			{
+			case EConquestUnitAugmentStat::Strength:
+				Unit.CachedStrength += Augment.FlatBonus;
+				break;
+			case EConquestUnitAugmentStat::AttackRange:
+				Unit.CachedAttackRange += Augment.FlatBonus;
+				break;
+			case EConquestUnitAugmentStat::MaxHealth:
+				Unit.CachedMaxHealth += Augment.FlatBonus;
+				break;
+			case EConquestUnitAugmentStat::HealthRegen:
+				Unit.CachedHealthRegenPerTurn += Augment.FlatBonus;
+				break;
+			case EConquestUnitAugmentStat::Movement:
+				Unit.CachedMovementPoints += Augment.FlatBonus;
+				break;
+			case EConquestUnitAugmentStat::AttackMultiplier:
+			case EConquestUnitAugmentStat::DefenseMultiplier:
+				break;
+			default:
+				break;
+			}
 		}
 	}
 
+	Unit.CachedStrength = FMath::Max(1, Unit.CachedStrength);
 	Unit.CachedAttackRange = FMath::Max(1, Unit.CachedAttackRange);
 	Unit.CachedMaxHealth = FMath::Max(1, Unit.CachedMaxHealth);
+	Unit.CachedHealthRegenPerTurn = FMath::Max(0, Unit.CachedHealthRegenPerTurn);
 	Unit.CachedMovementPoints = FMath::Max(0, Unit.CachedMovementPoints);
-
-	const FConquestPlayerEmpireState& OwnerPlayer = GameStateRef->GetPlayerEmpire(Unit.OwnerPlayerId);
-	const float HappinessCombatMultiplier = OwnerPlayer.PlayerId == Unit.OwnerPlayerId
-		? ConquestHappiness::GetPenaltyMultiplier(OwnerPlayer.CachedHappiness)
-		: 1.0f;
-	if (HappinessCombatMultiplier < 1.0f)
-	{
-		FConquestUnitCombatModifier AttackModifier;
-		AttackModifier.ModifierId = ConquestUnhappyAttackModifierId;
-		AttackModifier.ModifierType = EConquestUnitCombatModifierType::Attack;
-		AttackModifier.Multiplier = HappinessCombatMultiplier;
-		Unit.CombatModifiers.Add(AttackModifier);
-
-		FConquestUnitCombatModifier DefenseModifier;
-		DefenseModifier.ModifierId = ConquestUnhappyDefenseModifierId;
-		DefenseModifier.ModifierType = EConquestUnitCombatModifierType::Defense;
-		DefenseModifier.Multiplier = HappinessCombatMultiplier;
-		Unit.CombatModifiers.Add(DefenseModifier);
-	}
-
-	const FHexGridModel* GridModel = GameStateRef->GetHexGridModel();
-	const FHexTileData* Tile = GridModel ? GridModel->GetTile(Unit.TileCoord) : nullptr;
-	if (
-		Tile &&
-		Tile->Gameplay.OwnerPlayerId == Unit.OwnerPlayerId &&
-		Tile->Gameplay.DefenderModifier > 1.0f
-	)
-	{
-		FConquestUnitCombatModifier TileDefenseModifier;
-		TileDefenseModifier.ModifierId = ConquestTileDefenseModifierId;
-		TileDefenseModifier.ModifierType = EConquestUnitCombatModifierType::Defense;
-		TileDefenseModifier.Multiplier = Tile->Gameplay.DefenderModifier;
-		Unit.CombatModifiers.Add(TileDefenseModifier);
-	}
+	Unit.CachedGoldMaintenancePerTurn = FMath::Max(0, Unit.CachedGoldMaintenancePerTurn);
 
 	Unit.CurrentHealth = Unit.CurrentHealth <= 0
 		? Unit.CachedMaxHealth
@@ -1646,6 +1756,34 @@ void UConquestCityManager::ProcessCityProduction(FCityState& City)
 		return;
 	}
 
+	if (GameStateRef && GameStateRef->ModifierManager && GameStateRef->ContentManager)
+	{
+		if (City.CurrentProduction.Type == ECityProductionType::Building)
+		{
+			if (const FConquestBuildingRow* BuildingRow = GameStateRef->ContentManager->FindBuilding(City.CurrentProduction.ProductionId))
+			{
+				City.CurrentProduction.Cost = GameStateRef->ModifierManager->CalculateProductionCost(
+					City,
+					ECityProductionType::Building,
+					BuildingRow->BuildingId,
+					BuildingRow->ProductionCost
+				);
+			}
+		}
+		else if (City.CurrentProduction.Type == ECityProductionType::Unit)
+		{
+			if (const FConquestUnitRow* UnitRow = GameStateRef->ContentManager->FindUnit(City.CurrentProduction.ProductionId))
+			{
+				City.CurrentProduction.Cost = GameStateRef->ModifierManager->CalculateProductionCost(
+					City,
+					ECityProductionType::Unit,
+					UnitRow->UnitId,
+					UnitRow->ProductionCost
+				);
+			}
+		}
+	}
+
 	const int32 ProductionPerTurn = FMath::Max(0, City.CachedYieldPerTurn.Production);
 	if (ProductionPerTurn <= 0)
 	{
@@ -1982,7 +2120,14 @@ bool UConquestCityManager::SetCityProductionBuildingById(int32 CityId, FName Bui
 	CacheCurrentProductionProgress(*City);
 	City->CurrentProduction.Type = ECityProductionType::Building;
 	City->CurrentProduction.ProductionId = BuildingRow->BuildingId;
-	City->CurrentProduction.Cost = BuildingRow->ProductionCost;
+	City->CurrentProduction.Cost = GameStateRef->ModifierManager
+		? GameStateRef->ModifierManager->CalculateProductionCost(
+			*City,
+			ECityProductionType::Building,
+			BuildingRow->BuildingId,
+			BuildingRow->ProductionCost
+		)
+		: BuildingRow->ProductionCost;
 	City->CurrentProduction.Progress = GetCachedProductionProgress(
 		*City,
 		City->CurrentProduction.Type,
@@ -2034,7 +2179,14 @@ bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
 	CacheCurrentProductionProgress(*City);
 	City->CurrentProduction.Type = ECityProductionType::Unit;
 	City->CurrentProduction.ProductionId = UnitRow->UnitId;
-	City->CurrentProduction.Cost = UnitRow->ProductionCost;
+	City->CurrentProduction.Cost = GameStateRef->ModifierManager
+		? GameStateRef->ModifierManager->CalculateProductionCost(
+			*City,
+			ECityProductionType::Unit,
+			UnitRow->UnitId,
+			UnitRow->ProductionCost
+		)
+		: UnitRow->ProductionCost;
 	City->CurrentProduction.Progress = GetCachedProductionProgress(
 		*City,
 		City->CurrentProduction.Type,
@@ -2244,7 +2396,15 @@ int32 UConquestCityManager::EstimateTurnsToBuildById(int32 CityId, FName Buildin
 		return INDEX_NONE;
 	}
 
-	const float Cost = static_cast<float>(BuildingRow->ProductionCost);
+	const int32 ModifiedCost = GameStateRef->ModifierManager
+		? GameStateRef->ModifierManager->CalculateProductionCost(
+			*City,
+			ECityProductionType::Building,
+			BuildingRow->BuildingId,
+			BuildingRow->ProductionCost
+		)
+		: BuildingRow->ProductionCost;
+	const float Cost = static_cast<float>(ModifiedCost);
 	const float CurrentProgress =
 		City->CurrentProduction.Type == ECityProductionType::Building &&
 		City->CurrentProduction.ProductionId == BuildingRow->BuildingId
@@ -2284,7 +2444,15 @@ int32 UConquestCityManager::EstimateTurnsToTrainUnitById(int32 CityId, FName Uni
 		return INDEX_NONE;
 	}
 
-	const float Cost = static_cast<float>(UnitRow->ProductionCost);
+	const int32 ModifiedCost = GameStateRef->ModifierManager
+		? GameStateRef->ModifierManager->CalculateProductionCost(
+			*City,
+			ECityProductionType::Unit,
+			UnitRow->UnitId,
+			UnitRow->ProductionCost
+		)
+		: UnitRow->ProductionCost;
+	const float Cost = static_cast<float>(ModifiedCost);
 	const float CurrentProgress =
 		City->CurrentProduction.Type == ECityProductionType::Unit &&
 		City->CurrentProduction.ProductionId == UnitRow->UnitId

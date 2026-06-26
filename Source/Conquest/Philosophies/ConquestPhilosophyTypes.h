@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Engine/DataTable.h"
 #include "ConquestPhilosophyTypes.generated.h"
 
@@ -26,4 +27,7 @@ struct FConquestPhilosophyRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 CultureCost = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Modifiers")
+	TArray<FConquestModifierDefinition> Modifiers;
 };

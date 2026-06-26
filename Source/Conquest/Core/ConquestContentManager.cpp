@@ -242,6 +242,30 @@ void UConquestContentManager::GetAllTechs(TArray<const FConquestTechRow*>& OutRo
 	}
 }
 
+void UConquestContentManager::GetAllPhilosophies(TArray<const FConquestPhilosophyRow*>& OutRows) const
+{
+	OutRows.Reset();
+
+	if (!GameStateRef || !GameStateRef->PhilosophyTable)
+	{
+		return;
+	}
+
+	TArray<FConquestPhilosophyRow*> AllRows;
+	GameStateRef->PhilosophyTable->GetAllRows<FConquestPhilosophyRow>(
+		TEXT("GetAllPhilosophies"),
+		AllRows
+	);
+
+	for (const FConquestPhilosophyRow* Row : AllRows)
+	{
+		if (Row)
+		{
+			OutRows.Add(Row);
+		}
+	}
+}
+
 void UConquestContentManager::GetAllUnitAugments(TArray<const FConquestUnitAugmentRow*>& OutRows) const
 {
 	OutRows.Reset();

@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Research")
 	bool SetCurrentResearchForPlayer(int32 PlayerId, FName TechId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Philosophy")
+	bool AdoptPhilosophyForPlayer(int32 PlayerId, FName PhilosophyId);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|City")
 	bool SetCityProductionForPlayer(int32 PlayerId, int32 CityId, ECityProductionType ProductionType, FName ProductionId);
 

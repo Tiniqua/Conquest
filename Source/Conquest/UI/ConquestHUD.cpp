@@ -7,11 +7,13 @@
 #include "ConquestGameWidget.h"
 #include "ConquestMainMenuWidget.h"
 #include "ConquestResearchPanelWidget.h"
+#include "ConquestPhilosophyPanelWidget.h"
 #include "Conquest/UI/ConquestChoiceTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
 #include "Conquest/Player/ConquestPawn.h"
@@ -318,6 +320,16 @@ void AConquestHUD::BeginPlay()
 		{
 			ResearchPanelWidget->AddToViewport(6);
 			ResearchPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (PhilosophyPanelWidgetClass)
+	{
+		PhilosophyPanelWidget = CreateWidget<UConquestPhilosophyPanelWidget>(PlayerController, PhilosophyPanelWidgetClass);
+		if (PhilosophyPanelWidget)
+		{
+			PhilosophyPanelWidget->AddToViewport(7);
+			PhilosophyPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 
@@ -1069,7 +1081,7 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 		return false;
 	};
 
-	auto GetMoveCost = [GridModel](const FIntPoint& FromCoord, const FIntPoint& ToCoord)
+	auto GetMoveCost = [GridModel, ConquestGS, SelectedUnit](const FIntPoint& FromCoord, const FIntPoint& ToCoord)
 	{
 		const FHexTileData* FromTile = GridModel->GetTile(FromCoord);
 		const FHexTileData* ToTile = GridModel->GetTile(ToCoord);
@@ -1094,7 +1106,9 @@ bool AConquestHUD::EnterSelectedUnitMoveMode()
 			Cost = 2;
 		}
 
-		return Cost;
+		return ConquestGS->ModifierManager
+			? ConquestGS->ModifierManager->CalculateMovementCost(*SelectedUnit, FromCoord, ToCoord, Cost)
+			: Cost;
 	};
 
 	for (int32 FrontierIndex = 0; FrontierIndex < Frontier.Num(); ++FrontierIndex)
@@ -1484,8 +1498,13 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 				return false;
 			}
 
-			const float AttackerCombatValue =
-				ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
+			const float AttackerCombatValue = ConquestGS->ModifierManager
+				? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+					*SelectedUnit,
+					EConquestUnitCombatModifierType::Attack,
+					TargetTile->Gameplay.OwnerPlayerId
+				)
+				: ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
 			const float TileDefenseValue = FMath::Max(1.0f, static_cast<float>(FMath::Max(0, TileCombatState.CombatStrength)));
 
 			FConquestCombatPreviewData PreviewData;
@@ -1558,8 +1577,13 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 			return false;
 		}
 
-		const float AttackerCombatValue =
-			ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
+		const float AttackerCombatValue = ConquestGS->ModifierManager
+			? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+				*SelectedUnit,
+				EConquestUnitCombatModifierType::Attack,
+				DefenderCity->OwnerPlayerId
+			)
+			: ConquestUnitCombat::GetCombatValue(*SelectedUnit, EConquestUnitCombatModifierType::Attack);
 		const float CityDefenseValue = ConquestHUDGetCityCombatValue(*DefenderCity);
 
 		FConquestCombatPreviewData PreviewData;
@@ -1627,8 +1651,28 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		return false;
 	}
 
+	FConquestUnitState PreviewAttacker = *SelectedUnit;
+	FConquestUnitState PreviewDefender = *DefenderUnit;
+	if (ConquestGS->ModifierManager)
+	{
+		TArray<FConquestUnitCombatModifier> ExternalModifiers;
+		ConquestGS->ModifierManager->BuildExternalUnitCombatModifiers(
+			*SelectedUnit,
+			DefenderUnit->OwnerPlayerId,
+			ExternalModifiers
+		);
+		PreviewAttacker.CombatModifiers.Append(ExternalModifiers);
+
+		ConquestGS->ModifierManager->BuildExternalUnitCombatModifiers(
+			*DefenderUnit,
+			Player.PlayerId,
+			ExternalModifiers
+		);
+		PreviewDefender.CombatModifiers.Append(ExternalModifiers);
+	}
+
 	FConquestCombatPreviewData PreviewData =
-		ConquestUnitCombat::CalculatePreview(*SelectedUnit, *DefenderUnit, AttackDistance);
+		ConquestUnitCombat::CalculatePreview(PreviewAttacker, PreviewDefender, AttackDistance);
 	PreviewData.AttackerName = ConquestHUDGetUnitDisplayName(*ConquestGS, *SelectedUnit);
 	PreviewData.DefenderName = ConquestHUDGetUnitDisplayName(*ConquestGS, *DefenderUnit);
 	ConquestHUDAppendHappinessCombatModifierText(
@@ -1639,7 +1683,7 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 	ConquestHUDAppendUnitCombatModifierTexts(
 		PreviewData.ModifierTexts,
 		NSLOCTEXT("Conquest", "CombatPreviewAttackerAttackLabel", "Attacker ATK"),
-		*SelectedUnit,
+		PreviewAttacker,
 		EConquestUnitCombatModifierType::Attack
 	);
 	if (DefenderUnit->OwnerPlayerId != INDEX_NONE)
@@ -1657,7 +1701,7 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 	ConquestHUDAppendUnitCombatModifierTexts(
 		PreviewData.ModifierTexts,
 		NSLOCTEXT("Conquest", "CombatPreviewDefenderDefenseLabel", "Defender DEF"),
-		*DefenderUnit,
+		PreviewDefender,
 		EConquestUnitCombatModifierType::Defense
 	);
 	if (PreviewData.bHasCounterAttack)
@@ -1665,7 +1709,7 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		ConquestHUDAppendUnitCombatModifierTexts(
 			PreviewData.ModifierTexts,
 			NSLOCTEXT("Conquest", "CombatPreviewDefenderCounterLabel", "Defender Counter"),
-			*DefenderUnit,
+			PreviewDefender,
 			EConquestUnitCombatModifierType::Attack
 		);
 	}
@@ -2017,6 +2061,33 @@ void AConquestHUD::HideResearchPanel()
 	{
 		ResearchPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
+}
+
+void AConquestHUD::ShowPhilosophyPanel()
+{
+	if (!PhilosophyPanelWidget)
+	{
+		return;
+	}
+
+	PhilosophyPanelWidget->RefreshPhilosophyOptions();
+	PhilosophyPanelWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void AConquestHUD::HidePhilosophyPanel()
+{
+	if (PhilosophyPanelWidget)
+	{
+		PhilosophyPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void AConquestHUD::CloseEndTurnBlockingMenus()
+{
+	HideResearchPanel();
+	HidePhilosophyPanel();
+	HideCityPanel();
+	ClearUnitSelection();
 }
 
 bool AConquestHUD::GetLocalStartingRegion(FConquestPlayerStartRegion& OutStartRegion) const

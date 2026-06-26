@@ -34,6 +34,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Research")
 	void RequestSetCurrentResearch(FName TechId);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Philosophy")
+	void RequestAdoptPhilosophy(FName PhilosophyId);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|City")
 	void RequestSetCityProduction(int32 CityId, ECityProductionType ProductionType, FName ProductionId);
 
@@ -87,6 +90,9 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSetCurrentResearch(FName TechId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestAdoptPhilosophy(FName PhilosophyId);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSetCityProduction(int32 CityId, ECityProductionType ProductionType, FName ProductionId);

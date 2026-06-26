@@ -4,6 +4,7 @@
 #include "Conquest/Civilisations/ConquestCivilisationTypes.h"
 #include "Conquest/Units/ConquestUnitActor.h"
 #include "GameFramework/GameStateBase.h"
+#include "Conquest/Core/ConquestModifierTypes.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/World/Generation/ModularHexGridActor.h"
 #include "Conquest/World/Generation/ConquestGameSetupTypes.h"
@@ -14,6 +15,8 @@ class UConquestTurnManager;
 class UConquestCityManager;
 class UConquestYieldManager;
 class UConquestTechManager;
+class UConquestModifierManager;
+class UConquestPhilosophyManager;
 class UConquestBuildingData;
 class UConquestTechData;
 class FHexGridModel;
@@ -30,6 +33,7 @@ enum class EConquestEndTurnBlockType : uint8
 	GameNotReady,
 	WrongPhase,
 	Research,
+	Philosophy,
 	CityProduction,
 	UnitOrders,
 	CityGrowth
@@ -140,6 +144,12 @@ public:
 	TObjectPtr<UConquestTechManager> TechManager;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UConquestModifierManager> ModifierManager;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UConquestPhilosophyManager> PhilosophyManager;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UConquestContentManager> ContentManager;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Data")
@@ -156,6 +166,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Data")
 	TObjectPtr<UDataTable> PhilosophyTable = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Philosophy", meta=(ClampMin="0"))
+	int32 BasePhilosophyCultureCost = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Conquest|Philosophy", meta=(ClampMin="0.0"))
+	float PhilosophyCostIncreasePercentPerAdoption = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Modifiers")
+	EConquestModifierRoundingMode DefaultModifierRoundingMode = EConquestModifierRoundingMode::Nearest;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Modifiers", meta=(ClampMin="0.0001"))
+	float DefaultModifierRoundingIncrement = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Modifiers")
+	TArray<FConquestModifierRoundingRule> ModifierRoundingRules;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Conquest|Players")
 	TObjectPtr<UConquestCivilisationData> HumanCivilisation = nullptr;

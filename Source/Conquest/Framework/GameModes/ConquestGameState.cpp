@@ -2,6 +2,8 @@
 
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
+#include "Conquest/Managers/ConquestPhilosophyManager.h"
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
@@ -35,6 +37,8 @@ void AConquestGameState::BeginPlay()
 	CityManager = NewObject<UConquestCityManager>(this);
 	YieldManager = NewObject<UConquestYieldManager>(this);
 	TechManager = NewObject<UConquestTechManager>(this);
+	ModifierManager = NewObject<UConquestModifierManager>(this);
+	PhilosophyManager = NewObject<UConquestPhilosophyManager>(this);
 	ContentManager = NewObject<UConquestContentManager>(this);
 
 	if (ContentManager)
@@ -62,11 +66,22 @@ void AConquestGameState::BeginPlay()
 		TechManager->Initialize(this);
 	}
 
+	if (ModifierManager)
+	{
+		ModifierManager->Initialize(this);
+	}
+
+	if (PhilosophyManager)
+	{
+		PhilosophyManager->Initialize(this);
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("GameState class at runtime: %s"), *GetClass()->GetName());
 	UE_LOG(LogTemp, Warning, TEXT("BuildingTable: %s"), *GetNameSafe(BuildingTable));
 	UE_LOG(LogTemp, Warning, TEXT("UnitTable: %s"), *GetNameSafe(UnitTable));
 	UE_LOG(LogTemp, Warning, TEXT("UnitAugmentTable: %s"), *GetNameSafe(UnitAugmentTable));
 	UE_LOG(LogTemp, Warning, TEXT("TechTable: %s"), *GetNameSafe(TechTable));
+	UE_LOG(LogTemp, Warning, TEXT("PhilosophyTable: %s"), *GetNameSafe(PhilosophyTable));
 	UE_LOG(LogTemp, Warning, TEXT("HumanCivilisation: %s"), *GetNameSafe(HumanCivilisation));
 
 	if (!HasAuthority() && ReplicatedConquestState.PlayerEmpires.Num() > 0)
@@ -508,6 +523,20 @@ bool AConquestGameState::GetEndTurnBlockerForPlayer(int32 PlayerId, FConquestEnd
 		OutBlocker.Type = EConquestEndTurnBlockType::Research;
 		OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedResearch", "Select research");
 		return true;
+	}
+
+	if (PhilosophyManager)
+	{
+		const int32 NextPhilosophyCost = PhilosophyManager->GetNextPhilosophyCultureCost(PlayerId);
+		if (
+			Player.StoredYields.Culture >= NextPhilosophyCost &&
+			PhilosophyManager->GetAvailablePhilosophyIds(PlayerId).Num() > 0
+		)
+		{
+			OutBlocker.Type = EConquestEndTurnBlockType::Philosophy;
+			OutBlocker.Message = NSLOCTEXT("Conquest", "EndTurnBlockedPhilosophy", "Choose Philosophy");
+			return true;
+		}
 	}
 
 	if (CityManager)

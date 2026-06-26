@@ -38,6 +38,7 @@ public:
 	void GetAllUnitAugments(TArray<const FConquestUnitAugmentRow*>& OutRows) const;
 	void GetStartingBuildingIdsForPlayer(int32 PlayerId, TArray<FName>& OutBuildingIds) const;
 	void GetAllTechs(TArray<const FConquestTechRow*>& OutRows) const;
+	void GetAllPhilosophies(TArray<const FConquestPhilosophyRow*>& OutRows) const;
 
 private:
 	UPROPERTY()

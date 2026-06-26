@@ -5,6 +5,8 @@
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestModifierManager.h"
+#include "Conquest/Managers/ConquestPhilosophyManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Player/ConquestPlayerController.h"
@@ -484,6 +486,17 @@ bool AConquestGameMode::SetCurrentResearchForPlayer(int32 PlayerId, FName TechId
 	return ConquestGS->TechManager->SetCurrentResearchById(PlayerId, TechId);
 }
 
+bool AConquestGameMode::AdoptPhilosophyForPlayer(int32 PlayerId, FName PhilosophyId)
+{
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS || ConquestGS->bGameEnded || !ConquestGS->PhilosophyManager)
+	{
+		return false;
+	}
+
+	return ConquestGS->PhilosophyManager->AdoptPhilosophyById(PlayerId, PhilosophyId);
+}
+
 bool AConquestGameMode::SetCityProductionForPlayer(
 	int32 PlayerId,
 	int32 CityId,
@@ -605,18 +618,21 @@ bool AConquestGameMode::MoveUnitForPlayer(int32 PlayerId, int32 UnitInstanceId, 
 			}
 
 			const int32 MoveCost = GetMoveCost(*GridModel, CurrentCoord, NeighborCoord);
-			if (MoveCost == TNumericLimits<int32>::Max())
+			const int32 ModifiedMoveCost = ConquestGS->ModifierManager
+				? ConquestGS->ModifierManager->CalculateMovementCost(*Unit, CurrentCoord, NeighborCoord, MoveCost)
+				: MoveCost;
+			if (ModifiedMoveCost == TNumericLimits<int32>::Max())
 			{
 				continue;
 			}
 
 			const bool bOneTileMinimumMove = CurrentCoord == Unit->TileCoord && CurrentRemaining > 0;
-			if (CurrentRemaining < MoveCost && !bOneTileMinimumMove)
+			if (CurrentRemaining < ModifiedMoveCost && !bOneTileMinimumMove)
 			{
 				continue;
 			}
 
-			const int32 NewRemaining = FMath::Max(0, CurrentRemaining - MoveCost);
+			const int32 NewRemaining = FMath::Max(0, CurrentRemaining - ModifiedMoveCost);
 			const int32* ExistingRemaining = BestRemainingByCoord.Find(NeighborCoord);
 			if (ExistingRemaining && *ExistingRemaining >= NewRemaining)
 			{
@@ -810,18 +826,6 @@ bool AConquestGameMode::ApplyUnitAugmentForPlayer(int32 PlayerId, int32 UnitInst
 	NewAugment.MultiplierBonus = AugmentRow->MultiplierBonus;
 	Unit->Augments.Add(NewAugment);
 
-	if (AugmentRow->ModifiedStat == EConquestUnitAugmentStat::AttackMultiplier ||
-		AugmentRow->ModifiedStat == EConquestUnitAugmentStat::DefenseMultiplier)
-	{
-		FConquestUnitCombatModifier CombatModifier;
-		CombatModifier.ModifierId = AugmentId;
-		CombatModifier.ModifierType = AugmentRow->ModifiedStat == EConquestUnitAugmentStat::AttackMultiplier
-			? EConquestUnitCombatModifierType::Attack
-			: EConquestUnitCombatModifierType::Defense;
-		CombatModifier.Multiplier = FMath::Max(0.0f, 1.0f + AugmentRow->MultiplierBonus);
-		Unit->CombatModifiers.Add(CombatModifier);
-	}
-
 	const int32 PreviousMaxHealth = FMath::Max(1, Unit->CachedMaxHealth);
 	ConquestGS->CityManager->RecalculateUnitStats(*Unit);
 	if (Unit->CachedMaxHealth > PreviousMaxHealth)
@@ -877,8 +881,20 @@ bool AConquestGameMode::AttackUnitForPlayer(
 		return false;
 	}
 
-	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(*Attacker, EConquestUnitCombatModifierType::Attack);
-	const float DefenderDefenseValue = ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Defense);
+	const float AttackerCombatValue = ConquestGS->ModifierManager
+		? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+			*Attacker,
+			EConquestUnitCombatModifierType::Attack,
+			DefenderOwnerPlayerId
+		)
+		: ConquestUnitCombat::GetCombatValue(*Attacker, EConquestUnitCombatModifierType::Attack);
+	const float DefenderDefenseValue = ConquestGS->ModifierManager
+		? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+			*Defender,
+			EConquestUnitCombatModifierType::Defense,
+			PlayerId
+		)
+		: ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Defense);
 	const int32 DefenderDamage = ConquestUnitCombat::CalculateDeterministicDamage(AttackerCombatValue, DefenderDefenseValue, 50.0f);
 
 	Defender->CurrentHealth = FMath::Clamp(Defender->CurrentHealth - DefenderDamage, 0, Defender->CachedMaxHealth);
@@ -889,7 +905,13 @@ bool AConquestGameMode::AttackUnitForPlayer(
 	const bool bDefenderKilled = Defender->CurrentHealth <= 0;
 	if (!bDefenderKilled && AttackDistance <= 1)
 	{
-		const float DefenderCounterValue = ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Attack);
+		const float DefenderCounterValue = ConquestGS->ModifierManager
+			? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+				*Defender,
+				EConquestUnitCombatModifierType::Attack,
+				PlayerId
+			)
+			: ConquestUnitCombat::GetCombatValue(*Defender, EConquestUnitCombatModifierType::Attack);
 		const int32 AttackerDamage = ConquestUnitCombat::CalculateDeterministicDamage(DefenderCounterValue, AttackerCombatValue, 25.0f);
 		Attacker->CurrentHealth = FMath::Clamp(Attacker->CurrentHealth - AttackerDamage, 0, Attacker->CachedMaxHealth);
 	}
@@ -981,10 +1003,16 @@ bool AConquestGameMode::AttackCityForPlayer(
 
 	const bool bCityAlreadyDefeated = DefenderCity->CurrentHealth <= 0;
 	const bool bMeleeAttack = Attacker->CachedAttackRange <= 1 && AttackDistance <= 1;
-	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(
-		*Attacker,
-		EConquestUnitCombatModifierType::Attack
-	);
+	const float AttackerCombatValue = ConquestGS->ModifierManager
+		? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+			*Attacker,
+			EConquestUnitCombatModifierType::Attack,
+			DefenderCity->OwnerPlayerId
+		)
+		: ConquestUnitCombat::GetCombatValue(
+			*Attacker,
+			EConquestUnitCombatModifierType::Attack
+		);
 	const float CityDefenseValue = GetCityCombatValue(*DefenderCity);
 	const int32 CityDamage = bCityAlreadyDefeated
 		? 0
@@ -1095,10 +1123,16 @@ bool AConquestGameMode::AttackTileForPlayer(
 	}
 
 	const FIntPoint AttackerFromCoord = Attacker->TileCoord;
-	const float AttackerCombatValue = ConquestUnitCombat::GetCombatValue(
-		*Attacker,
-		EConquestUnitCombatModifierType::Attack
-	);
+	const float AttackerCombatValue = ConquestGS->ModifierManager
+		? ConquestGS->ModifierManager->CalculateUnitCombatValue(
+			*Attacker,
+			EConquestUnitCombatModifierType::Attack,
+			TargetTile->Gameplay.OwnerPlayerId
+		)
+		: ConquestUnitCombat::GetCombatValue(
+			*Attacker,
+			EConquestUnitCombatModifierType::Attack
+		);
 	const float TileDefenseValue = FMath::Max(1.0f, static_cast<float>(FMath::Max(0, TileCombatState.CombatStrength)));
 	const int32 TileDamage = ConquestUnitCombat::CalculateDeterministicDamage(
 		AttackerCombatValue,

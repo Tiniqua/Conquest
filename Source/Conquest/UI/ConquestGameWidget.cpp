@@ -12,6 +12,7 @@
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Managers/ConquestCityManager.h"
+#include "Conquest/Managers/ConquestPhilosophyManager.h"
 #include "Conquest/Managers/ConquestTechManager.h"
 #include "Conquest/Managers/ConquestTurnManager.h"
 #include "Conquest/Managers/ConquestYieldManager.h"
@@ -236,6 +237,12 @@ void UConquestGameWidget::NativeConstruct()
 		ResearchButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleResearchClicked);
 	}
 
+	if (PhilosophyButton)
+	{
+		PhilosophyButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandlePhilosophyClicked);
+		PhilosophyButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandlePhilosophyClicked);
+	}
+
 	if (FoodYieldLensButton)
 	{
 		FoodYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleFoodYieldLensClicked);
@@ -312,6 +319,12 @@ void UConquestGameWidget::NativeConstruct()
 			ConquestGS->TechManager->OnResearchChanged.RemoveDynamic(this, &UConquestGameWidget::HandleResearchChanged);
 			ConquestGS->TechManager->OnResearchChanged.AddDynamic(this, &UConquestGameWidget::HandleResearchChanged);
 		}
+
+		if (ConquestGS->PhilosophyManager)
+		{
+			ConquestGS->PhilosophyManager->OnPhilosophiesChanged.RemoveDynamic(this, &UConquestGameWidget::HandlePhilosophiesChanged);
+			ConquestGS->PhilosophyManager->OnPhilosophiesChanged.AddDynamic(this, &UConquestGameWidget::HandlePhilosophiesChanged);
+		}
 	}
 	
 	ClearHoveredTileInfo();
@@ -325,6 +338,7 @@ void UConquestGameWidget::NativeConstruct()
 	RefreshTopBarYieldInfo();
 	RefreshYieldLensButtons();
 	RefreshResearchInfo();
+	RefreshPhilosophyInfo();
 	RefreshEndGameResultFromGameState();
 }
 
@@ -342,6 +356,11 @@ void UConquestGameWidget::NativeDestruct()
 		if (ConquestGS->TechManager)
 		{
 			ConquestGS->TechManager->OnResearchChanged.RemoveDynamic(this, &UConquestGameWidget::HandleResearchChanged);
+		}
+
+		if (ConquestGS->PhilosophyManager)
+		{
+			ConquestGS->PhilosophyManager->OnPhilosophiesChanged.RemoveDynamic(this, &UConquestGameWidget::HandlePhilosophiesChanged);
 		}
 	}
 
@@ -370,11 +389,24 @@ void UConquestGameWidget::NativeDestruct()
 		GoldYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleGoldYieldLensClicked);
 	}
 
+	if (PhilosophyButton)
+	{
+		PhilosophyButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandlePhilosophyClicked);
+	}
+
 	Super::NativeDestruct();
 }
 
 void UConquestGameWidget::HandleEndTurnClicked()
 {
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PC->GetHUD()))
+		{
+			ConquestHUD->CloseEndTurnBlockingMenus();
+		}
+	}
+
 	if (IsWaitingForOtherPlayers())
 	{
 		RefreshTurnInfo();
@@ -410,6 +442,20 @@ void UConquestGameWidget::HandleResearchClicked()
 	}
 }
 
+void UConquestGameWidget::HandlePhilosophyClicked()
+{
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		return;
+	}
+
+	if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PC->GetHUD()))
+	{
+		ConquestHUD->ShowPhilosophyPanel();
+	}
+}
+
 void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 {
 	(void)NewTurn;
@@ -417,6 +463,7 @@ void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
+	RefreshPhilosophyInfo();
 }
 
 void UConquestGameWidget::HandleConquestStateChanged()
@@ -432,6 +479,7 @@ void UConquestGameWidget::HandleConquestStateChanged()
 	RefreshTopBarYieldInfo();
 	RefreshYieldLensButtons();
 	RefreshResearchInfo();
+	RefreshPhilosophyInfo();
 	RefreshSelectedUnitInfoFromGameState();
 	RefreshEndGameResultFromGameState();
 }
@@ -439,6 +487,12 @@ void UConquestGameWidget::HandleConquestStateChanged()
 void UConquestGameWidget::HandleResearchChanged()
 {
 	RefreshResearchInfo();
+}
+
+void UConquestGameWidget::HandlePhilosophiesChanged()
+{
+	RefreshPhilosophyInfo();
+	RefreshTopBarYieldInfo();
 }
 
 void UConquestGameWidget::RefreshTurnInfo()
@@ -733,6 +787,54 @@ void UConquestGameWidget::RefreshResearchInfo()
 	SetText(CurrentResearchText, GetCurrentResearchStatusText());
 }
 
+FText UConquestGameWidget::GetCurrentPhilosophyStatusText() const
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+
+	if (!ConquestGS || !ConquestGS->PhilosophyManager)
+	{
+		return NSLOCTEXT("Conquest", "PhilosophyStatusUnavailable", "Philosophy");
+	}
+
+	const FConquestPlayerEmpireState& Player = ConquestGS->GetHumanPlayer();
+	const int32 NextCost = ConquestGS->PhilosophyManager->GetNextPhilosophyCultureCost(Player.PlayerId);
+	const int32 StoredCulture = Player.StoredYields.Culture;
+	const int32 CulturePerTurn = Player.CachedYieldPerTurn.Culture;
+
+	if (StoredCulture >= NextCost)
+	{
+		return FText::Format(
+			NSLOCTEXT("Conquest", "PhilosophyStatusAvailable", "Philosophy Available ({0}/{1})"),
+			FText::AsNumber(StoredCulture),
+			FText::AsNumber(NextCost)
+		);
+	}
+
+	if (CulturePerTurn <= 0)
+	{
+		return FText::Format(
+			NSLOCTEXT("Conquest", "PhilosophyStatusNoCulture", "Philosophy: {0}/{1} Culture"),
+			FText::AsNumber(StoredCulture),
+			FText::AsNumber(NextCost)
+		);
+	}
+
+	const int32 Turns = FMath::CeilToInt(static_cast<float>(NextCost - StoredCulture) / static_cast<float>(CulturePerTurn));
+	return FText::Format(
+		NSLOCTEXT("Conquest", "PhilosophyStatusTurns", "Philosophy: {0}/{1} | {2} Turns"),
+		FText::AsNumber(StoredCulture),
+		FText::AsNumber(NextCost),
+		FText::AsNumber(Turns)
+	);
+}
+
+void UConquestGameWidget::RefreshPhilosophyInfo()
+{
+	SetText(CurrentPhilosophyText, GetCurrentPhilosophyStatusText());
+}
+
 void UConquestGameWidget::RefreshSelectedUnitInfoFromGameState()
 {
 	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
@@ -918,6 +1020,9 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 	{
 	case EConquestEndTurnBlockType::Research:
 		ConquestHUD->ShowResearchPanel();
+		return true;
+	case EConquestEndTurnBlockType::Philosophy:
+		ConquestHUD->ShowPhilosophyPanel();
 		return true;
 	case EConquestEndTurnBlockType::CityProduction:
 		if (Blocker.CityId != INDEX_NONE)

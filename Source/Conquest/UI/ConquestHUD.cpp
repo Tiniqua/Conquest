@@ -1650,8 +1650,10 @@ bool AConquestHUD::UpdateSelectedUnitCombatPreviewForTile(int32 Q, int32 R)
 		PreviewData.bHasCounterAttack = DefenderCity->CurrentHealth > 0 && !PreviewData.bDefenderKilled && AttackDistance <= 1;
 		if (PreviewData.bHasCounterAttack)
 		{
+			FCityState CounterAttackCity = *DefenderCity;
+			CounterAttackCity.CurrentHealth = PreviewData.DefenderProjectedHealth;
 			PreviewData.DamageTaken = ConquestUnitCombat::CalculateDeterministicDamage(
-				ConquestHUDGetCityCombatValue(*DefenderCity),
+				ConquestHUDGetCityCombatValue(CounterAttackCity),
 				AttackerCombatValue,
 				25.0f
 			);

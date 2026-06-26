@@ -1075,6 +1075,7 @@ void UConquestCityManager::RecalculateEmpireYields(int32 PlayerId)
 			if (City.OwnerPlayerId == PlayerId)
 			{
 				RecalculateCityYields(City);
+				RefreshCityCombatStats(City);
 			}
 		}
 

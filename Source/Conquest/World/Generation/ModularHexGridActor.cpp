@@ -2266,6 +2266,7 @@ void AModularHexGridActor::OnRep_ReplicatedSetupSettings()
 	{
 		if (ConquestGS->ActiveGridActor == this)
 		{
+			ConquestGS->ApplyReplicatedTileImprovements();
 			ConquestGS->RebuildCityVisualsFromReplicatedState();
 			ConquestGS->RebuildUnitVisualsFromReplicatedState();
 			ConquestGS->OnConquestStateChanged.Broadcast();
@@ -2728,6 +2729,13 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 		}
 	}
 	return bChanged;
+}
+
+void AModularHexGridActor::RefreshPlacedTileVisualMeshes()
+{
+	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
+	RebuildPlacedTileVisualMeshes();
+	RebuildTileYieldOverlay();
 }
 
 void AModularHexGridActor::RebuildPlacedTileVisualMeshes()

@@ -46,6 +46,65 @@ namespace
 		return !SingleId.IsNone() && Value == SingleId;
 	}
 
+	bool MatchesBuildingIdWithReplacement(
+		const AConquestGameState* GameState,
+		FName BuildingId,
+		FName SingleId,
+		const TArray<FName>& Ids
+	)
+	{
+		if (MatchesNameList(BuildingId, SingleId, Ids))
+		{
+			return true;
+		}
+
+		const FConquestBuildingRow* BuildingRow = GameState && GameState->ContentManager
+			? GameState->ContentManager->FindBuilding(BuildingId)
+			: nullptr;
+		return BuildingRow && MatchesNameList(BuildingRow->ReplacesBuildingId, SingleId, Ids);
+	}
+
+	bool MatchesUnitIdWithReplacement(
+		const AConquestGameState* GameState,
+		FName UnitId,
+		FName SingleId,
+		const TArray<FName>& Ids
+	)
+	{
+		if (MatchesNameList(UnitId, SingleId, Ids))
+		{
+			return true;
+		}
+
+		const FConquestUnitRow* UnitRow = GameState && GameState->ContentManager
+			? GameState->ContentManager->FindUnit(UnitId)
+			: nullptr;
+		return UnitRow && MatchesNameList(UnitRow->ReplacesUnitId, SingleId, Ids);
+	}
+
+	bool MatchesProductionIdWithReplacement(
+		const AConquestGameState* GameState,
+		const FConquestModifierContext& Context,
+		FName SingleId,
+		const TArray<FName>& Ids
+	)
+	{
+		if (MatchesNameList(Context.ProductionId, SingleId, Ids))
+		{
+			return true;
+		}
+
+		switch (Context.ProductionType)
+		{
+		case ECityProductionType::Building:
+			return MatchesBuildingIdWithReplacement(GameState, Context.ProductionId, SingleId, Ids);
+		case ECityProductionType::Unit:
+			return MatchesUnitIdWithReplacement(GameState, Context.ProductionId, SingleId, Ids);
+		default:
+			return false;
+		}
+	}
+
 	EConquestModifierAttribute YieldAttributeFromIndex(int32 Index)
 	{
 		switch (Index)
@@ -895,7 +954,11 @@ namespace
 				{
 					for (const FName BuildingId : Condition.Ids)
 					{
-						if (City->ConstructedBuildingIds.Contains(BuildingId))
+						if (City->ConstructedBuildingIds.ContainsByPredicate(
+							[GameState, BuildingId](const FName ConstructedBuildingId)
+							{
+								return MatchesBuildingIdWithReplacement(GameState, ConstructedBuildingId, BuildingId, TArray<FName>());
+							}))
 						{
 							bMatches = true;
 							break;
@@ -904,7 +967,11 @@ namespace
 				}
 				else if (!Condition.Id.IsNone())
 				{
-					bMatches = City->ConstructedBuildingIds.Contains(Condition.Id);
+					bMatches = City->ConstructedBuildingIds.ContainsByPredicate(
+						[GameState, &Condition](const FName ConstructedBuildingId)
+						{
+							return MatchesBuildingIdWithReplacement(GameState, ConstructedBuildingId, Condition.Id, Condition.Ids);
+						});
 				}
 			}
 			break;
@@ -918,10 +985,21 @@ namespace
 				Player.CityIds[0] == City->CityId;
 			break;
 		case EConquestModifierConditionType::UnitIs:
-			bMatches = Unit && MatchesNameList(Unit->UnitId, Condition.Id, Condition.Ids);
+			bMatches = Unit && MatchesUnitIdWithReplacement(GameState, Unit->UnitId, Condition.Id, Condition.Ids);
 			break;
 		case EConquestModifierConditionType::ProductionIs:
-			bMatches = MatchesNameList(Context.ProductionId, Condition.Id, Condition.Ids);
+			if (Condition.Ids.Num() > 0 || !Condition.Id.IsNone())
+			{
+				bMatches = MatchesProductionIdWithReplacement(GameState, Context, Condition.Id, Condition.Ids);
+			}
+			else if (Condition.ProductionType != ECityProductionType::None)
+			{
+				bMatches = Context.ProductionType == Condition.ProductionType;
+			}
+			else
+			{
+				bMatches = false;
+			}
 			break;
 		case EConquestModifierConditionType::ProductionTypeIs:
 			bMatches = Context.ProductionType == Condition.ProductionType;
@@ -978,8 +1056,17 @@ namespace
 		const FConquestResolvedModifier& Modifier
 	)
 	{
+		const bool bAttributeMatches =
+			Modifier.Definition.Attribute == Attribute ||
+			(
+				Context.Scope == EConquestModifierTargetScope::Production &&
+				Modifier.Definition.TargetScope == EConquestModifierTargetScope::Production &&
+				Attribute == EConquestModifierAttribute::ProductionCost &&
+				Modifier.Definition.Attribute == EConquestModifierAttribute::PhilosophyCost
+			);
+
 		if (
-			Modifier.Definition.Attribute != Attribute ||
+			!bAttributeMatches ||
 			!TargetScopeMatches(Modifier.Definition.TargetScope, Context.Scope)
 		)
 		{
@@ -1009,11 +1096,15 @@ namespace
 		}
 
 		int32 Count = 0;
-		auto CountCityBuildings = [&Definition, &Count](const FCityState& City)
+		auto CountCityBuildings = [GameState, &Definition, &Count](const FCityState& City)
 		{
 			for (const FName BuildingId : City.ConstructedBuildingIds)
 			{
-				if (CountIdMatches(BuildingId, Definition))
+				if (Definition.CountIds.Num() <= 0 && Definition.CountId.IsNone())
+				{
+					++Count;
+				}
+				else if (MatchesBuildingIdWithReplacement(GameState, BuildingId, Definition.CountId, Definition.CountIds))
 				{
 					++Count;
 				}
@@ -1114,7 +1205,11 @@ namespace
 		int32 Count = 0;
 		for (const FConquestUnitState& Unit : Player.Units)
 		{
-			if (CountIdMatches(Unit.UnitId, Definition))
+			if (Definition.CountIds.Num() <= 0 && Definition.CountId.IsNone())
+			{
+				++Count;
+			}
+			else if (MatchesUnitIdWithReplacement(GameState, Unit.UnitId, Definition.CountId, Definition.CountIds))
 			{
 				++Count;
 			}

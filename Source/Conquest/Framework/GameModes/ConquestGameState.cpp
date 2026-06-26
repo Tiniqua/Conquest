@@ -13,6 +13,106 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
+namespace
+{
+	void RebuildPlayerCivilisationsFromLobby(AConquestGameState& GameState)
+	{
+		GameState.PlayerCivilisations.Reset();
+
+		for (const FConquestLobbyPlayerSlot& Slot : GameState.LobbyPlayerSlots)
+		{
+			if (Slot.PlayerId != INDEX_NONE && Slot.SlotType != EConquestLobbySlotType::Closed && Slot.Civilisation)
+			{
+				GameState.PlayerCivilisations.Add(Slot.PlayerId, Slot.Civilisation);
+			}
+		}
+
+		if (const TObjectPtr<UConquestCivilisationData>* HostCivilisation =
+			GameState.PlayerCivilisations.Find(GameState.HumanPlayer.PlayerId))
+		{
+			GameState.HumanCivilisation = HostCivilisation->Get();
+		}
+	}
+
+	void BuildReplicatedTileImprovements(const AConquestGameState& GameState, TArray<FConquestReplicatedTileImprovement>& OutTileImprovements)
+	{
+		OutTileImprovements.Reset();
+
+		const AModularHexGridActor* GridActor = GameState.ActiveGridActor;
+		if (!GridActor)
+		{
+			return;
+		}
+
+		const FHexGridModel& GridModel = GridActor->GetGridModel();
+		const TArray<FHexTileData>& Tiles = GridModel.GetTiles();
+		for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
+		{
+			const FHexTileData& Tile = Tiles[TileIndex];
+			if (Tile.ImprovementId.IsNone())
+			{
+				continue;
+			}
+
+			int32 Q = INDEX_NONE;
+			int32 R = INDEX_NONE;
+			if (!GridModel.GetCoordFromIndex(TileIndex, Q, R))
+			{
+				continue;
+			}
+
+			FConquestReplicatedTileImprovement& ReplicatedImprovement = OutTileImprovements.AddDefaulted_GetRef();
+			ReplicatedImprovement.Coord = FIntPoint(Q, R);
+			ReplicatedImprovement.ImprovementId = Tile.ImprovementId;
+		}
+	}
+
+	void ApplyReplicatedTileImprovementsToGrid(AConquestGameState& GameState)
+	{
+		AModularHexGridActor* GridActor = GameState.ActiveGridActor;
+		if (!GridActor)
+		{
+			return;
+		}
+
+		FHexGridModel& GridModel = GridActor->GetMutableGridModel();
+		bool bChangedAnyImprovement = false;
+		TArray<FHexTileData>& Tiles = GridModel.GetMutableTiles();
+		for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
+		{
+			FHexTileData& Tile = Tiles[TileIndex];
+			if (Tile.ImprovementId.IsNone())
+			{
+				continue;
+			}
+
+			int32 Q = INDEX_NONE;
+			int32 R = INDEX_NONE;
+			if (GridModel.GetCoordFromIndex(TileIndex, Q, R))
+			{
+				bChangedAnyImprovement |= GridModel.SetTileImprovement(Q, R, NAME_None);
+			}
+		}
+
+		for (const FConquestReplicatedTileImprovement& ReplicatedImprovement : GameState.ReplicatedConquestState.TileImprovements)
+		{
+			if (!ReplicatedImprovement.ImprovementId.IsNone())
+			{
+				bChangedAnyImprovement |= GridModel.SetTileImprovement(
+					ReplicatedImprovement.Coord.X,
+					ReplicatedImprovement.Coord.Y,
+					ReplicatedImprovement.ImprovementId
+				);
+			}
+		}
+
+		if (bChangedAnyImprovement)
+		{
+			GridActor->RefreshPlacedTileVisualMeshes();
+		}
+	}
+}
+
 
 AConquestGameState::AConquestGameState()
 {
@@ -122,6 +222,7 @@ void AConquestGameState::PushReplicatedState()
 	ReplicatedConquestState.PlayerStartRegions = PlayerStartRegions;
 	ReplicatedConquestState.bGameEnded = bGameEnded;
 	ReplicatedConquestState.WinningPlayerId = WinningPlayerId;
+	BuildReplicatedTileImprovements(*this, ReplicatedConquestState.TileImprovements);
 
 	if (TurnManager)
 	{
@@ -137,6 +238,11 @@ void AConquestGameState::PushReplicatedState()
 	ForceNetUpdate();
 }
 
+void AConquestGameState::ApplyReplicatedTileImprovements()
+{
+	ApplyReplicatedTileImprovementsToGrid(*this);
+}
+
 void AConquestGameState::OnRep_ReplicatedConquestState()
 {
 	PlayerEmpires = ReplicatedConquestState.PlayerEmpires;
@@ -145,15 +251,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 	PlayerStartRegions = ReplicatedConquestState.PlayerStartRegions;
 	bGameEnded = ReplicatedConquestState.bGameEnded;
 	WinningPlayerId = ReplicatedConquestState.WinningPlayerId;
-	PlayerCivilisations.Reset();
-
-	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
-	{
-		if (Slot.PlayerId != INDEX_NONE && Slot.Civilisation)
-		{
-			PlayerCivilisations.Add(Slot.PlayerId, Slot.Civilisation);
-		}
-	}
+	RebuildPlayerCivilisationsFromLobby(*this);
 
 	if (PlayerEmpires.Num() > 0)
 	{
@@ -175,6 +273,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 		CityManager->Cities = ReplicatedConquestState.Cities;
 	}
 
+	ApplyReplicatedTileImprovements();
 	RebuildCityVisualsFromReplicatedState();
 	RebuildUnitVisualsFromReplicatedState();
 
@@ -183,6 +282,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 
 void AConquestGameState::OnRep_ActiveGridActor()
 {
+	ApplyReplicatedTileImprovements();
 	RebuildCityVisualsFromReplicatedState();
 	RebuildUnitVisualsFromReplicatedState();
 	OnConquestStateChanged.Broadcast();
@@ -284,8 +384,8 @@ void AConquestGameState::EnsurePlayerEmpire(int32 PlayerId)
 void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
 {
 	LobbyPlayerSlots = SetupSettings.PlayerSlots;
-	PlayerCivilisations.Reset();
 	ReplicatedConquestState.TurnMode = SetupSettings.TurnMode;
+	RebuildPlayerCivilisationsFromLobby(*this);
 
 	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
 	{
@@ -294,15 +394,10 @@ void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings
 			continue;
 		}
 
-		PlayerCivilisations.Add(Slot.PlayerId, Slot.Civilisation);
 		EnsurePlayerEmpire(Slot.PlayerId);
 	}
 
-	if (const TObjectPtr<UConquestCivilisationData>* HostCivilisation = PlayerCivilisations.Find(HumanPlayer.PlayerId))
-	{
-		HumanCivilisation = HostCivilisation->Get();
-	}
-	else if (HumanCivilisation)
+	if (!PlayerCivilisations.Contains(HumanPlayer.PlayerId) && HumanCivilisation)
 	{
 		PlayerCivilisations.Add(HumanPlayer.PlayerId, HumanCivilisation);
 	}
@@ -337,6 +432,7 @@ void AConquestGameState::SetLobbyPlayerSlots(const TArray<FConquestLobbyPlayerSl
 	}
 
 	LobbyPlayerSlots = InLobbyPlayerSlots;
+	RebuildPlayerCivilisationsFromLobby(*this);
 	BroadcastStateChanged();
 }
 
@@ -371,6 +467,7 @@ bool AConquestGameState::SetLobbySlotCivilisationForPlayer(
 	Slot.Civilisation = Civilisation;
 	Slot.bIsReady = false;
 	ReplicatedConquestState.ReadyPlayerIds.Remove(Slot.PlayerId);
+	RebuildPlayerCivilisationsFromLobby(*this);
 	BroadcastStateChanged();
 	return true;
 }
@@ -472,6 +569,14 @@ UConquestCivilisationData* AConquestGameState::GetCivilisationForPlayer(int32 Pl
 	if (const TObjectPtr<UConquestCivilisationData>* FoundCivilisation = PlayerCivilisations.Find(PlayerId))
 	{
 		return FoundCivilisation->Get();
+	}
+
+	for (const FConquestLobbyPlayerSlot& Slot : LobbyPlayerSlots)
+	{
+		if (Slot.PlayerId == PlayerId && Slot.SlotType != EConquestLobbySlotType::Closed && Slot.Civilisation)
+		{
+			return Slot.Civilisation;
+		}
 	}
 
 	if (PlayerId == HumanPlayer.PlayerId)

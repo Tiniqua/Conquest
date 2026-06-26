@@ -73,6 +73,18 @@ struct FConquestPlayerStartRegion
 };
 
 USTRUCT(BlueprintType)
+struct FConquestReplicatedTileImprovement
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FIntPoint Coord = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ImprovementId = NAME_None;
+};
+
+USTRUCT(BlueprintType)
 struct FConquestReplicatedGameState
 {
 	GENERATED_BODY()
@@ -103,6 +115,9 @@ struct FConquestReplicatedGameState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FConquestPlayerStartRegion> PlayerStartRegions;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FConquestReplicatedTileImprovement> TileImprovements;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bGameEnded = false;
@@ -226,6 +241,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Replication")
 	void PushReplicatedState();
+
+	void ApplyReplicatedTileImprovements();
 
 	UFUNCTION()
 	void OnRep_ReplicatedConquestState();

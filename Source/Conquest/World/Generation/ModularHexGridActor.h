@@ -219,6 +219,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Improvements")
 	bool SetTileImprovement(int32 Q, int32 R, FName ImprovementId);
 
+	void RefreshPlacedTileVisualMeshes();
+
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Hover")
 	bool GetTileAtWorldLocation(
 		const FVector& WorldLocation,

@@ -165,6 +165,7 @@ protected:
 
 	void ToggleFogOfWar();
 	void ToggleHexGridOverlay();
+	void ToggleTileYieldOverlay();
 	void RegenerateMapWithNewSeed();
 	void HandleEnterShortcut();
 

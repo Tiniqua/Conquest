@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Conquest/Core/ConquestGameplayTypes.h"
 #include "Conquest/UI/ConquestUnitWorldIconWidget.h"
 #include "ConquestGameSetupTypes.h"
 #include "HexFeatureGenerator.h"
@@ -18,9 +19,11 @@
 class USceneComponent;
 class UProceduralMeshComponent;
 class UInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UWidgetComponent;
+class UTextRenderComponent;
 class UConquestCityWorldLabelWidget;
 class UConquestTileHealthBarWidget;
 class UHexTileResourceData;
@@ -169,6 +172,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Overlay")
 	void SetHexGridOverlayVisible(bool bVisible);
 
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void SetTileYieldLens(EConquestYieldType YieldType);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void ClearTileYieldLens();
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void SetTileYieldOverlayVisible(bool bVisible);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void ToggleTileYieldOverlay();
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void RebuildTileYieldOverlay();
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void UpdateTileYieldOverlayForTile(const FIntPoint& Coord);
+
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Water")
 	void SetWaterLayerVisible(bool bVisible);
 
@@ -213,6 +234,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Overlay")
 	bool IsHexGridOverlayVisible() const { return OverlaySettings.bShowHexGridOverlay; }
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Yields")
+	bool IsTileYieldOverlayVisible() const { return bShowTileYieldOverlay; }
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Yields")
+	EConquestYieldType GetActiveTileYieldLens() const { return ActiveTileYieldLens; }
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Yields")
+	bool HasActiveTileYieldLens() const { return bHasActiveTileYieldLens; }
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Fog Of War")
 	bool IsFogOfWarVisible() const { return bGenerateFogOfWar; }
@@ -279,6 +309,78 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Expansion")
 	float ExpansionCandidateSurfaceOffset = 14.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Yields")
+	TArray<TObjectPtr<UProceduralMeshComponent>> TileYieldBorderMeshes;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Yields")
+	TArray<TObjectPtr<UProceduralMeshComponent>> TileYieldFillMeshes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	TObjectPtr<UMaterialInterface> TileYieldBorderMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	TObjectPtr<UMaterialInterface> TileYieldFillMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	FName TileYieldMaterialColorParameterName = TEXT("Colour");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	bool bShowTileYieldOverlay = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	EConquestYieldType ActiveTileYieldLens = EConquestYieldType::Food;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	bool bHasActiveTileYieldLens = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float TileYieldHexScale = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields", meta = (ClampMin = "0.0"))
+	float TileYieldBorderWidth = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	float TileYieldSurfaceOffset = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	int32 TileYieldBorderTranslucencySortPriority = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	int32 TileYieldFillTranslucencySortPriority = 7;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	bool bShowTileYieldText = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	FLinearColor TileYieldTextColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	float TileYieldTextWorldSize = 28.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	float TileYieldTextHeightOffset = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	FRotator TileYieldTextRotation = FRotator(90.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields", meta = (ClampMin = "0"))
+	int32 TileYieldHoverRevealRadius = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
+	FLinearColor FoodYieldColor = FLinearColor(0.1f, 0.8f, 0.2f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
+	FLinearColor ProductionYieldColor = FLinearColor(0.75f, 0.45f, 0.15f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
+	FLinearColor GoldYieldColor = FLinearColor(1.0f, 0.78f, 0.05f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
+	FLinearColor ScienceYieldColor = FLinearColor(0.1f, 0.55f, 1.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields|Colors")
+	FLinearColor CultureYieldColor = FLinearColor(0.75f, 0.2f, 0.95f, 1.0f);
 	
 protected:
 	virtual void BeginPlay() override;
@@ -383,10 +485,31 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ImprovementMeshComponents;
 
+	UPROPERTY()
+	TArray<TObjectPtr<UTextRenderComponent>> TileYieldTextComponents;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldBorderMaterialInstances;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldFillMaterialInstances;
+
+	TMap<int32, TMap<FIntPoint, int32>> TileYieldSectionIndicesByLayer;
+	TMap<int32, TMap<FIntPoint, UTextRenderComponent*>> TileYieldTextComponentsByLayer;
+
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
 	void RebuildPlacedTileVisualMeshes();
 	void RebuildFogOfWarMesh();
+	void ClearTileYieldOverlay();
+	void BuildAllTileYieldOverlays();
+	void UpdateTileYieldOverlayVisibility();
+	int32 GetTileYieldValue(const FHexYield& Yield, EConquestYieldType YieldType) const;
+	FLinearColor GetTileYieldColor(EConquestYieldType YieldType) const;
+	EConquestYieldType GetTileYieldTypeForLayer(int32 LayerIndex) const;
+	int32 GetTileYieldLayerIndex(EConquestYieldType YieldType) const;
+	bool IsTileDiscoveredForYieldOverlay(const FIntPoint& Coord) const;
+	bool IsTileInYieldHoverRange(const FIntPoint& Coord) const;
 
 
 };

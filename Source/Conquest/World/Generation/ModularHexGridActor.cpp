@@ -7,10 +7,12 @@
 #include "Components/SceneComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Conquest/UI/ConquestCityWorldLabelWidget.h"
 #include "Conquest/UI/ConquestTileHealthBarWidget.h"
 #include "Conquest/UI/ConquestUnitWorldIconWidget.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -49,6 +51,27 @@ AModularHexGridActor::AModularHexGridActor()
 	HexGridOverlayMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HexGridOverlayMesh"));
 	HexGridOverlayMesh->SetupAttachment(SceneRoot);
 	HexGridOverlayMesh->bUseAsyncCooking = true;
+
+	TileYieldBorderMeshes.Reserve(5);
+	TileYieldFillMeshes.Reserve(5);
+	for (int32 YieldLayerIndex = 0; YieldLayerIndex < 5; ++YieldLayerIndex)
+	{
+		const FName BorderComponentName(*FString::Printf(TEXT("TileYieldBorderMesh_%d"), YieldLayerIndex));
+		UProceduralMeshComponent* YieldBorderMesh = CreateDefaultSubobject<UProceduralMeshComponent>(
+			BorderComponentName
+		);
+		YieldBorderMesh->SetupAttachment(SceneRoot);
+		YieldBorderMesh->bUseAsyncCooking = true;
+		TileYieldBorderMeshes.Add(YieldBorderMesh);
+
+		const FName FillComponentName(*FString::Printf(TEXT("TileYieldFillMesh_%d"), YieldLayerIndex));
+		UProceduralMeshComponent* YieldFillMesh = CreateDefaultSubobject<UProceduralMeshComponent>(
+			FillComponentName
+		);
+		YieldFillMesh->SetupAttachment(SceneRoot);
+		YieldFillMesh->bUseAsyncCooking = true;
+		TileYieldFillMeshes.Add(YieldFillMesh);
+	}
 
 	FogOfWarMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FogOfWarMesh"));
 	FogOfWarMesh->SetupAttachment(SceneRoot);
@@ -1101,6 +1124,766 @@ void AModularHexGridActor::ClearExpansionCandidateHighlights()
 	}
 }
 
+int32 AModularHexGridActor::GetTileYieldValue(const FHexYield& Yield, EConquestYieldType YieldType) const
+{
+	switch (YieldType)
+	{
+	case EConquestYieldType::Food:
+		return Yield.Food;
+	case EConquestYieldType::Production:
+		return Yield.Production;
+	case EConquestYieldType::Gold:
+		return Yield.Gold;
+	case EConquestYieldType::Science:
+		return Yield.Science;
+	case EConquestYieldType::Culture:
+		return Yield.Culture;
+	default:
+		return 0;
+	}
+}
+
+EConquestYieldType AModularHexGridActor::GetTileYieldTypeForLayer(int32 LayerIndex) const
+{
+	switch (LayerIndex)
+	{
+	case 0:
+		return EConquestYieldType::Food;
+	case 1:
+		return EConquestYieldType::Production;
+	case 2:
+		return EConquestYieldType::Science;
+	case 3:
+		return EConquestYieldType::Culture;
+	case 4:
+		return EConquestYieldType::Gold;
+	default:
+		return EConquestYieldType::Food;
+	}
+}
+
+int32 AModularHexGridActor::GetTileYieldLayerIndex(EConquestYieldType YieldType) const
+{
+	switch (YieldType)
+	{
+	case EConquestYieldType::Food:
+		return 0;
+	case EConquestYieldType::Production:
+		return 1;
+	case EConquestYieldType::Science:
+		return 2;
+	case EConquestYieldType::Culture:
+		return 3;
+	case EConquestYieldType::Gold:
+		return 4;
+	default:
+		return INDEX_NONE;
+	}
+}
+
+FLinearColor AModularHexGridActor::GetTileYieldColor(EConquestYieldType YieldType) const
+{
+	switch (YieldType)
+	{
+	case EConquestYieldType::Food:
+		return FoodYieldColor;
+	case EConquestYieldType::Production:
+		return ProductionYieldColor;
+	case EConquestYieldType::Gold:
+		return GoldYieldColor;
+	case EConquestYieldType::Science:
+		return ScienceYieldColor;
+	case EConquestYieldType::Culture:
+		return CultureYieldColor;
+	default:
+		return FLinearColor::White;
+	}
+}
+
+void AModularHexGridActor::ClearTileYieldOverlay()
+{
+	for (TObjectPtr<UProceduralMeshComponent>& YieldBorderMesh : TileYieldBorderMeshes)
+	{
+		if (YieldBorderMesh)
+		{
+			YieldBorderMesh->ClearAllMeshSections();
+			YieldBorderMesh->SetVisibility(false);
+		}
+	}
+
+	for (TObjectPtr<UProceduralMeshComponent>& YieldFillMesh : TileYieldFillMeshes)
+	{
+		if (YieldFillMesh)
+		{
+			YieldFillMesh->ClearAllMeshSections();
+			YieldFillMesh->SetVisibility(false);
+		}
+	}
+
+	for (TObjectPtr<UTextRenderComponent>& TextComponent : TileYieldTextComponents)
+	{
+		if (TextComponent)
+		{
+			TextComponent->DestroyComponent();
+		}
+	}
+
+	TileYieldTextComponents.Reset();
+	TileYieldTextComponentsByLayer.Reset();
+	TileYieldSectionIndicesByLayer.Reset();
+	TileYieldBorderMaterialInstances.Reset();
+	TileYieldFillMaterialInstances.Reset();
+}
+
+void AModularHexGridActor::SetTileYieldLens(EConquestYieldType YieldType)
+{
+	if (
+		YieldType != EConquestYieldType::Food &&
+		YieldType != EConquestYieldType::Production &&
+		YieldType != EConquestYieldType::Gold &&
+		YieldType != EConquestYieldType::Science &&
+		YieldType != EConquestYieldType::Culture
+	)
+	{
+		ClearTileYieldLens();
+		return;
+	}
+
+	ActiveTileYieldLens = YieldType;
+	bHasActiveTileYieldLens = true;
+	bShowTileYieldOverlay = true;
+	UpdateTileYieldOverlayVisibility();
+}
+
+void AModularHexGridActor::ClearTileYieldLens()
+{
+	bHasActiveTileYieldLens = false;
+	bShowTileYieldOverlay = false;
+	UpdateTileYieldOverlayVisibility();
+}
+
+void AModularHexGridActor::SetTileYieldOverlayVisible(bool bVisible)
+{
+	bShowTileYieldOverlay = bVisible;
+
+	if (!bShowTileYieldOverlay || !bHasActiveTileYieldLens)
+	{
+		UpdateTileYieldOverlayVisibility();
+		return;
+	}
+
+	UpdateTileYieldOverlayVisibility();
+}
+
+void AModularHexGridActor::ToggleTileYieldOverlay()
+{
+	if (bShowTileYieldOverlay && bHasActiveTileYieldLens)
+	{
+		ClearTileYieldLens();
+	}
+	else
+	{
+		SetTileYieldLens(EConquestYieldType::Food);
+	}
+}
+
+void AModularHexGridActor::RebuildTileYieldOverlay()
+{
+	BuildAllTileYieldOverlays();
+}
+
+bool AModularHexGridActor::IsTileDiscoveredForYieldOverlay(const FIntPoint& Coord) const
+{
+	return !bGenerateFogOfWar || LocallyRevealedFogTiles.Contains(Coord);
+}
+
+bool AModularHexGridActor::IsTileInYieldHoverRange(const FIntPoint& Coord) const
+{
+	if (HoveredQ == INDEX_NONE || HoveredR == INDEX_NONE)
+	{
+		return false;
+	}
+
+	return GridModel.GetHexDistance(FIntPoint(HoveredQ, HoveredR), Coord) <= TileYieldHoverRevealRadius;
+}
+
+void AModularHexGridActor::BuildAllTileYieldOverlays()
+{
+	ClearTileYieldOverlay();
+
+	TArray<FVector> BorderVertices;
+	TArray<int32> BorderTriangles;
+	TArray<FVector> BorderNormals;
+	TArray<FVector2D> BorderUVs;
+	TArray<FColor> BorderVertexColors;
+	TArray<FProcMeshTangent> BorderTangents;
+
+	TArray<FVector> FillVertices;
+	TArray<int32> FillTriangles;
+	TArray<FVector> FillNormals;
+	TArray<FVector2D> FillUVs;
+	TArray<FColor> FillVertexColors;
+	TArray<FProcMeshTangent> FillTangents;
+
+	auto AddHex = [](
+		const FVector& Center,
+		float Radius,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const int32 CenterIndex = Vertices.Num();
+		Vertices.Add(Center);
+		Normals.Add(FVector::UpVector);
+		UVs.Add(FVector2D(0.5f, 0.5f));
+		VertexColors.Add(Color);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+		int32 CornerIndices[6];
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const float AngleRadians = FMath::DegreesToRadians(60.0f * static_cast<float>(CornerIndex));
+			const FVector Corner(
+				Center.X + FMath::Cos(AngleRadians) * Radius,
+				Center.Y + FMath::Sin(AngleRadians) * Radius,
+				Center.Z
+			);
+
+			CornerIndices[CornerIndex] = Vertices.Num();
+			Vertices.Add(Corner);
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D(
+				0.5f + FMath::Cos(AngleRadians) * 0.5f,
+				0.5f + FMath::Sin(AngleRadians) * 0.5f
+			));
+			VertexColors.Add(Color);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const int32 NextCornerIndex = (CornerIndex + 1) % 6;
+			Triangles.Add(CenterIndex);
+			Triangles.Add(CornerIndices[NextCornerIndex]);
+			Triangles.Add(CornerIndices[CornerIndex]);
+		}
+	};
+
+	const float IconRadius = FMath::Max(1.0f, GridModel.GetHexRadius() * TileYieldHexScale);
+	const float FillRadius = FMath::Max(1.0f, IconRadius - FMath::Max(0.0f, TileYieldBorderWidth));
+	const FLinearColor BorderLinearColor = FLinearColor::Black;
+	const FColor BorderColor = BorderLinearColor.ToFColor(true);
+
+	TileYieldBorderMaterialInstances.SetNum(TileYieldBorderMeshes.Num());
+	TileYieldFillMaterialInstances.SetNum(TileYieldFillMeshes.Num());
+
+	for (int32 LayerIndex = 0; LayerIndex < 5; ++LayerIndex)
+	{
+		if (!TileYieldBorderMeshes.IsValidIndex(LayerIndex) || !TileYieldFillMeshes.IsValidIndex(LayerIndex))
+		{
+			continue;
+		}
+
+		UProceduralMeshComponent* YieldBorderMesh = TileYieldBorderMeshes[LayerIndex].Get();
+		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes[LayerIndex].Get();
+		if (!YieldBorderMesh || !YieldFillMesh)
+		{
+			continue;
+		}
+
+		BorderVertices.Reset();
+		BorderTriangles.Reset();
+		BorderNormals.Reset();
+		BorderUVs.Reset();
+		BorderVertexColors.Reset();
+		BorderTangents.Reset();
+		FillVertices.Reset();
+		FillTriangles.Reset();
+		FillNormals.Reset();
+		FillUVs.Reset();
+		FillVertexColors.Reset();
+		FillTangents.Reset();
+
+		const EConquestYieldType YieldType = GetTileYieldTypeForLayer(LayerIndex);
+		const FLinearColor FillLinearColor = GetTileYieldColor(YieldType);
+		const FColor FillColor = FillLinearColor.ToFColor(true);
+		TMap<FIntPoint, int32>& SectionIndices = TileYieldSectionIndicesByLayer.FindOrAdd(LayerIndex);
+		TMap<FIntPoint, UTextRenderComponent*>& TextComponents = TileYieldTextComponentsByLayer.FindOrAdd(LayerIndex);
+
+		UMaterialInterface* EffectiveBorderMaterial = TileYieldBorderMaterial.Get();
+		if (TileYieldBorderMaterial)
+		{
+			UMaterialInstanceDynamic* BorderMaterialInstance = UMaterialInstanceDynamic::Create(TileYieldBorderMaterial, this);
+			TileYieldBorderMaterialInstances[LayerIndex] = BorderMaterialInstance;
+			if (BorderMaterialInstance)
+			{
+				BorderMaterialInstance->SetVectorParameterValue(
+					TileYieldMaterialColorParameterName,
+					BorderLinearColor
+				);
+				EffectiveBorderMaterial = BorderMaterialInstance;
+			}
+		}
+
+		UMaterialInterface* EffectiveFillMaterial = TileYieldFillMaterial.Get();
+		if (TileYieldFillMaterial)
+		{
+			UMaterialInstanceDynamic* FillMaterialInstance = UMaterialInstanceDynamic::Create(TileYieldFillMaterial, this);
+			TileYieldFillMaterialInstances[LayerIndex] = FillMaterialInstance;
+			if (FillMaterialInstance)
+			{
+				FillMaterialInstance->SetVectorParameterValue(
+					TileYieldMaterialColorParameterName,
+					FillLinearColor
+				);
+				EffectiveFillMaterial = FillMaterialInstance;
+			}
+		}
+
+		for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
+		{
+			for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
+			{
+				const FIntPoint Coord(Q, R);
+				const FHexTileData* Tile = GridModel.GetTile(Q, R);
+				if (!Tile)
+				{
+					continue;
+				}
+
+				const int32 YieldValue = GetTileYieldValue(Tile->FinalYield, YieldType);
+				if (YieldValue <= 0)
+				{
+					continue;
+				}
+
+				const int32 SectionIndex = SectionIndices.Num();
+				SectionIndices.Add(Coord, SectionIndex);
+
+				const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
+				const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, Tile->Height + TileYieldSurfaceOffset);
+				const FVector FillCenter = BorderCenter + FVector(0.0f, 0.0f, 0.5f);
+
+				AddHex(
+					BorderCenter,
+					IconRadius,
+					BorderColor,
+					BorderVertices,
+					BorderTriangles,
+					BorderNormals,
+					BorderUVs,
+					BorderVertexColors,
+					BorderTangents
+				);
+
+				AddHex(
+					FillCenter,
+					FillRadius,
+					FillColor,
+					FillVertices,
+					FillTriangles,
+					FillNormals,
+					FillUVs,
+					FillVertexColors,
+					FillTangents
+				);
+
+				YieldBorderMesh->CreateMeshSection(
+					SectionIndex,
+					BorderVertices,
+					BorderTriangles,
+					BorderNormals,
+					BorderUVs,
+					BorderVertexColors,
+					BorderTangents,
+					false
+				);
+
+				YieldFillMesh->CreateMeshSection(
+					SectionIndex,
+					FillVertices,
+					FillTriangles,
+					FillNormals,
+					FillUVs,
+					FillVertexColors,
+					FillTangents,
+					false
+				);
+
+				YieldBorderMesh->SetMeshSectionVisible(SectionIndex, false);
+				YieldFillMesh->SetMeshSectionVisible(SectionIndex, false);
+				if (EffectiveBorderMaterial)
+				{
+					YieldBorderMesh->SetMaterial(SectionIndex, EffectiveBorderMaterial);
+				}
+				if (EffectiveFillMaterial)
+				{
+					YieldFillMesh->SetMaterial(SectionIndex, EffectiveFillMaterial);
+				}
+
+				BorderVertices.Reset();
+				BorderTriangles.Reset();
+				BorderNormals.Reset();
+				BorderUVs.Reset();
+				BorderVertexColors.Reset();
+				BorderTangents.Reset();
+				FillVertices.Reset();
+				FillTriangles.Reset();
+				FillNormals.Reset();
+				FillUVs.Reset();
+				FillVertexColors.Reset();
+				FillTangents.Reset();
+
+				if (bShowTileYieldText)
+				{
+					const FName ComponentName = MakeUniqueObjectName(
+						this,
+						UTextRenderComponent::StaticClass(),
+						TEXT("TileYieldText")
+					);
+
+					UTextRenderComponent* TextComponent = NewObject<UTextRenderComponent>(this, ComponentName);
+					if (TextComponent)
+					{
+						TextComponent->SetupAttachment(SceneRoot);
+						TextComponent->RegisterComponent();
+						TextComponent->SetRelativeLocation(FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset));
+						TextComponent->SetRelativeRotation(TileYieldTextRotation);
+						TextComponent->SetText(FText::AsNumber(YieldValue));
+						TextComponent->SetTextRenderColor(TileYieldTextColor.ToFColor(true));
+						TextComponent->SetWorldSize(TileYieldTextWorldSize);
+						TextComponent->SetHorizontalAlignment(EHTA_Center);
+						TextComponent->SetVerticalAlignment(EVRTA_TextCenter);
+						TextComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+						TextComponent->SetGenerateOverlapEvents(false);
+						TextComponent->SetCastShadow(false);
+						TextComponent->bCastDynamicShadow = false;
+						TextComponent->bCastStaticShadow = false;
+						TextComponent->CastShadow = false;
+						TextComponent->SetVisibility(false);
+
+						AddInstanceComponent(TextComponent);
+						TileYieldTextComponents.Add(TextComponent);
+						TextComponents.Add(Coord, TextComponent);
+					}
+				}
+			}
+		}
+
+		YieldBorderMesh->SetVisibility(false);
+		YieldFillMesh->SetVisibility(false);
+	}
+
+	UpdateTileYieldOverlayVisibility();
+}
+
+void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
+{
+	const FHexTileData* Tile = GridModel.GetTile(Coord);
+	if (!Tile)
+	{
+		return;
+	}
+
+	const float IconRadius = FMath::Max(1.0f, GridModel.GetHexRadius() * TileYieldHexScale);
+	const float FillRadius = FMath::Max(1.0f, IconRadius - FMath::Max(0.0f, TileYieldBorderWidth));
+	const FLinearColor BorderLinearColor = FLinearColor::Black;
+	const FColor BorderColor = BorderLinearColor.ToFColor(true);
+	const FVector FlatCenter = GridModel.GetHexCenter(Coord.X, Coord.Y);
+	const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, Tile->Height + TileYieldSurfaceOffset);
+	const FVector FillCenter = BorderCenter + FVector(0.0f, 0.0f, 0.5f);
+
+	auto AddHex = [](
+		const FVector& Center,
+		float Radius,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const int32 CenterIndex = Vertices.Num();
+		Vertices.Add(Center);
+		Normals.Add(FVector::UpVector);
+		UVs.Add(FVector2D(0.5f, 0.5f));
+		VertexColors.Add(Color);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+
+		int32 CornerIndices[6];
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const float AngleRadians = FMath::DegreesToRadians(60.0f * static_cast<float>(CornerIndex));
+			const FVector Corner(
+				Center.X + FMath::Cos(AngleRadians) * Radius,
+				Center.Y + FMath::Sin(AngleRadians) * Radius,
+				Center.Z
+			);
+
+			CornerIndices[CornerIndex] = Vertices.Num();
+			Vertices.Add(Corner);
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D(
+				0.5f + FMath::Cos(AngleRadians) * 0.5f,
+				0.5f + FMath::Sin(AngleRadians) * 0.5f
+			));
+			VertexColors.Add(Color);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+
+		for (int32 CornerIndex = 0; CornerIndex < 6; ++CornerIndex)
+		{
+			const int32 NextCornerIndex = (CornerIndex + 1) % 6;
+			Triangles.Add(CenterIndex);
+			Triangles.Add(CornerIndices[NextCornerIndex]);
+			Triangles.Add(CornerIndices[CornerIndex]);
+		}
+	};
+
+	for (int32 LayerIndex = 0; LayerIndex < 5; ++LayerIndex)
+	{
+		if (!TileYieldBorderMeshes.IsValidIndex(LayerIndex) || !TileYieldFillMeshes.IsValidIndex(LayerIndex))
+		{
+			continue;
+		}
+
+		UProceduralMeshComponent* YieldBorderMesh = TileYieldBorderMeshes[LayerIndex].Get();
+		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes[LayerIndex].Get();
+		if (!YieldBorderMesh || !YieldFillMesh)
+		{
+			continue;
+		}
+
+		const EConquestYieldType YieldType = GetTileYieldTypeForLayer(LayerIndex);
+		const int32 YieldValue = GetTileYieldValue(Tile->FinalYield, YieldType);
+		TMap<FIntPoint, int32>& SectionIndices = TileYieldSectionIndicesByLayer.FindOrAdd(LayerIndex);
+		TMap<FIntPoint, UTextRenderComponent*>& TextComponents = TileYieldTextComponentsByLayer.FindOrAdd(LayerIndex);
+
+		int32* ExistingSectionIndex = SectionIndices.Find(Coord);
+		if (YieldValue <= 0)
+		{
+			if (ExistingSectionIndex)
+			{
+				YieldBorderMesh->SetMeshSectionVisible(*ExistingSectionIndex, false);
+				YieldFillMesh->SetMeshSectionVisible(*ExistingSectionIndex, false);
+			}
+			if (UTextRenderComponent** TextComponent = TextComponents.Find(Coord))
+			{
+				if (*TextComponent)
+				{
+					(*TextComponent)->SetVisibility(false);
+				}
+			}
+			continue;
+		}
+
+		const int32 SectionIndex = ExistingSectionIndex ? *ExistingSectionIndex : SectionIndices.Num();
+		if (!ExistingSectionIndex)
+		{
+			SectionIndices.Add(Coord, SectionIndex);
+		}
+
+		TArray<FVector> BorderVertices;
+		TArray<int32> BorderTriangles;
+		TArray<FVector> BorderNormals;
+		TArray<FVector2D> BorderUVs;
+		TArray<FColor> BorderVertexColors;
+		TArray<FProcMeshTangent> BorderTangents;
+
+		TArray<FVector> FillVertices;
+		TArray<int32> FillTriangles;
+		TArray<FVector> FillNormals;
+		TArray<FVector2D> FillUVs;
+		TArray<FColor> FillVertexColors;
+		TArray<FProcMeshTangent> FillTangents;
+
+		AddHex(
+			BorderCenter,
+			IconRadius,
+			BorderColor,
+			BorderVertices,
+			BorderTriangles,
+			BorderNormals,
+			BorderUVs,
+			BorderVertexColors,
+			BorderTangents
+		);
+
+		AddHex(
+			FillCenter,
+			FillRadius,
+			GetTileYieldColor(YieldType).ToFColor(true),
+			FillVertices,
+			FillTriangles,
+			FillNormals,
+			FillUVs,
+			FillVertexColors,
+			FillTangents
+		);
+
+		YieldBorderMesh->CreateMeshSection(
+			SectionIndex,
+			BorderVertices,
+			BorderTriangles,
+			BorderNormals,
+			BorderUVs,
+			BorderVertexColors,
+			BorderTangents,
+			false
+		);
+
+		YieldFillMesh->CreateMeshSection(
+			SectionIndex,
+			FillVertices,
+			FillTriangles,
+			FillNormals,
+			FillUVs,
+			FillVertexColors,
+			FillTangents,
+			false
+		);
+
+		if (TileYieldBorderMaterialInstances.IsValidIndex(LayerIndex) && TileYieldBorderMaterialInstances[LayerIndex])
+		{
+			YieldBorderMesh->SetMaterial(SectionIndex, TileYieldBorderMaterialInstances[LayerIndex]);
+		}
+		else if (TileYieldBorderMaterial)
+		{
+			YieldBorderMesh->SetMaterial(SectionIndex, TileYieldBorderMaterial);
+		}
+
+		if (TileYieldFillMaterialInstances.IsValidIndex(LayerIndex) && TileYieldFillMaterialInstances[LayerIndex])
+		{
+			YieldFillMesh->SetMaterial(SectionIndex, TileYieldFillMaterialInstances[LayerIndex]);
+		}
+		else if (TileYieldFillMaterial)
+		{
+			YieldFillMesh->SetMaterial(SectionIndex, TileYieldFillMaterial);
+		}
+
+		UTextRenderComponent* TextComponent = nullptr;
+		if (UTextRenderComponent** ExistingTextComponent = TextComponents.Find(Coord))
+		{
+			TextComponent = *ExistingTextComponent;
+		}
+		else if (bShowTileYieldText)
+		{
+			const FName ComponentName = MakeUniqueObjectName(
+				this,
+				UTextRenderComponent::StaticClass(),
+				TEXT("TileYieldText")
+			);
+
+			TextComponent = NewObject<UTextRenderComponent>(this, ComponentName);
+			if (TextComponent)
+			{
+				TextComponent->SetupAttachment(SceneRoot);
+				TextComponent->RegisterComponent();
+				TextComponent->SetHorizontalAlignment(EHTA_Center);
+				TextComponent->SetVerticalAlignment(EVRTA_TextCenter);
+				TextComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				TextComponent->SetGenerateOverlapEvents(false);
+				TextComponent->SetCastShadow(false);
+				TextComponent->bCastDynamicShadow = false;
+				TextComponent->bCastStaticShadow = false;
+				TextComponent->CastShadow = false;
+				AddInstanceComponent(TextComponent);
+				TileYieldTextComponents.Add(TextComponent);
+				TextComponents.Add(Coord, TextComponent);
+			}
+		}
+
+		if (TextComponent)
+		{
+			TextComponent->SetRelativeLocation(FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset));
+			TextComponent->SetRelativeRotation(TileYieldTextRotation);
+			TextComponent->SetText(FText::AsNumber(YieldValue));
+			TextComponent->SetTextRenderColor(TileYieldTextColor.ToFColor(true));
+			TextComponent->SetWorldSize(TileYieldTextWorldSize);
+		}
+	}
+
+	UpdateTileYieldOverlayVisibility();
+}
+
+void AModularHexGridActor::UpdateTileYieldOverlayVisibility()
+{
+	const int32 ActiveLayerIndex = bHasActiveTileYieldLens
+		? GetTileYieldLayerIndex(ActiveTileYieldLens)
+		: INDEX_NONE;
+
+	for (int32 LayerIndex = 0; LayerIndex < 5; ++LayerIndex)
+	{
+		const bool bLayerVisible =
+			bShowTileYieldOverlay &&
+			bHasActiveTileYieldLens &&
+			LayerIndex == ActiveLayerIndex;
+
+		UProceduralMeshComponent* YieldBorderMesh = TileYieldBorderMeshes.IsValidIndex(LayerIndex)
+			? TileYieldBorderMeshes[LayerIndex].Get()
+			: nullptr;
+		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes.IsValidIndex(LayerIndex)
+			? TileYieldFillMeshes[LayerIndex].Get()
+			: nullptr;
+
+		if (YieldBorderMesh)
+		{
+			YieldBorderMesh->SetVisibility(bLayerVisible);
+		}
+
+		if (YieldFillMesh)
+		{
+			YieldFillMesh->SetVisibility(bLayerVisible);
+		}
+
+		TMap<FIntPoint, int32>* SectionIndices = TileYieldSectionIndicesByLayer.Find(LayerIndex);
+		if (SectionIndices)
+		{
+			for (const TPair<FIntPoint, int32>& Pair : *SectionIndices)
+			{
+				const bool bSectionVisible =
+					bLayerVisible &&
+					IsTileDiscoveredForYieldOverlay(Pair.Key) &&
+					IsTileInYieldHoverRange(Pair.Key);
+
+				if (YieldBorderMesh)
+				{
+					YieldBorderMesh->SetMeshSectionVisible(Pair.Value, bSectionVisible);
+				}
+
+				if (YieldFillMesh)
+				{
+					YieldFillMesh->SetMeshSectionVisible(Pair.Value, bSectionVisible);
+				}
+			}
+		}
+
+		TMap<FIntPoint, UTextRenderComponent*>* TextComponents = TileYieldTextComponentsByLayer.Find(LayerIndex);
+		if (TextComponents)
+		{
+			for (const TPair<FIntPoint, UTextRenderComponent*>& Pair : *TextComponents)
+			{
+				if (Pair.Value)
+				{
+					Pair.Value->SetVisibility(
+						bShowTileYieldText &&
+						bLayerVisible &&
+						IsTileDiscoveredForYieldOverlay(Pair.Key) &&
+						IsTileInYieldHoverRange(Pair.Key)
+					);
+				}
+			}
+		}
+	}
+}
+
 void AModularHexGridActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -1244,6 +2027,7 @@ void AModularHexGridActor::RebuildGrid()
 	MeshBuilder.BuildWaterMesh(WaterMesh, GridModel, WaterSettings, TileResourceData);
 	MeshBuilder.BuildSimpleRiverMesh(RiverMesh, GridModel, GeneratedRivers, RiverSettings);
 	MeshBuilder.BuildGridOverlayMesh(HexGridOverlayMesh, GridModel, OverlaySettings, TileResourceData);
+	RebuildTileYieldOverlay();
 
 
 	FeatureMeshBuilder.BuildFeatureMeshes(
@@ -1454,6 +2238,7 @@ void AModularHexGridActor::SetHoveredTile(int32 Q, int32 R)
 	}
 
 	HoverHighlightMesh->SetVisibility(true);
+	UpdateTileYieldOverlayVisibility();
 }
 
 void AModularHexGridActor::ClearHoveredTile()
@@ -1466,6 +2251,8 @@ void AModularHexGridActor::ClearHoveredTile()
 		HoverHighlightMesh->ClearAllMeshSections();
 		HoverHighlightMesh->SetVisibility(false);
 	}
+
+	UpdateTileYieldOverlayVisibility();
 }
 
 void AModularHexGridActor::SetMapTypePreset(EHexMapTypePreset MapTypePreset)
@@ -1502,6 +2289,7 @@ void AModularHexGridActor::ResetLocalFogOfWar(bool bVisible)
 	LocallyRevealedFogTiles.Reset();
 	bGenerateFogOfWar = bVisible;
 	RebuildFogOfWarMesh();
+	UpdateTileYieldOverlayVisibility();
 }
 
 void AModularHexGridActor::RevealFogOfWarAroundTile(FIntPoint CenterCoord, int32 Radius)
@@ -1527,10 +2315,12 @@ void AModularHexGridActor::RevealFogOfWarAroundTile(FIntPoint CenterCoord, int32
 	if (bRevealedAnyTile)
 	{
 		RebuildFogOfWarMesh();
+		UpdateTileYieldOverlayVisibility();
 	}
 	else if (FogOfWarMesh)
 	{
 		FogOfWarMesh->SetVisibility(true);
+		UpdateTileYieldOverlayVisibility();
 	}
 }
 
@@ -1589,6 +2379,7 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 		// Terrain shape does not change yet, but this makes material/yield-driven visual changes easy later.
 		MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
 		RebuildPlacedTileVisualMeshes();
+		UpdateTileYieldOverlayForTile(FIntPoint(Q, R));
 
 		if (const FHexTileData* Tile = GridModel.GetTile(Q, R))
 		{
@@ -1730,6 +2521,34 @@ void AModularHexGridActor::ConfigureMeshComponents()
 		HexGridOverlayMesh->bCastStaticShadow = false;
 		HexGridOverlayMesh->CastShadow = false;
 		HexGridOverlayMesh->TranslucencySortPriority = 2;
+	}
+
+	for (TObjectPtr<UProceduralMeshComponent>& YieldBorderMesh : TileYieldBorderMeshes)
+	{
+		if (YieldBorderMesh)
+		{
+			YieldBorderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			YieldBorderMesh->SetVisibility(false);
+			YieldBorderMesh->SetCastShadow(false);
+			YieldBorderMesh->bCastDynamicShadow = false;
+			YieldBorderMesh->bCastStaticShadow = false;
+			YieldBorderMesh->CastShadow = false;
+			YieldBorderMesh->TranslucencySortPriority = TileYieldBorderTranslucencySortPriority;
+		}
+	}
+
+	for (TObjectPtr<UProceduralMeshComponent>& YieldFillMesh : TileYieldFillMeshes)
+	{
+		if (YieldFillMesh)
+		{
+			YieldFillMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			YieldFillMesh->SetVisibility(false);
+			YieldFillMesh->SetCastShadow(false);
+			YieldFillMesh->bCastDynamicShadow = false;
+			YieldFillMesh->bCastStaticShadow = false;
+			YieldFillMesh->CastShadow = false;
+			YieldFillMesh->TranslucencySortPriority = TileYieldFillTranslucencySortPriority;
+		}
 	}
 
 	if (CivilisationBorderMesh)

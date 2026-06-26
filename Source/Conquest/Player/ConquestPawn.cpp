@@ -273,6 +273,7 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
+	PlayerInputComponent->BindAction(TEXT("ToggleTileYieldOverlay"), IE_Pressed, this, &AConquestPawn::ToggleTileYieldOverlay);
 	PlayerInputComponent->BindAction(TEXT("RegenerateGrid"), IE_Pressed, this, &AConquestPawn::RegenerateMapWithNewSeed);
 	PlayerInputComponent->BindAction(TEXT("Enter"), IE_Pressed, this, &AConquestPawn::HandleEnterShortcut);
 	// Intentionally no Turn / LookUp bindings.
@@ -737,6 +738,22 @@ void AConquestPawn::ToggleHexGridOverlay()
 	}
 
 	HexGridActor->SetHexGridOverlayVisible(!HexGridActor->IsHexGridOverlayVisible());
+}
+
+void AConquestPawn::ToggleTileYieldOverlay()
+{
+	AModularHexGridActor* HexGridActor = FindHexGridActor();
+	if (!HexGridActor)
+	{
+		return;
+	}
+
+	HexGridActor->ToggleTileYieldOverlay();
+
+	if (UConquestGameWidget* GameWidget = GetActiveGameWidget())
+	{
+		GameWidget->RefreshYieldLensButtons();
+	}
 }
 
 void AConquestPawn::RegenerateMapWithNewSeed()

@@ -18,6 +18,8 @@
 #include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Tech/ConquestTechTypes.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
+#include "Conquest/World/Generation/ModularHexGridActor.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -86,129 +88,78 @@ void UConquestGameWidget::SetYieldTexts(const FHexYield& Yield)
 	SetText(TileCultureText, FString::Printf(TEXT("Culture: %d"), Yield.Culture));
 }
 
-FText UConquestGameWidget::FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn)
-{
-	return FText::Format(
-		NSLOCTEXT("Conquest", "TopBarStoredYieldFormat", "{0}: {1} (+{2})"),
-		Label,
-		FText::AsNumber(Stored),
-		FText::AsNumber(PerTurn)
-	);
-}
-
-FText UConquestGameWidget::FormatStoredYieldText(
-	const FText& Label,
-	int32 Stored,
-	int32 PerTurn,
-	int32 PerTurnBeforeUnhappyPenalty,
-	bool bShowUnhappyPenalty
+FText UConquestGameWidget::FormatTopBarYieldText(
+	const TCHAR* Label,
+	int32 EmpireYield,
+	int32 SelectedCityYield,
+	bool bShowSelectedCityYield
 )
 {
-	if (!bShowUnhappyPenalty || PerTurn >= PerTurnBeforeUnhappyPenalty)
+	if (bShowSelectedCityYield)
 	{
-		return FormatStoredYieldText(Label, Stored, PerTurn);
+		return FText::FromString(FString::Printf(
+			TEXT("%s %d(%d)"),
+			Label,
+			EmpireYield,
+			SelectedCityYield
+		));
 	}
 
-	return FText::Format(
-		NSLOCTEXT("Conquest", "TopBarStoredYieldUnhappyFormat", "{0}: {1} (+{2} ({3}))"),
+	return FText::FromString(FString::Printf(
+		TEXT("%s %d"),
 		Label,
-		FText::AsNumber(Stored),
-		FText::AsNumber(PerTurn),
-		FText::AsNumber(PerTurn - PerTurnBeforeUnhappyPenalty)
-	);
-}
-
-FText UConquestGameWidget::FormatPerTurnYieldText(const FText& Label, int32 PerTurn)
-{
-	return FText::Format(
-		NSLOCTEXT("Conquest", "TopBarPerTurnYieldFormat", "{0}: +{1}"),
-		Label,
-		FText::AsNumber(PerTurn)
-	);
-}
-
-FText UConquestGameWidget::FormatPerTurnYieldText(
-	const FText& Label,
-	int32 PerTurn,
-	int32 PerTurnBeforeUnhappyPenalty,
-	bool bShowUnhappyPenalty
-)
-{
-	if (!bShowUnhappyPenalty || PerTurn >= PerTurnBeforeUnhappyPenalty)
-	{
-		return FormatPerTurnYieldText(Label, PerTurn);
-	}
-
-	return FText::Format(
-		NSLOCTEXT("Conquest", "TopBarPerTurnYieldUnhappyFormat", "{0}: +{1} ({2})"),
-		Label,
-		FText::AsNumber(PerTurn),
-		FText::AsNumber(PerTurn - PerTurnBeforeUnhappyPenalty)
-	);
+		EmpireYield
+	));
 }
 
 void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData)
 {
 	SetWidgetVisibility(TopBarYieldPanel, ESlateVisibility::Visible);
-	SetWidgetVisibility(
-		TopBarLocalYieldPanel,
-		YieldData.bShowSelectedCityLocalYields ? ESlateVisibility::Visible : ESlateVisibility::Collapsed
-	);
-
-	if (YieldData.bShowSelectedCityLocalYields)
-	{
-		SetText(
-			TopBarFoodText,
-			FormatPerTurnYieldText(
-				NSLOCTEXT("Conquest", "YieldFoodShort", "Food"),
-				YieldData.SelectedCityYieldPerTurn.Food,
-				YieldData.SelectedCityYieldPerTurnBeforeUnhappyPenalty.Food,
-				YieldData.bIsUnhappy
-			)
-		);
-		SetText(
-			TopBarProductionText,
-			FormatPerTurnYieldText(
-				NSLOCTEXT("Conquest", "YieldProductionShort", "Prod"),
-				YieldData.SelectedCityYieldPerTurn.Production,
-				YieldData.SelectedCityYieldPerTurnBeforeUnhappyPenalty.Production,
-				YieldData.bIsUnhappy
-			)
-		);
-	}
-	else
-	{
-		ClearText(TopBarFoodText);
-		ClearText(TopBarProductionText);
-	}
+	SetWidgetVisibility(TopBarLocalYieldPanel, ESlateVisibility::Visible);
 
 	SetText(
-		TopBarGoldText,
-		FormatStoredYieldText(
-			NSLOCTEXT("Conquest", "YieldGoldShort", "Gold"),
-			YieldData.EmpireStoredYields.Gold,
-			YieldData.EmpireYieldPerTurn.Gold,
-			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Gold,
-			YieldData.bIsUnhappy
+		TopBarFoodText,
+		FormatTopBarYieldText(
+			TEXT("F"),
+			YieldData.EmpireYieldPerTurn.Food,
+			YieldData.SelectedCityYieldPerTurn.Food,
+			YieldData.bShowSelectedCityLocalYields
+		)
+	);
+	SetText(
+		TopBarProductionText,
+		FormatTopBarYieldText(
+			TEXT("P"),
+			YieldData.EmpireYieldPerTurn.Production,
+			YieldData.SelectedCityYieldPerTurn.Production,
+			YieldData.bShowSelectedCityLocalYields
 		)
 	);
 	SetText(
 		TopBarScienceText,
-		FormatPerTurnYieldText(
-			NSLOCTEXT("Conquest", "YieldScienceShort", "Sci"),
+		FormatTopBarYieldText(
+			TEXT("S"),
 			YieldData.EmpireYieldPerTurn.Science,
-			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Science,
-			YieldData.bIsUnhappy
+			YieldData.SelectedCityYieldPerTurn.Science,
+			YieldData.bShowSelectedCityLocalYields
 		)
 	);
 	SetText(
 		TopBarCultureText,
-		FormatStoredYieldText(
-			NSLOCTEXT("Conquest", "YieldCultureShort", "Culture"),
-			YieldData.EmpireStoredYields.Culture,
+		FormatTopBarYieldText(
+			TEXT("C"),
 			YieldData.EmpireYieldPerTurn.Culture,
-			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Culture,
-			YieldData.bIsUnhappy
+			YieldData.SelectedCityYieldPerTurn.Culture,
+			YieldData.bShowSelectedCityLocalYields
+		)
+	);
+	SetText(
+		TopBarGoldText,
+		FormatTopBarYieldText(
+			TEXT("G"),
+			YieldData.EmpireYieldPerTurn.Gold,
+			YieldData.SelectedCityYieldPerTurn.Gold,
+			YieldData.bShowSelectedCityLocalYields
 		)
 	);
 	SetText(
@@ -285,6 +236,36 @@ void UConquestGameWidget::NativeConstruct()
 		ResearchButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleResearchClicked);
 	}
 
+	if (FoodYieldLensButton)
+	{
+		FoodYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleFoodYieldLensClicked);
+		FoodYieldLensButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleFoodYieldLensClicked);
+	}
+
+	if (ProductionYieldLensButton)
+	{
+		ProductionYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleProductionYieldLensClicked);
+		ProductionYieldLensButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleProductionYieldLensClicked);
+	}
+
+	if (ScienceYieldLensButton)
+	{
+		ScienceYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleScienceYieldLensClicked);
+		ScienceYieldLensButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleScienceYieldLensClicked);
+	}
+
+	if (CultureYieldLensButton)
+	{
+		CultureYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleCultureYieldLensClicked);
+		CultureYieldLensButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleCultureYieldLensClicked);
+	}
+
+	if (GoldYieldLensButton)
+	{
+		GoldYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleGoldYieldLensClicked);
+		GoldYieldLensButton->OnClicked.AddDynamic(this, &UConquestGameWidget::HandleGoldYieldLensClicked);
+	}
+
 	if (TileExpansionConfirmButton)
 	{
 		TileExpansionConfirmButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleTileExpansionConfirmClicked);
@@ -342,6 +323,7 @@ void UConquestGameWidget::NativeConstruct()
 	ClearSelectedUnitInfo();
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
+	RefreshYieldLensButtons();
 	RefreshResearchInfo();
 	RefreshEndGameResultFromGameState();
 }
@@ -361,6 +343,31 @@ void UConquestGameWidget::NativeDestruct()
 		{
 			ConquestGS->TechManager->OnResearchChanged.RemoveDynamic(this, &UConquestGameWidget::HandleResearchChanged);
 		}
+	}
+
+	if (FoodYieldLensButton)
+	{
+		FoodYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleFoodYieldLensClicked);
+	}
+
+	if (ProductionYieldLensButton)
+	{
+		ProductionYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleProductionYieldLensClicked);
+	}
+
+	if (ScienceYieldLensButton)
+	{
+		ScienceYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleScienceYieldLensClicked);
+	}
+
+	if (CultureYieldLensButton)
+	{
+		CultureYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleCultureYieldLensClicked);
+	}
+
+	if (GoldYieldLensButton)
+	{
+		GoldYieldLensButton->OnClicked.RemoveDynamic(this, &UConquestGameWidget::HandleGoldYieldLensClicked);
 	}
 
 	Super::NativeDestruct();
@@ -423,6 +430,7 @@ void UConquestGameWidget::HandleConquestStateChanged()
 
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
+	RefreshYieldLensButtons();
 	RefreshResearchInfo();
 	RefreshSelectedUnitInfoFromGameState();
 	RefreshEndGameResultFromGameState();
@@ -589,6 +597,98 @@ void UConquestGameWidget::RefreshTopBarYieldInfo()
 	}
 
 	SetTopBarYieldTexts(GetTopBarYieldData());
+}
+
+void UConquestGameWidget::SetYieldLensButtonState(UButton* Button, bool bActive) const
+{
+	if (Button)
+	{
+		Button->SetBackgroundColor(bActive ? ActiveYieldLensButtonColor : InactiveYieldLensButtonColor);
+	}
+}
+
+void UConquestGameWidget::RefreshYieldLensButtons()
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	AModularHexGridActor* GridActor = ConquestGS ? ConquestGS->ActiveGridActor.Get() : nullptr;
+	if (!GridActor && GetWorld())
+	{
+		GridActor = Cast<AModularHexGridActor>(
+			UGameplayStatics::GetActorOfClass(GetWorld(), AModularHexGridActor::StaticClass())
+		);
+	}
+
+	const bool bHasActiveLens =
+		GridActor &&
+		GridActor->IsTileYieldOverlayVisible() &&
+		GridActor->HasActiveTileYieldLens();
+
+	const EConquestYieldType ActiveLens = GridActor
+		? GridActor->GetActiveTileYieldLens()
+		: EConquestYieldType::Food;
+
+	SetYieldLensButtonState(FoodYieldLensButton, bHasActiveLens && ActiveLens == EConquestYieldType::Food);
+	SetYieldLensButtonState(ProductionYieldLensButton, bHasActiveLens && ActiveLens == EConquestYieldType::Production);
+	SetYieldLensButtonState(ScienceYieldLensButton, bHasActiveLens && ActiveLens == EConquestYieldType::Science);
+	SetYieldLensButtonState(CultureYieldLensButton, bHasActiveLens && ActiveLens == EConquestYieldType::Culture);
+	SetYieldLensButtonState(GoldYieldLensButton, bHasActiveLens && ActiveLens == EConquestYieldType::Gold);
+}
+
+void UConquestGameWidget::HandleYieldLensButtonClicked(EConquestYieldType YieldType)
+{
+	AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
+	AModularHexGridActor* GridActor = ConquestGS ? ConquestGS->ActiveGridActor.Get() : nullptr;
+	if (!GridActor && GetWorld())
+	{
+		GridActor = Cast<AModularHexGridActor>(
+			UGameplayStatics::GetActorOfClass(GetWorld(), AModularHexGridActor::StaticClass())
+		);
+	}
+	if (!GridActor)
+	{
+		RefreshYieldLensButtons();
+		return;
+	}
+
+	if (
+		GridActor->IsTileYieldOverlayVisible() &&
+		GridActor->HasActiveTileYieldLens() &&
+		GridActor->GetActiveTileYieldLens() == YieldType
+	)
+	{
+		GridActor->ClearTileYieldLens();
+	}
+	else
+	{
+		GridActor->SetTileYieldLens(YieldType);
+	}
+
+	RefreshYieldLensButtons();
+}
+
+void UConquestGameWidget::HandleFoodYieldLensClicked()
+{
+	HandleYieldLensButtonClicked(EConquestYieldType::Food);
+}
+
+void UConquestGameWidget::HandleProductionYieldLensClicked()
+{
+	HandleYieldLensButtonClicked(EConquestYieldType::Production);
+}
+
+void UConquestGameWidget::HandleScienceYieldLensClicked()
+{
+	HandleYieldLensButtonClicked(EConquestYieldType::Science);
+}
+
+void UConquestGameWidget::HandleCultureYieldLensClicked()
+{
+	HandleYieldLensButtonClicked(EConquestYieldType::Culture);
+}
+
+void UConquestGameWidget::HandleGoldYieldLensClicked()
+{
+	HandleYieldLensButtonClicked(EConquestYieldType::Gold);
 }
 
 FText UConquestGameWidget::GetCurrentResearchStatusText() const

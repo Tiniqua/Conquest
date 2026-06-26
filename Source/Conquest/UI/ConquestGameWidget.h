@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Conquest/Core/ConquestGameplayTypes.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
@@ -204,6 +205,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
 	void RefreshTopBarYieldInfo();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Yields")
+	void RefreshYieldLensButtons();
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Research")
 	void RefreshResearchInfo();
 
@@ -336,6 +340,27 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> TopBarLocalYieldPanel = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FoodYieldLensButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ProductionYieldLensButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ScienceYieldLensButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> CultureYieldLensButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> GoldYieldLensButton = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Yields")
+	FLinearColor ActiveYieldLensButtonColor = FLinearColor(0.15f, 0.45f, 0.95f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Yields")
+	FLinearColor InactiveYieldLensButtonColor = FLinearColor(0.08f, 0.08f, 0.08f, 0.75f);
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TopBarFoodText = nullptr;
@@ -474,15 +499,14 @@ private:
 
 	void SetYieldTexts(const FHexYield& Yield);
 	void SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData);
-	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn);
-	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn);
-	static FText FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn, int32 PerTurnBeforeUnhappyPenalty, bool bShowUnhappyPenalty);
-	static FText FormatPerTurnYieldText(const FText& Label, int32 PerTurn, int32 PerTurnBeforeUnhappyPenalty, bool bShowUnhappyPenalty);
+	static FText FormatTopBarYieldText(const TCHAR* Label, int32 EmpireYield, int32 SelectedCityYield, bool bShowSelectedCityYield);
 	void ClearTileTexts();
 	void RefreshSelectedUnitInfoFromGameState();
 	bool FocusNextRequiredEndTurnAction();
 	bool IsUnitActionEnabled(FName ActionId, const FConquestSelectedUnitWidgetData& UnitData) const;
 	void RefreshEndGameResultFromGameState();
+	void HandleYieldLensButtonClicked(EConquestYieldType YieldType);
+	void SetYieldLensButtonState(UButton* Button, bool bActive) const;
 
 	int32 SelectedCityYieldContextId = INDEX_NONE;
 	FConquestTileExpansionChoiceData PendingTileExpansionChoice;
@@ -517,4 +541,19 @@ private:
 
 	UFUNCTION()
 	void HandleResearchChanged();
+
+	UFUNCTION()
+	void HandleFoodYieldLensClicked();
+
+	UFUNCTION()
+	void HandleProductionYieldLensClicked();
+
+	UFUNCTION()
+	void HandleScienceYieldLensClicked();
+
+	UFUNCTION()
+	void HandleCultureYieldLensClicked();
+
+	UFUNCTION()
+	void HandleGoldYieldLensClicked();
 };

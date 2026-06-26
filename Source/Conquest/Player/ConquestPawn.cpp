@@ -142,6 +142,18 @@ void AConquestPawn::BeginPlay()
 	ConfigurePlayerControllerForGameAndUI();
 }
 
+void AConquestPawn::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	ConfigurePlayerControllerForGameAndUI();
+}
+
+void AConquestPawn::OnRep_Controller()
+{
+	Super::OnRep_Controller();
+	ConfigurePlayerControllerForGameAndUI();
+}
+
 void AConquestPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);

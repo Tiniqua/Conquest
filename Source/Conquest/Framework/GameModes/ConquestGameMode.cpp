@@ -377,6 +377,8 @@ void AConquestGameMode::StartSinglePlayerGame()
 		return;
 	}
 
+	ReadyPlayerIds.Reset();
+	ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Reset();
 	InitializeEmpiresFromLobby();
 	AssignPlayerStartRegions();
 	ConquestGS->TurnManager->BeginGameSetup();
@@ -1202,6 +1204,8 @@ bool AConquestGameMode::FoundStartingCityForPlayer(int32 PlayerId, const FIntPoi
 
 	if (bFounded && HaveAllHumanPlayersFoundedStartingCities(*ConquestGS))
 	{
+		ReadyPlayerIds.Reset();
+		ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Reset();
 		ConquestGS->TurnManager->BeginFirstTurn();
 	}
 

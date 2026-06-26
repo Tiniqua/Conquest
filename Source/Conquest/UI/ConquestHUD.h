@@ -189,6 +189,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Camera")
 	void FocusCameraOnTile(FIntPoint Coord, bool bPreserveCurrentHeight);
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Camera")
+	bool FocusCameraOnFirstLocalCity(bool bPreserveCurrentHeight = false);
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Camera")
+	bool FocusCameraOnLocalStartingRegion(bool bPreserveCurrentHeight = false);
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Turn")
 	void TriggerEndTurnShortcut();
 

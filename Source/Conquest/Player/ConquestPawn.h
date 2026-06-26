@@ -135,6 +135,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zoom", meta = (EditCondition = "bClampZoomHeight"))
 	float MaxZoomHeight = 5000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Bounds")
+	bool bClampCameraToMapBounds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Bounds", meta = (EditCondition = "bClampCameraToMapBounds", ClampMin = "0.0"))
+	float MapBoundsPaddingTiles = 6.0f;
+
 	// If true, BeginPlay configures the local controller for visible cursor + Game/UI input.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
 	bool bConfigureGameAndUIInputMode = true;
@@ -173,6 +179,7 @@ protected:
 	void ToggleGoldYieldLens();
 	void RegenerateMapWithNewSeed();
 	void HandleEnterShortcut();
+	void HandleFocusFirstCityShortcut();
 	void ToggleSpecificTileYieldLens(EConquestYieldType YieldType);
 
 	AModularHexGridActor* FindHexGridActor() const;
@@ -187,7 +194,10 @@ protected:
 	void UpdateSmoothedCameraMovement(float DeltaTime);
 	void ResetSmoothedCameraTarget();
 	FVector ClampZoomHeightForLocation(const FVector& Location) const;
+	FVector ClampCameraToMapBoundsForLocation(const FVector& Location) const;
+	FVector ClampCameraLocation(const FVector& Location) const;
 
 	void ConfigurePlayerControllerForGameAndUI();
+	void ClampCameraLocationIfNeeded();
 	void ClampZoomHeightIfNeeded();
 };

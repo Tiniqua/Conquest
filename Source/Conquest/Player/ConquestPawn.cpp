@@ -160,6 +160,7 @@ void AConquestPawn::Tick(float DeltaTime)
 
 	UpdateDragPan(DeltaTime);
 	UpdateSmoothedCameraMovement(DeltaTime);
+	ClampCameraLocationIfNeeded();
 
 	if (!bEnableTileHoverDebug || !Camera)
 	{
@@ -281,6 +282,7 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAction(TEXT("ToggleGoldYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleGoldYieldLens);
 	PlayerInputComponent->BindAction(TEXT("RegenerateGrid"), IE_Pressed, this, &AConquestPawn::RegenerateMapWithNewSeed);
 	PlayerInputComponent->BindAction(TEXT("Enter"), IE_Pressed, this, &AConquestPawn::HandleEnterShortcut);
+	PlayerInputComponent->BindAction(TEXT("FocusFirstCity"), IE_Pressed, this, &AConquestPawn::HandleFocusFirstCityShortcut);
 	// Intentionally no Turn / LookUp bindings.
 	// Mouse movement is reserved for cursor hover / tile selection.
 }
@@ -482,8 +484,7 @@ void AConquestPawn::FocusCameraOnWorldLocation(const FVector& TargetWorldLocatio
 		? GetActorLocation().Z
 		: TargetWorldLocation.Z + CameraFocusHeightAboveTarget;
 
-	SetActorLocation(NewLocation);
-	ClampZoomHeightIfNeeded();
+	SetActorLocation(ClampCameraLocation(NewLocation));
 	ResetSmoothedCameraTarget();
 }
 
@@ -828,6 +829,20 @@ void AConquestPawn::HandleEnterShortcut()
 	}
 }
 
+void AConquestPawn::HandleFocusFirstCityShortcut()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
+	{
+		ConquestHUD->FocusCameraOnFirstLocalCity();
+	}
+}
+
 UConquestGameWidget* AConquestPawn::GetActiveGameWidget() const
 {
 	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
@@ -1043,7 +1058,7 @@ void AConquestPawn::AddCameraOffset(const FVector& Offset, bool bUseSmoothing, f
 	if (!bUseSmoothing || SmoothingSpeed <= 0.0f)
 	{
 		AddActorWorldOffset(Offset, true);
-		ClampZoomHeightIfNeeded();
+		ClampCameraLocationIfNeeded();
 		ResetSmoothedCameraTarget();
 		return;
 	}
@@ -1054,7 +1069,7 @@ void AConquestPawn::AddCameraOffset(const FVector& Offset, bool bUseSmoothing, f
 		bHasSmoothedCameraTarget = true;
 	}
 
-	SmoothedCameraTargetLocation = ClampZoomHeightForLocation(SmoothedCameraTargetLocation + Offset);
+	SmoothedCameraTargetLocation = ClampCameraLocation(SmoothedCameraTargetLocation + Offset);
 	ActiveCameraSmoothingSpeed = FMath::Max(ActiveCameraSmoothingSpeed, SmoothingSpeed);
 }
 
@@ -1067,13 +1082,13 @@ void AConquestPawn::UpdateSmoothedCameraMovement(float DeltaTime)
 
 	const FVector CurrentLocation = GetActorLocation();
 	const float InterpSpeed = FMath::Max(0.1f, ActiveCameraSmoothingSpeed);
-	const FVector NewLocation = FMath::VInterpTo(CurrentLocation, SmoothedCameraTargetLocation, DeltaTime, InterpSpeed);
+	const FVector NewLocation = ClampCameraLocation(FMath::VInterpTo(CurrentLocation, SmoothedCameraTargetLocation, DeltaTime, InterpSpeed));
 
 	SetActorLocation(NewLocation, true);
 
 	if (FVector::DistSquared(NewLocation, SmoothedCameraTargetLocation) <= 1.0f)
 	{
-		SetActorLocation(SmoothedCameraTargetLocation, true);
+		SetActorLocation(ClampCameraLocation(SmoothedCameraTargetLocation), true);
 		ResetSmoothedCameraTarget();
 	}
 }
@@ -1097,15 +1112,65 @@ FVector AConquestPawn::ClampZoomHeightForLocation(const FVector& Location) const
 	return ClampedLocation;
 }
 
-void AConquestPawn::ClampZoomHeightIfNeeded()
+FVector AConquestPawn::ClampCameraToMapBoundsForLocation(const FVector& Location) const
 {
-	if (!bClampZoomHeight)
+	if (!bClampCameraToMapBounds)
 	{
-		return;
+		return Location;
 	}
 
-	FVector Location = GetActorLocation();
-	SetActorLocation(ClampZoomHeightForLocation(Location));
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	const AModularHexGridActor* HexGridActor = ConquestGS && ConquestGS->ActiveGridActor
+		? ConquestGS->ActiveGridActor.Get()
+		: FindHexGridActor();
+	if (!HexGridActor)
+	{
+		return Location;
+	}
+
+	const FHexGridModel& GridModel = HexGridActor->GetGridModel();
+	const int32 GridWidth = GridModel.GetGridWidth();
+	const int32 GridHeight = GridModel.GetGridHeight();
+	if (GridWidth <= 0 || GridHeight <= 0)
+	{
+		return Location;
+	}
+
+	FBox WorldBounds(ForceInit);
+	const FTransform& GridTransform = HexGridActor->GetActorTransform();
+	WorldBounds += GridTransform.TransformPosition(GridModel.GetHexCenter(0, 0));
+	WorldBounds += GridTransform.TransformPosition(GridModel.GetHexCenter(GridWidth - 1, 0));
+	WorldBounds += GridTransform.TransformPosition(GridModel.GetHexCenter(0, GridHeight - 1));
+	WorldBounds += GridTransform.TransformPosition(GridModel.GetHexCenter(GridWidth - 1, GridHeight - 1));
+
+	if (!WorldBounds.IsValid)
+	{
+		return Location;
+	}
+
+	const float Padding = FMath::Max(0.0f, MapBoundsPaddingTiles) * GridModel.GetHexRadius();
+	FVector ClampedLocation = Location;
+	ClampedLocation.X = FMath::Clamp(ClampedLocation.X, WorldBounds.Min.X - Padding, WorldBounds.Max.X + Padding);
+	ClampedLocation.Y = FMath::Clamp(ClampedLocation.Y, WorldBounds.Min.Y - Padding, WorldBounds.Max.Y + Padding);
+	return ClampedLocation;
+}
+
+FVector AConquestPawn::ClampCameraLocation(const FVector& Location) const
+{
+	return ClampCameraToMapBoundsForLocation(ClampZoomHeightForLocation(Location));
+}
+
+void AConquestPawn::ClampCameraLocationIfNeeded()
+{
+	const FVector Location = GetActorLocation();
+	SetActorLocation(ClampCameraLocation(Location));
+}
+
+void AConquestPawn::ClampZoomHeightIfNeeded()
+{
+	ClampCameraLocationIfNeeded();
 }
 
 void AConquestPawn::ConfigurePlayerControllerForGameAndUI()

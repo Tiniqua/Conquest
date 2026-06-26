@@ -1011,6 +1011,7 @@ bool UConquestGameWidget::FocusNextRequiredEndTurnAction()
 			);
 		if (!bLocalPlayerHasCity)
 		{
+			ConquestHUD->FocusCameraOnLocalStartingRegion(false);
 			ConquestHUD->BeginStartingRegionSelection();
 		}
 		return true;

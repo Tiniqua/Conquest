@@ -1019,6 +1019,46 @@ void AConquestHUD::FocusCameraOnTile(FIntPoint Coord, bool bPreserveCurrentHeigh
 	ConquestPawn->FocusCameraOnHex(ConquestGS->ActiveGridActor, Coord, bPreserveCurrentHeight);
 }
 
+bool AConquestHUD::FocusCameraOnFirstLocalCity(bool bPreserveCurrentHeight)
+{
+	const AConquestGameState* ConquestGS = GetWorld()
+		? GetWorld()->GetGameState<AConquestGameState>()
+		: nullptr;
+	if (!ConquestGS || !ConquestGS->CityManager)
+	{
+		return false;
+	}
+
+	const int32 LocalPlayerId = ConquestGS->GetLocalPlayerId();
+	const FCityState* FirstLocalCity = ConquestGS->CityManager->Cities.FindByPredicate(
+		[LocalPlayerId](const FCityState& City)
+		{
+			return City.OwnerPlayerId == LocalPlayerId;
+		}
+	);
+
+	if (!FirstLocalCity)
+	{
+		return false;
+	}
+
+	FocusCameraOnTile(FirstLocalCity->CenterTile, bPreserveCurrentHeight);
+	return true;
+}
+
+bool AConquestHUD::FocusCameraOnLocalStartingRegion(bool bPreserveCurrentHeight)
+{
+	FConquestPlayerStartRegion StartRegion;
+	if (!GetLocalStartingRegion(StartRegion))
+	{
+		return false;
+	}
+
+	FocusCameraOnTile(StartRegion.Center, bPreserveCurrentHeight);
+	bStartingCameraFocused = true;
+	return true;
+}
+
 void AConquestHUD::TriggerEndTurnShortcut()
 {
 	if (UConquestGameWidget* ActiveGameWidget = GetActiveGameWidget())
@@ -2166,8 +2206,7 @@ void AConquestHUD::BeginStartingRegionSelection()
 	ConquestGS->ActiveGridActor->RevealFogOfWarAroundTile(StartRegion.Center, ConquestHUDStartingRegionFogRevealRadius);
 	if (!bStartingCameraFocused)
 	{
-		FocusCameraOnTile(StartRegion.Center, false);
-		bStartingCameraFocused = true;
+		FocusCameraOnLocalStartingRegion(false);
 	}
 
 	UMaterialInterface* HighlightMaterial = nullptr;

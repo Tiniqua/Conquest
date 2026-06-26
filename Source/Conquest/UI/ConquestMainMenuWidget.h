@@ -39,9 +39,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer")
 	// Local standalone/listen-server testing:
-	// bool bUseLanSessions = true;
+	bool bUseLanSessions = true;
 	// Packaged Steam multiplayer testing:
-	bool bUseLanSessions = false;
+	// bool bUseLanSessions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conquest|Multiplayer", meta = (ClampMin = "0"))
 	int32 JoinSessionResultIndex = 0;

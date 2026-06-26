@@ -100,7 +100,10 @@ void UConquestMultiplayerSessionSubsystem::HostSession(int32 PublicConnections, 
 	SessionSettings.bAllowInvites = !bUseLan;
 	SessionSettings.bAllowJoinViaPresence = !bUseLan;
 	SessionSettings.bAllowJoinViaPresenceFriendsOnly = false;
-	SessionSettings.Set(ConquestPresenceKey, ConquestPresenceValue, EOnlineDataAdvertisementType::ViaOnlineService);
+	// Local LAN searches need this in ping data so the Conquest filter can see it through OnlineSubsystemNull.
+	SessionSettings.Set(ConquestPresenceKey, ConquestPresenceValue, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	// Packaged Steam-only filtering:
+	// SessionSettings.Set(ConquestPresenceKey, ConquestPresenceValue, EOnlineDataAdvertisementType::ViaOnlineService);
 	SessionSettings.Set(SETTING_MAPNAME, UWorld::RemovePIEPrefix(GetWorld() ? GetWorld()->GetMapName() : FString()), EOnlineDataAdvertisementType::ViaOnlineService);
 	SessionSettings.Set(SETTING_GAMEMODE, FString(TEXT("Conquest")), EOnlineDataAdvertisementType::ViaOnlineService);
 

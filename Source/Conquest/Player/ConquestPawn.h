@@ -166,8 +166,14 @@ protected:
 	void ToggleFogOfWar();
 	void ToggleHexGridOverlay();
 	void ToggleTileYieldOverlay();
+	void ToggleFoodYieldLens();
+	void ToggleProductionYieldLens();
+	void ToggleScienceYieldLens();
+	void ToggleCultureYieldLens();
+	void ToggleGoldYieldLens();
 	void RegenerateMapWithNewSeed();
 	void HandleEnterShortcut();
+	void ToggleSpecificTileYieldLens(EConquestYieldType YieldType);
 
 	AModularHexGridActor* FindHexGridActor() const;
 

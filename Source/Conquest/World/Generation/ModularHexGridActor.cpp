@@ -54,6 +54,7 @@ AModularHexGridActor::AModularHexGridActor()
 
 	TileYieldBorderMeshes.Reserve(5);
 	TileYieldFillMeshes.Reserve(5);
+	TileYieldTextMeshes.Reserve(5);
 	for (int32 YieldLayerIndex = 0; YieldLayerIndex < 5; ++YieldLayerIndex)
 	{
 		const FName BorderComponentName(*FString::Printf(TEXT("TileYieldBorderMesh_%d"), YieldLayerIndex));
@@ -71,6 +72,14 @@ AModularHexGridActor::AModularHexGridActor()
 		YieldFillMesh->SetupAttachment(SceneRoot);
 		YieldFillMesh->bUseAsyncCooking = true;
 		TileYieldFillMeshes.Add(YieldFillMesh);
+
+		const FName TextComponentName(*FString::Printf(TEXT("TileYieldTextMesh_%d"), YieldLayerIndex));
+		UProceduralMeshComponent* YieldTextMesh = CreateDefaultSubobject<UProceduralMeshComponent>(
+			TextComponentName
+		);
+		YieldTextMesh->SetupAttachment(SceneRoot);
+		YieldTextMesh->bUseAsyncCooking = true;
+		TileYieldTextMeshes.Add(YieldTextMesh);
 	}
 
 	FogOfWarMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FogOfWarMesh"));
@@ -1181,6 +1190,13 @@ int32 AModularHexGridActor::GetTileYieldLayerIndex(EConquestYieldType YieldType)
 	}
 }
 
+float AModularHexGridActor::GetTileYieldOverlayZ(const FHexTileData& Tile) const
+{
+	return bUseFixedTileYieldHeight
+		? FixedTileYieldHeight
+		: Tile.Height + TileYieldSurfaceOffset;
+}
+
 FLinearColor AModularHexGridActor::GetTileYieldColor(EConquestYieldType YieldType) const
 {
 	switch (YieldType)
@@ -1220,23 +1236,28 @@ void AModularHexGridActor::ClearTileYieldOverlay()
 		}
 	}
 
-	for (TObjectPtr<UTextRenderComponent>& TextComponent : TileYieldTextComponents)
+	for (TObjectPtr<UProceduralMeshComponent>& YieldTextMesh : TileYieldTextMeshes)
 	{
-		if (TextComponent)
+		if (YieldTextMesh)
 		{
-			TextComponent->DestroyComponent();
+			YieldTextMesh->ClearAllMeshSections();
+			YieldTextMesh->SetVisibility(false);
 		}
 	}
 
-	TileYieldTextComponents.Reset();
-	TileYieldTextComponentsByLayer.Reset();
 	TileYieldSectionIndicesByLayer.Reset();
 	TileYieldBorderMaterialInstances.Reset();
 	TileYieldFillMaterialInstances.Reset();
+	TileYieldTextMaterialInstances.Reset();
 }
 
 void AModularHexGridActor::SetTileYieldLens(EConquestYieldType YieldType)
 {
+	if (bIsTileYieldLensTransitioning)
+	{
+		return;
+	}
+
 	if (
 		YieldType != EConquestYieldType::Food &&
 		YieldType != EConquestYieldType::Production &&
@@ -1249,17 +1270,38 @@ void AModularHexGridActor::SetTileYieldLens(EConquestYieldType YieldType)
 		return;
 	}
 
+	if (
+		bShowTileYieldOverlay &&
+		bHasActiveTileYieldLens &&
+		ActiveTileYieldLens == YieldType
+	)
+	{
+		return;
+	}
+
+	bIsTileYieldLensTransitioning = true;
 	ActiveTileYieldLens = YieldType;
+	LastSelectedTileYieldLens = YieldType;
 	bHasActiveTileYieldLens = true;
 	bShowTileYieldOverlay = true;
 	UpdateTileYieldOverlayVisibility();
+	bIsTileYieldLensTransitioning = false;
+	OnTileYieldLensTransitionFinished.Broadcast(ActiveTileYieldLens);
 }
 
 void AModularHexGridActor::ClearTileYieldLens()
 {
+	if (bIsTileYieldLensTransitioning)
+	{
+		return;
+	}
+
+	bIsTileYieldLensTransitioning = true;
 	bHasActiveTileYieldLens = false;
 	bShowTileYieldOverlay = false;
 	UpdateTileYieldOverlayVisibility();
+	bIsTileYieldLensTransitioning = false;
+	OnTileYieldLensTransitionFinished.Broadcast(LastSelectedTileYieldLens);
 }
 
 void AModularHexGridActor::SetTileYieldOverlayVisible(bool bVisible)
@@ -1277,14 +1319,38 @@ void AModularHexGridActor::SetTileYieldOverlayVisible(bool bVisible)
 
 void AModularHexGridActor::ToggleTileYieldOverlay()
 {
+	if (bIsTileYieldLensTransitioning)
+	{
+		return;
+	}
+
 	if (bShowTileYieldOverlay && bHasActiveTileYieldLens)
 	{
 		ClearTileYieldLens();
 	}
 	else
 	{
-		SetTileYieldLens(EConquestYieldType::Food);
+		SetTileYieldLens(LastSelectedTileYieldLens);
 	}
+}
+
+void AModularHexGridActor::ToggleSpecificTileYieldLens(EConquestYieldType YieldType)
+{
+	if (bIsTileYieldLensTransitioning)
+	{
+		return;
+	}
+
+	if (
+		bShowTileYieldOverlay &&
+		bHasActiveTileYieldLens &&
+		ActiveTileYieldLens == YieldType
+	)
+	{
+		return;
+	}
+
+	SetTileYieldLens(YieldType);
 }
 
 void AModularHexGridActor::RebuildTileYieldOverlay()
@@ -1374,6 +1440,113 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 		}
 	};
 
+	auto AddRect = [](
+		const FVector& Center,
+		float HalfWidth,
+		float HalfHeight,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const int32 StartIndex = Vertices.Num();
+		Vertices.Add(FVector(Center.X - HalfWidth, Center.Y - HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X + HalfWidth, Center.Y - HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X + HalfWidth, Center.Y + HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X - HalfWidth, Center.Y + HalfHeight, Center.Z));
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 1);
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 3);
+		Triangles.Add(StartIndex + 2);
+
+		for (int32 VertexIndex = 0; VertexIndex < 4; ++VertexIndex)
+		{
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(Color);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+	};
+
+	auto AddDigit = [&AddRect](
+		int32 Digit,
+		const FVector& Center,
+		float Height,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		static const bool SegmentMasks[10][7] =
+		{
+			{ true, true, true, true, true, true, false },
+			{ false, true, true, false, false, false, false },
+			{ true, true, false, true, true, false, true },
+			{ true, true, true, true, false, false, true },
+			{ false, true, true, false, false, true, true },
+			{ true, false, true, true, false, true, true },
+			{ true, false, true, true, true, true, true },
+			{ true, true, true, false, false, false, false },
+			{ true, true, true, true, true, true, true },
+			{ true, true, true, true, false, true, true }
+		};
+
+		const float Width = Height * 0.55f;
+		const float Thickness = Height * 0.13f;
+		const float HalfHeight = Height * 0.5f;
+		const float HalfWidth = Width * 0.5f;
+		const float VerticalSegmentHalfHeight = (Height - Thickness * 3.0f) * 0.25f;
+		const float HorizontalHalfWidth = HalfWidth - Thickness * 0.5f;
+		const float VisualRightX = -HalfWidth + Thickness * 0.5f;
+		const float VisualLeftX = -VisualRightX;
+		const float UpperY = HalfHeight * 0.5f;
+		const float LowerY = -HalfHeight * 0.5f;
+
+		const auto& Mask = SegmentMasks[FMath::Clamp(Digit, 0, 9)];
+		if (Mask[0]) AddRect(Center + FVector(0.0f, HalfHeight - Thickness * 0.5f, 0.0f), HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[1]) AddRect(Center + FVector(VisualRightX, UpperY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[2]) AddRect(Center + FVector(VisualRightX, LowerY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[3]) AddRect(Center + FVector(0.0f, -HalfHeight + Thickness * 0.5f, 0.0f), HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[4]) AddRect(Center + FVector(VisualLeftX, LowerY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[5]) AddRect(Center + FVector(VisualLeftX, UpperY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[6]) AddRect(Center, HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+	};
+
+	auto AddNumber = [&AddDigit](
+		int32 Value,
+		const FVector& Center,
+		float Height,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const FString Digits = FString::FromInt(FMath::Max(0, Value));
+		const float DigitWidth = Height * 0.65f;
+		const float TotalWidth = DigitWidth * static_cast<float>(Digits.Len());
+		for (int32 DigitIndex = 0; DigitIndex < Digits.Len(); ++DigitIndex)
+		{
+			const int32 Digit = Digits[DigitIndex] - TCHAR('0');
+			const float OffsetX = -TotalWidth * 0.5f + DigitWidth * 0.5f + DigitWidth * static_cast<float>(DigitIndex);
+			AddDigit(Digit, Center + FVector(OffsetX, 0.0f, 0.0f), Height, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		}
+	};
+
 	const float IconRadius = FMath::Max(1.0f, GridModel.GetHexRadius() * TileYieldHexScale);
 	const float FillRadius = FMath::Max(1.0f, IconRadius - FMath::Max(0.0f, TileYieldBorderWidth));
 	const FLinearColor BorderLinearColor = FLinearColor::Black;
@@ -1384,14 +1557,19 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 
 	for (int32 LayerIndex = 0; LayerIndex < 5; ++LayerIndex)
 	{
-		if (!TileYieldBorderMeshes.IsValidIndex(LayerIndex) || !TileYieldFillMeshes.IsValidIndex(LayerIndex))
+		if (
+			!TileYieldBorderMeshes.IsValidIndex(LayerIndex) ||
+			!TileYieldFillMeshes.IsValidIndex(LayerIndex) ||
+			!TileYieldTextMeshes.IsValidIndex(LayerIndex)
+		)
 		{
 			continue;
 		}
 
 		UProceduralMeshComponent* YieldBorderMesh = TileYieldBorderMeshes[LayerIndex].Get();
 		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes[LayerIndex].Get();
-		if (!YieldBorderMesh || !YieldFillMesh)
+		UProceduralMeshComponent* YieldTextMesh = TileYieldTextMeshes[LayerIndex].Get();
+		if (!YieldBorderMesh || !YieldFillMesh || !YieldTextMesh)
 		{
 			continue;
 		}
@@ -1408,17 +1586,25 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 		FillUVs.Reset();
 		FillVertexColors.Reset();
 		FillTangents.Reset();
+		TArray<FVector> TextVertices;
+		TArray<int32> TextTriangles;
+		TArray<FVector> TextNormals;
+		TArray<FVector2D> TextUVs;
+		TArray<FColor> TextVertexColors;
+		TArray<FProcMeshTangent> TextTangents;
 
 		const EConquestYieldType YieldType = GetTileYieldTypeForLayer(LayerIndex);
 		const FLinearColor FillLinearColor = GetTileYieldColor(YieldType);
 		const FColor FillColor = FillLinearColor.ToFColor(true);
 		TMap<FIntPoint, int32>& SectionIndices = TileYieldSectionIndicesByLayer.FindOrAdd(LayerIndex);
-		TMap<FIntPoint, UTextRenderComponent*>& TextComponents = TileYieldTextComponentsByLayer.FindOrAdd(LayerIndex);
 
-		UMaterialInterface* EffectiveBorderMaterial = TileYieldBorderMaterial.Get();
-		if (TileYieldBorderMaterial)
+		UMaterialInterface* BorderSourceMaterial = bUseTileYieldFillMaterialForBorder && TileYieldFillMaterial
+			? TileYieldFillMaterial.Get()
+			: TileYieldBorderMaterial.Get();
+		UMaterialInterface* EffectiveBorderMaterial = BorderSourceMaterial;
+		if (BorderSourceMaterial)
 		{
-			UMaterialInstanceDynamic* BorderMaterialInstance = UMaterialInstanceDynamic::Create(TileYieldBorderMaterial, this);
+			UMaterialInstanceDynamic* BorderMaterialInstance = UMaterialInstanceDynamic::Create(BorderSourceMaterial, this);
 			TileYieldBorderMaterialInstances[LayerIndex] = BorderMaterialInstance;
 			if (BorderMaterialInstance)
 			{
@@ -1445,6 +1631,29 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 			}
 		}
 
+		UMaterialInterface* TextSourceMaterial = TileYieldTextMaterial
+			? TileYieldTextMaterial.Get()
+			: TileYieldFillMaterial.Get();
+		UMaterialInterface* EffectiveTextMaterial = TextSourceMaterial;
+		if (TextSourceMaterial)
+		{
+			if (TileYieldTextMaterialInstances.Num() < TileYieldTextMeshes.Num())
+			{
+				TileYieldTextMaterialInstances.SetNum(TileYieldTextMeshes.Num());
+			}
+
+			UMaterialInstanceDynamic* TextMaterialInstance = UMaterialInstanceDynamic::Create(TextSourceMaterial, this);
+			TileYieldTextMaterialInstances[LayerIndex] = TextMaterialInstance;
+			if (TextMaterialInstance)
+			{
+				TextMaterialInstance->SetVectorParameterValue(
+					TileYieldMaterialColorParameterName,
+					TileYieldTextColor
+				);
+				EffectiveTextMaterial = TextMaterialInstance;
+			}
+		}
+
 		for (int32 R = 0; R < GridModel.GetGridHeight(); ++R)
 		{
 			for (int32 Q = 0; Q < GridModel.GetGridWidth(); ++Q)
@@ -1466,7 +1675,7 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 				SectionIndices.Add(Coord, SectionIndex);
 
 				const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
-				const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, Tile->Height + TileYieldSurfaceOffset);
+				const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, GetTileYieldOverlayZ(*Tile));
 				const FVector FillCenter = BorderCenter + FVector(0.0f, 0.0f, 0.5f);
 
 				AddHex(
@@ -1541,42 +1750,47 @@ void AModularHexGridActor::BuildAllTileYieldOverlays()
 
 				if (bShowTileYieldText)
 				{
-					const FName ComponentName = MakeUniqueObjectName(
-						this,
-						UTextRenderComponent::StaticClass(),
-						TEXT("TileYieldText")
+					AddNumber(
+						YieldValue,
+						FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset),
+						TileYieldTextWorldSize,
+						TileYieldTextColor.ToFColor(true),
+						TextVertices,
+						TextTriangles,
+						TextNormals,
+						TextUVs,
+						TextVertexColors,
+						TextTangents
 					);
 
-					UTextRenderComponent* TextComponent = NewObject<UTextRenderComponent>(this, ComponentName);
-					if (TextComponent)
+					YieldTextMesh->CreateMeshSection(
+						SectionIndex,
+						TextVertices,
+						TextTriangles,
+						TextNormals,
+						TextUVs,
+						TextVertexColors,
+						TextTangents,
+						false
+					);
+					YieldTextMesh->SetMeshSectionVisible(SectionIndex, false);
+					if (EffectiveTextMaterial)
 					{
-						TextComponent->SetupAttachment(SceneRoot);
-						TextComponent->RegisterComponent();
-						TextComponent->SetRelativeLocation(FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset));
-						TextComponent->SetRelativeRotation(TileYieldTextRotation);
-						TextComponent->SetText(FText::AsNumber(YieldValue));
-						TextComponent->SetTextRenderColor(TileYieldTextColor.ToFColor(true));
-						TextComponent->SetWorldSize(TileYieldTextWorldSize);
-						TextComponent->SetHorizontalAlignment(EHTA_Center);
-						TextComponent->SetVerticalAlignment(EVRTA_TextCenter);
-						TextComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-						TextComponent->SetGenerateOverlapEvents(false);
-						TextComponent->SetCastShadow(false);
-						TextComponent->bCastDynamicShadow = false;
-						TextComponent->bCastStaticShadow = false;
-						TextComponent->CastShadow = false;
-						TextComponent->SetVisibility(false);
-
-						AddInstanceComponent(TextComponent);
-						TileYieldTextComponents.Add(TextComponent);
-						TextComponents.Add(Coord, TextComponent);
+						YieldTextMesh->SetMaterial(SectionIndex, EffectiveTextMaterial);
 					}
+					TextVertices.Reset();
+					TextTriangles.Reset();
+					TextNormals.Reset();
+					TextUVs.Reset();
+					TextVertexColors.Reset();
+					TextTangents.Reset();
 				}
 			}
 		}
 
 		YieldBorderMesh->SetVisibility(false);
 		YieldFillMesh->SetVisibility(false);
+		YieldTextMesh->SetVisibility(false);
 	}
 
 	UpdateTileYieldOverlayVisibility();
@@ -1595,7 +1809,7 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 	const FLinearColor BorderLinearColor = FLinearColor::Black;
 	const FColor BorderColor = BorderLinearColor.ToFColor(true);
 	const FVector FlatCenter = GridModel.GetHexCenter(Coord.X, Coord.Y);
-	const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, Tile->Height + TileYieldSurfaceOffset);
+	const FVector BorderCenter(FlatCenter.X, FlatCenter.Y, GetTileYieldOverlayZ(*Tile));
 	const FVector FillCenter = BorderCenter + FVector(0.0f, 0.0f, 0.5f);
 
 	auto AddHex = [](
@@ -1647,16 +1861,128 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 		}
 	};
 
+	auto AddRect = [](
+		const FVector& Center,
+		float HalfWidth,
+		float HalfHeight,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const int32 StartIndex = Vertices.Num();
+		Vertices.Add(FVector(Center.X - HalfWidth, Center.Y - HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X + HalfWidth, Center.Y - HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X + HalfWidth, Center.Y + HalfHeight, Center.Z));
+		Vertices.Add(FVector(Center.X - HalfWidth, Center.Y + HalfHeight, Center.Z));
+
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 2);
+		Triangles.Add(StartIndex + 1);
+		Triangles.Add(StartIndex + 0);
+		Triangles.Add(StartIndex + 3);
+		Triangles.Add(StartIndex + 2);
+
+		for (int32 VertexIndex = 0; VertexIndex < 4; ++VertexIndex)
+		{
+			Normals.Add(FVector::UpVector);
+			UVs.Add(FVector2D::ZeroVector);
+			VertexColors.Add(Color);
+			Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		}
+	};
+
+	auto AddDigit = [&AddRect](
+		int32 Digit,
+		const FVector& Center,
+		float Height,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		static const bool SegmentMasks[10][7] =
+		{
+			{ true, true, true, true, true, true, false },
+			{ false, true, true, false, false, false, false },
+			{ true, true, false, true, true, false, true },
+			{ true, true, true, true, false, false, true },
+			{ false, true, true, false, false, true, true },
+			{ true, false, true, true, false, true, true },
+			{ true, false, true, true, true, true, true },
+			{ true, true, true, false, false, false, false },
+			{ true, true, true, true, true, true, true },
+			{ true, true, true, true, false, true, true }
+		};
+
+		const float Width = Height * 0.55f;
+		const float Thickness = Height * 0.13f;
+		const float HalfHeight = Height * 0.5f;
+		const float HalfWidth = Width * 0.5f;
+		const float VerticalSegmentHalfHeight = (Height - Thickness * 3.0f) * 0.25f;
+		const float HorizontalHalfWidth = HalfWidth - Thickness * 0.5f;
+		const float VisualRightX = -HalfWidth + Thickness * 0.5f;
+		const float VisualLeftX = -VisualRightX;
+		const float UpperY = HalfHeight * 0.5f;
+		const float LowerY = -HalfHeight * 0.5f;
+
+		const auto& Mask = SegmentMasks[FMath::Clamp(Digit, 0, 9)];
+		if (Mask[0]) AddRect(Center + FVector(0.0f, HalfHeight - Thickness * 0.5f, 0.0f), HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[1]) AddRect(Center + FVector(VisualRightX, UpperY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[2]) AddRect(Center + FVector(VisualRightX, LowerY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[3]) AddRect(Center + FVector(0.0f, -HalfHeight + Thickness * 0.5f, 0.0f), HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[4]) AddRect(Center + FVector(VisualLeftX, LowerY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[5]) AddRect(Center + FVector(VisualLeftX, UpperY, 0.0f), Thickness * 0.5f, VerticalSegmentHalfHeight, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		if (Mask[6]) AddRect(Center, HorizontalHalfWidth, Thickness * 0.5f, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+	};
+
+	auto AddNumber = [&AddDigit](
+		int32 Value,
+		const FVector& Center,
+		float Height,
+		const FColor& Color,
+		TArray<FVector>& Vertices,
+		TArray<int32>& Triangles,
+		TArray<FVector>& Normals,
+		TArray<FVector2D>& UVs,
+		TArray<FColor>& VertexColors,
+		TArray<FProcMeshTangent>& Tangents
+	)
+	{
+		const FString Digits = FString::FromInt(FMath::Max(0, Value));
+		const float DigitWidth = Height * 0.65f;
+		const float TotalWidth = DigitWidth * static_cast<float>(Digits.Len());
+		for (int32 DigitIndex = 0; DigitIndex < Digits.Len(); ++DigitIndex)
+		{
+			const int32 Digit = Digits[DigitIndex] - TCHAR('0');
+			const float OffsetX = -TotalWidth * 0.5f + DigitWidth * 0.5f + DigitWidth * static_cast<float>(DigitIndex);
+			AddDigit(Digit, Center + FVector(OffsetX, 0.0f, 0.0f), Height, Color, Vertices, Triangles, Normals, UVs, VertexColors, Tangents);
+		}
+	};
+
 	for (int32 LayerIndex = 0; LayerIndex < 5; ++LayerIndex)
 	{
-		if (!TileYieldBorderMeshes.IsValidIndex(LayerIndex) || !TileYieldFillMeshes.IsValidIndex(LayerIndex))
+		if (
+			!TileYieldBorderMeshes.IsValidIndex(LayerIndex) ||
+			!TileYieldFillMeshes.IsValidIndex(LayerIndex) ||
+			!TileYieldTextMeshes.IsValidIndex(LayerIndex)
+		)
 		{
 			continue;
 		}
 
 		UProceduralMeshComponent* YieldBorderMesh = TileYieldBorderMeshes[LayerIndex].Get();
 		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes[LayerIndex].Get();
-		if (!YieldBorderMesh || !YieldFillMesh)
+		UProceduralMeshComponent* YieldTextMesh = TileYieldTextMeshes[LayerIndex].Get();
+		if (!YieldBorderMesh || !YieldFillMesh || !YieldTextMesh)
 		{
 			continue;
 		}
@@ -1664,7 +1990,6 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 		const EConquestYieldType YieldType = GetTileYieldTypeForLayer(LayerIndex);
 		const int32 YieldValue = GetTileYieldValue(Tile->FinalYield, YieldType);
 		TMap<FIntPoint, int32>& SectionIndices = TileYieldSectionIndicesByLayer.FindOrAdd(LayerIndex);
-		TMap<FIntPoint, UTextRenderComponent*>& TextComponents = TileYieldTextComponentsByLayer.FindOrAdd(LayerIndex);
 
 		int32* ExistingSectionIndex = SectionIndices.Find(Coord);
 		if (YieldValue <= 0)
@@ -1673,13 +1998,7 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 			{
 				YieldBorderMesh->SetMeshSectionVisible(*ExistingSectionIndex, false);
 				YieldFillMesh->SetMeshSectionVisible(*ExistingSectionIndex, false);
-			}
-			if (UTextRenderComponent** TextComponent = TextComponents.Find(Coord))
-			{
-				if (*TextComponent)
-				{
-					(*TextComponent)->SetVisibility(false);
-				}
+				YieldTextMesh->SetMeshSectionVisible(*ExistingSectionIndex, false);
 			}
 			continue;
 		}
@@ -1703,6 +2022,13 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 		TArray<FVector2D> FillUVs;
 		TArray<FColor> FillVertexColors;
 		TArray<FProcMeshTangent> FillTangents;
+
+		TArray<FVector> TextVertices;
+		TArray<int32> TextTriangles;
+		TArray<FVector> TextNormals;
+		TArray<FVector2D> TextUVs;
+		TArray<FColor> TextVertexColors;
+		TArray<FProcMeshTangent> TextTangents;
 
 		AddHex(
 			BorderCenter,
@@ -1754,9 +2080,15 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 		{
 			YieldBorderMesh->SetMaterial(SectionIndex, TileYieldBorderMaterialInstances[LayerIndex]);
 		}
-		else if (TileYieldBorderMaterial)
+		else
 		{
-			YieldBorderMesh->SetMaterial(SectionIndex, TileYieldBorderMaterial);
+			UMaterialInterface* BorderSourceMaterial = bUseTileYieldFillMaterialForBorder && TileYieldFillMaterial
+				? TileYieldFillMaterial.Get()
+				: TileYieldBorderMaterial.Get();
+			if (BorderSourceMaterial)
+			{
+				YieldBorderMesh->SetMaterial(SectionIndex, BorderSourceMaterial);
+			}
 		}
 
 		if (TileYieldFillMaterialInstances.IsValidIndex(LayerIndex) && TileYieldFillMaterialInstances[LayerIndex])
@@ -1768,45 +2100,47 @@ void AModularHexGridActor::UpdateTileYieldOverlayForTile(const FIntPoint& Coord)
 			YieldFillMesh->SetMaterial(SectionIndex, TileYieldFillMaterial);
 		}
 
-		UTextRenderComponent* TextComponent = nullptr;
-		if (UTextRenderComponent** ExistingTextComponent = TextComponents.Find(Coord))
+		if (bShowTileYieldText)
 		{
-			TextComponent = *ExistingTextComponent;
-		}
-		else if (bShowTileYieldText)
-		{
-			const FName ComponentName = MakeUniqueObjectName(
-				this,
-				UTextRenderComponent::StaticClass(),
-				TEXT("TileYieldText")
+			AddNumber(
+				YieldValue,
+				FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset),
+				TileYieldTextWorldSize,
+				TileYieldTextColor.ToFColor(true),
+				TextVertices,
+				TextTriangles,
+				TextNormals,
+				TextUVs,
+				TextVertexColors,
+				TextTangents
 			);
 
-			TextComponent = NewObject<UTextRenderComponent>(this, ComponentName);
-			if (TextComponent)
+			YieldTextMesh->CreateMeshSection(
+				SectionIndex,
+				TextVertices,
+				TextTriangles,
+				TextNormals,
+				TextUVs,
+				TextVertexColors,
+				TextTangents,
+				false
+			);
+			if (TileYieldTextMaterialInstances.IsValidIndex(LayerIndex) && TileYieldTextMaterialInstances[LayerIndex])
 			{
-				TextComponent->SetupAttachment(SceneRoot);
-				TextComponent->RegisterComponent();
-				TextComponent->SetHorizontalAlignment(EHTA_Center);
-				TextComponent->SetVerticalAlignment(EVRTA_TextCenter);
-				TextComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				TextComponent->SetGenerateOverlapEvents(false);
-				TextComponent->SetCastShadow(false);
-				TextComponent->bCastDynamicShadow = false;
-				TextComponent->bCastStaticShadow = false;
-				TextComponent->CastShadow = false;
-				AddInstanceComponent(TextComponent);
-				TileYieldTextComponents.Add(TextComponent);
-				TextComponents.Add(Coord, TextComponent);
+				YieldTextMesh->SetMaterial(SectionIndex, TileYieldTextMaterialInstances[LayerIndex]);
+			}
+			else if (TileYieldTextMaterial)
+			{
+				YieldTextMesh->SetMaterial(SectionIndex, TileYieldTextMaterial);
+			}
+			else if (TileYieldFillMaterial)
+			{
+				YieldTextMesh->SetMaterial(SectionIndex, TileYieldFillMaterial);
 			}
 		}
-
-		if (TextComponent)
+		else
 		{
-			TextComponent->SetRelativeLocation(FillCenter + FVector(0.0f, 0.0f, TileYieldTextHeightOffset));
-			TextComponent->SetRelativeRotation(TileYieldTextRotation);
-			TextComponent->SetText(FText::AsNumber(YieldValue));
-			TextComponent->SetTextRenderColor(TileYieldTextColor.ToFColor(true));
-			TextComponent->SetWorldSize(TileYieldTextWorldSize);
+			YieldTextMesh->SetMeshSectionVisible(SectionIndex, false);
 		}
 	}
 
@@ -1832,6 +2166,9 @@ void AModularHexGridActor::UpdateTileYieldOverlayVisibility()
 		UProceduralMeshComponent* YieldFillMesh = TileYieldFillMeshes.IsValidIndex(LayerIndex)
 			? TileYieldFillMeshes[LayerIndex].Get()
 			: nullptr;
+		UProceduralMeshComponent* YieldTextMesh = TileYieldTextMeshes.IsValidIndex(LayerIndex)
+			? TileYieldTextMeshes[LayerIndex].Get()
+			: nullptr;
 
 		if (YieldBorderMesh)
 		{
@@ -1841,6 +2178,11 @@ void AModularHexGridActor::UpdateTileYieldOverlayVisibility()
 		if (YieldFillMesh)
 		{
 			YieldFillMesh->SetVisibility(bLayerVisible);
+		}
+
+		if (YieldTextMesh)
+		{
+			YieldTextMesh->SetVisibility(bShowTileYieldText && bLayerVisible);
 		}
 
 		TMap<FIntPoint, int32>* SectionIndices = TileYieldSectionIndicesByLayer.Find(LayerIndex);
@@ -1862,22 +2204,10 @@ void AModularHexGridActor::UpdateTileYieldOverlayVisibility()
 				{
 					YieldFillMesh->SetMeshSectionVisible(Pair.Value, bSectionVisible);
 				}
-			}
-		}
 
-		TMap<FIntPoint, UTextRenderComponent*>* TextComponents = TileYieldTextComponentsByLayer.Find(LayerIndex);
-		if (TextComponents)
-		{
-			for (const TPair<FIntPoint, UTextRenderComponent*>& Pair : *TextComponents)
-			{
-				if (Pair.Value)
+				if (YieldTextMesh)
 				{
-					Pair.Value->SetVisibility(
-						bShowTileYieldText &&
-						bLayerVisible &&
-						IsTileDiscoveredForYieldOverlay(Pair.Key) &&
-						IsTileInYieldHoverRange(Pair.Key)
-					);
+					YieldTextMesh->SetMeshSectionVisible(Pair.Value, bShowTileYieldText && bSectionVisible);
 				}
 			}
 		}
@@ -2548,6 +2878,20 @@ void AModularHexGridActor::ConfigureMeshComponents()
 			YieldFillMesh->bCastStaticShadow = false;
 			YieldFillMesh->CastShadow = false;
 			YieldFillMesh->TranslucencySortPriority = TileYieldFillTranslucencySortPriority;
+		}
+	}
+
+	for (TObjectPtr<UProceduralMeshComponent>& YieldTextMesh : TileYieldTextMeshes)
+	{
+		if (YieldTextMesh)
+		{
+			YieldTextMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			YieldTextMesh->SetVisibility(false);
+			YieldTextMesh->SetCastShadow(false);
+			YieldTextMesh->bCastDynamicShadow = false;
+			YieldTextMesh->bCastStaticShadow = false;
+			YieldTextMesh->CastShadow = false;
+			YieldTextMesh->TranslucencySortPriority = TileYieldTextTranslucencySortPriority;
 		}
 	}
 

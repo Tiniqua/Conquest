@@ -23,13 +23,14 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UWidgetComponent;
-class UTextRenderComponent;
 class UConquestCityWorldLabelWidget;
 class UConquestTileHealthBarWidget;
 class UHexTileResourceData;
 class UHexResourceSetData;
 class UDataTable;
 class FLifetimeProperty;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTileYieldLensTransitionFinished, EConquestYieldType, YieldType);
 
 UCLASS()
 class CONQUEST_API AModularHexGridActor : public AActor
@@ -185,6 +186,9 @@ public:
 	void ToggleTileYieldOverlay();
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
+	void ToggleSpecificTileYieldLens(EConquestYieldType YieldType);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
 	void RebuildTileYieldOverlay();
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
@@ -243,6 +247,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Yields")
 	bool HasActiveTileYieldLens() const { return bHasActiveTileYieldLens; }
+
+	UFUNCTION(BlueprintPure, Category = "Hex Grid|Yields")
+	bool IsTileYieldLensTransitioning() const { return bIsTileYieldLensTransitioning; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Hex Grid|Yields")
+	FOnTileYieldLensTransitionFinished OnTileYieldLensTransitionFinished;
 
 	UFUNCTION(BlueprintPure, Category = "Hex Grid|Fog Of War")
 	bool IsFogOfWarVisible() const { return bGenerateFogOfWar; }
@@ -316,11 +326,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Yields")
 	TArray<TObjectPtr<UProceduralMeshComponent>> TileYieldFillMeshes;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Yields")
+	TArray<TObjectPtr<UProceduralMeshComponent>> TileYieldTextMeshes;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	TObjectPtr<UMaterialInterface> TileYieldBorderMaterial = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	TObjectPtr<UMaterialInterface> TileYieldFillMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	bool bUseTileYieldFillMaterialForBorder = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	FName TileYieldMaterialColorParameterName = TEXT("Colour");
@@ -332,7 +348,13 @@ public:
 	EConquestYieldType ActiveTileYieldLens = EConquestYieldType::Food;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	EConquestYieldType LastSelectedTileYieldLens = EConquestYieldType::Food;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	bool bHasActiveTileYieldLens = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hex Grid|Yields")
+	bool bIsTileYieldLensTransitioning = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields", meta = (ClampMin = "0.01", ClampMax = "1.0"))
 	float TileYieldHexScale = 0.1f;
@@ -344,16 +366,28 @@ public:
 	float TileYieldSurfaceOffset = 18.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
-	int32 TileYieldBorderTranslucencySortPriority = 8;
+	bool bUseFixedTileYieldHeight = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
-	int32 TileYieldFillTranslucencySortPriority = 7;
+	float FixedTileYieldHeight = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	int32 TileYieldBorderTranslucencySortPriority = 31;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	int32 TileYieldFillTranslucencySortPriority = 30;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	bool bShowTileYieldText = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	FLinearColor TileYieldTextColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	TObjectPtr<UMaterialInterface> TileYieldTextMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
+	int32 TileYieldTextTranslucencySortPriority = 32;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Yields")
 	float TileYieldTextWorldSize = 28.0f;
@@ -486,16 +520,15 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ImprovementMeshComponents;
 
 	UPROPERTY()
-	TArray<TObjectPtr<UTextRenderComponent>> TileYieldTextComponents;
-
-	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldBorderMaterialInstances;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldFillMaterialInstances;
 
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldTextMaterialInstances;
+
 	TMap<int32, TMap<FIntPoint, int32>> TileYieldSectionIndicesByLayer;
-	TMap<int32, TMap<FIntPoint, UTextRenderComponent*>> TileYieldTextComponentsByLayer;
 
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
@@ -508,6 +541,7 @@ private:
 	FLinearColor GetTileYieldColor(EConquestYieldType YieldType) const;
 	EConquestYieldType GetTileYieldTypeForLayer(int32 LayerIndex) const;
 	int32 GetTileYieldLayerIndex(EConquestYieldType YieldType) const;
+	float GetTileYieldOverlayZ(const FHexTileData& Tile) const;
 	bool IsTileDiscoveredForYieldOverlay(const FIntPoint& Coord) const;
 	bool IsTileInYieldHoverRange(const FIntPoint& Coord) const;
 

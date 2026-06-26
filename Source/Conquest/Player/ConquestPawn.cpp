@@ -274,6 +274,11 @@ void AConquestPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindAction(TEXT("ToggleFogOfWar"), IE_Pressed, this, &AConquestPawn::ToggleFogOfWar);
 	PlayerInputComponent->BindAction(TEXT("ToggleHexGridOverlay"), IE_Pressed, this, &AConquestPawn::ToggleHexGridOverlay);
 	PlayerInputComponent->BindAction(TEXT("ToggleTileYieldOverlay"), IE_Pressed, this, &AConquestPawn::ToggleTileYieldOverlay);
+	PlayerInputComponent->BindAction(TEXT("ToggleFoodYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleFoodYieldLens);
+	PlayerInputComponent->BindAction(TEXT("ToggleProductionYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleProductionYieldLens);
+	PlayerInputComponent->BindAction(TEXT("ToggleScienceYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleScienceYieldLens);
+	PlayerInputComponent->BindAction(TEXT("ToggleCultureYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleCultureYieldLens);
+	PlayerInputComponent->BindAction(TEXT("ToggleGoldYieldLens"), IE_Pressed, this, &AConquestPawn::ToggleGoldYieldLens);
 	PlayerInputComponent->BindAction(TEXT("RegenerateGrid"), IE_Pressed, this, &AConquestPawn::RegenerateMapWithNewSeed);
 	PlayerInputComponent->BindAction(TEXT("Enter"), IE_Pressed, this, &AConquestPawn::HandleEnterShortcut);
 	// Intentionally no Turn / LookUp bindings.
@@ -754,6 +759,47 @@ void AConquestPawn::ToggleTileYieldOverlay()
 	{
 		GameWidget->RefreshYieldLensButtons();
 	}
+}
+
+void AConquestPawn::ToggleSpecificTileYieldLens(EConquestYieldType YieldType)
+{
+	AModularHexGridActor* HexGridActor = FindHexGridActor();
+	if (!HexGridActor)
+	{
+		return;
+	}
+
+	HexGridActor->ToggleSpecificTileYieldLens(YieldType);
+
+	if (UConquestGameWidget* GameWidget = GetActiveGameWidget())
+	{
+		GameWidget->RefreshYieldLensButtons();
+	}
+}
+
+void AConquestPawn::ToggleFoodYieldLens()
+{
+	ToggleSpecificTileYieldLens(EConquestYieldType::Food);
+}
+
+void AConquestPawn::ToggleProductionYieldLens()
+{
+	ToggleSpecificTileYieldLens(EConquestYieldType::Production);
+}
+
+void AConquestPawn::ToggleScienceYieldLens()
+{
+	ToggleSpecificTileYieldLens(EConquestYieldType::Science);
+}
+
+void AConquestPawn::ToggleCultureYieldLens()
+{
+	ToggleSpecificTileYieldLens(EConquestYieldType::Culture);
+}
+
+void AConquestPawn::ToggleGoldYieldLens()
+{
+	ToggleSpecificTileYieldLens(EConquestYieldType::Gold);
 }
 
 void AConquestPawn::RegenerateMapWithNewSeed()

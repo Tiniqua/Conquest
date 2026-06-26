@@ -650,18 +650,21 @@ void UConquestGameWidget::HandleYieldLensButtonClicked(EConquestYieldType YieldT
 		return;
 	}
 
+	if (GridActor->IsTileYieldLensTransitioning())
+	{
+		return;
+	}
+
 	if (
 		GridActor->IsTileYieldOverlayVisible() &&
 		GridActor->HasActiveTileYieldLens() &&
 		GridActor->GetActiveTileYieldLens() == YieldType
 	)
 	{
-		GridActor->ClearTileYieldLens();
+		return;
 	}
-	else
-	{
-		GridActor->SetTileYieldLens(YieldType);
-	}
+
+	GridActor->SetTileYieldLens(YieldType);
 
 	RefreshYieldLensButtons();
 }

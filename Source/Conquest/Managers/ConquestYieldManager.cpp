@@ -116,6 +116,34 @@ FHexYield UConquestYieldManager::CalculateCityBuildingYields(const FCityState& C
 	return Result;
 }
 
+void UConquestYieldManager::ApplyCityBuildingYieldsToCenterTile(const FCityState& City) const
+{
+	if (!GameStateRef)
+	{
+		return;
+	}
+
+	FHexGridModel* GridModel = GameStateRef->GetHexGridModelMutable();
+	if (!GridModel)
+	{
+		return;
+	}
+
+	FHexTileData* CenterTile = GridModel->GetTileMutable(City.CenterTile);
+	if (!CenterTile)
+	{
+		return;
+	}
+
+	CenterTile->FinalYield = CenterTile->Gameplay.BaseYields + CalculateCityBuildingYields(City);
+	CenterTile->Gameplay.CachedFinalYields = CenterTile->FinalYield;
+
+	if (GameStateRef->ActiveGridActor)
+	{
+		GameStateRef->ActiveGridActor->UpdateTileYieldOverlayForTile(City.CenterTile);
+	}
+}
+
 FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(const FCityState& City) const
 {
 	FHexYield Result;
@@ -160,8 +188,6 @@ FHexYield UConquestYieldManager::CalculateCityTotalYieldsBeforeUnhappyPenalty(co
 			Result += CalculateTileYield(*Tile);
 		}
 	}
-
-	Result += CalculateCityBuildingYields(City);
 
 	return Result;
 }

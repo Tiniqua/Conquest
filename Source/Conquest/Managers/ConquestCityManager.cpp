@@ -889,6 +889,7 @@ void UConquestCityManager::RecalculateCityYields(FCityState& City)
 		return;
 	}
 
+	GameStateRef->YieldManager->ApplyCityBuildingYieldsToCenterTile(City);
 	City.CachedYieldPerTurn = GameStateRef->YieldManager->CalculateCityTotalYields(City);
 	City.CachedYieldPerTurn += GetProductionProjectYieldBonus(City);
 }

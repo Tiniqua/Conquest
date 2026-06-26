@@ -20,6 +20,7 @@ public:
 
 	FHexYield CalculateTileYield(const FHexTileData& Tile) const;
 	FHexYield CalculateCityBuildingYields(const FCityState& City) const;
+	void ApplyCityBuildingYieldsToCenterTile(const FCityState& City) const;
 	FHexYield CalculateCityTotalYieldsBeforeUnhappyPenalty(const FCityState& City) const;
 	FHexYield CalculateCityTotalYields(const FCityState& City) const;
 	FHexYield CalculateEmpireYieldPerTurnBeforeUnhappyPenalty(int32 PlayerId) const;

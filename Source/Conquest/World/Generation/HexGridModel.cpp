@@ -243,6 +243,7 @@ void FHexGridModel::ResolveTileYields()
 			}
 		}
 
+		Tile.Gameplay.BaseYields = TotalYield;
 		Tile.FinalYield = TotalYield;
 	}
 }

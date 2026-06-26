@@ -23,9 +23,6 @@ struct FHexYield
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
 	int32 Culture = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Yield")
-	int32 Faith = 0;
-
 	void Reset()
 	{
 		Food = 0;
@@ -33,7 +30,6 @@ struct FHexYield
 		Gold = 0;
 		Science = 0;
 		Culture = 0;
-		Faith = 0;
 	}
 
 	bool IsZero() const
@@ -42,13 +38,12 @@ struct FHexYield
 			Production == 0 &&
 			Gold == 0 &&
 			Science == 0 &&
-			Culture == 0 &&
-			Faith == 0;
+			Culture == 0;
 	}
 
 	int32 GetTotal() const
 	{
-		return Food + Production + Gold + Science + Culture + Faith;
+		return Food + Production + Gold + Science + Culture;
 	}
 
 	float GetWeightedScore(
@@ -56,28 +51,25 @@ struct FHexYield
 		float ProductionWeight = 1.0f,
 		float GoldWeight = 1.0f,
 		float ScienceWeight = 1.0f,
-		float CultureWeight = 1.0f,
-		float FaithWeight = 1.0f
+		float CultureWeight = 1.0f
 	) const
 	{
 		return Food * FoodWeight +
 			Production * ProductionWeight +
 			Gold * GoldWeight +
 			Science * ScienceWeight +
-			Culture * CultureWeight +
-			Faith * FaithWeight;
+			Culture * CultureWeight;
 	}
 
 	FString ToCompactString() const
 	{
 		return FString::Printf(
-			TEXT("Food %d | Prod %d | Gold %d | Sci %d | Cult %d | Faith %d"),
+			TEXT("Food %d | Prod %d | Gold %d | Sci %d | Cult %d"),
 			Food,
 			Production,
 			Gold,
 			Science,
-			Culture,
-			Faith
+			Culture
 		);
 	}
 
@@ -88,7 +80,6 @@ struct FHexYield
 		Gold += Other.Gold;
 		Science += Other.Science;
 		Culture += Other.Culture;
-		Faith += Other.Faith;
 		return *this;
 	}
 

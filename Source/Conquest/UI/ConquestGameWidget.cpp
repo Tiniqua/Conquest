@@ -84,7 +84,6 @@ void UConquestGameWidget::SetYieldTexts(const FHexYield& Yield)
 	SetText(TileGoldText, FString::Printf(TEXT("Gold: %d"), Yield.Gold));
 	SetText(TileScienceText, FString::Printf(TEXT("Sci: %d"), Yield.Science));
 	SetText(TileCultureText, FString::Printf(TEXT("Culture: %d"), Yield.Culture));
-	SetText(TileFaithText, FString::Printf(TEXT("Faith: %d"), Yield.Faith));
 }
 
 FText UConquestGameWidget::FormatStoredYieldText(const FText& Label, int32 Stored, int32 PerTurn)
@@ -213,16 +212,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 		)
 	);
 	SetText(
-		TopBarFaithText,
-		FormatStoredYieldText(
-			NSLOCTEXT("Conquest", "YieldFaithShort", "Faith"),
-			YieldData.EmpireStoredYields.Faith,
-			YieldData.EmpireYieldPerTurn.Faith,
-			YieldData.EmpireYieldPerTurnBeforeUnhappyPenalty.Faith,
-			YieldData.bIsUnhappy
-		)
-	);
-	SetText(
 		TopBarHappinessText,
 		YieldData.bIsUnhappy
 			? FText::Format(
@@ -278,7 +267,6 @@ void UConquestGameWidget::ClearTileTexts()
 	ClearText(TileGoldText);
 	ClearText(TileScienceText);
 	ClearText(TileCultureText);
-	ClearText(TileFaithText);
 }
 
 void UConquestGameWidget::NativeConstruct()

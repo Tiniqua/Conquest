@@ -1915,7 +1915,7 @@ float UConquestCityManager::ScoreTileForExpansion(const FCityState& City, const 
 
 	const FHexYield TileYield = GameStateRef->YieldManager->CalculateTileYield(*Tile);
 
-	float Score = TileYield.GetWeightedScore(3.0f, 3.0f, 1.5f, 2.0f, 2.0f, 1.0f);
+	float Score = TileYield.GetWeightedScore(3.0f, 3.0f, 1.5f, 2.0f, 2.0f);
 	if (City.OwnedTiles.Contains(Coord))
 	{
 		const int32 AssignedCitizens = GetAssignedCitizensForTile(City, Coord);

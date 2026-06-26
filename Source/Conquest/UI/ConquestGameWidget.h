@@ -323,9 +323,6 @@ protected:
 	TObjectPtr<UTextBlock> TileCultureText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> TileFaithText = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> EndTurnButton = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -354,9 +351,6 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TopBarCultureText = nullptr;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> TopBarFaithText = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TopBarHappinessText = nullptr;

@@ -43,7 +43,6 @@ namespace
 		Result.Gold = FMath::CeilToInt(static_cast<float>(Yield.Gold) * Multiplier);
 		Result.Science = FMath::CeilToInt(static_cast<float>(Yield.Science) * Multiplier);
 		Result.Culture = FMath::CeilToInt(static_cast<float>(Yield.Culture) * Multiplier);
-		Result.Faith = FMath::CeilToInt(static_cast<float>(Yield.Faith) * Multiplier);
 		return Result;
 	}
 
@@ -429,7 +428,6 @@ FHexYield UConquestYieldManager::ApplyUnhappyYieldPenalty(const FHexYield& Yield
 	Result.Gold = FMath::CeilToInt(static_cast<float>(Result.Gold) * PenaltyMultiplier);
 	Result.Science = FMath::CeilToInt(static_cast<float>(Result.Science) * PenaltyMultiplier);
 	Result.Culture = FMath::CeilToInt(static_cast<float>(Result.Culture) * PenaltyMultiplier);
-	Result.Faith = FMath::CeilToInt(static_cast<float>(Result.Faith) * PenaltyMultiplier);
 	return Result;
 }
 
@@ -450,5 +448,4 @@ void UConquestYieldManager::CollectGlobalYieldIncome(int32 PlayerId) const
 
 	Player.StoredYields.Gold += Income.Gold;
 	Player.StoredYields.Culture += Income.Culture;
-	Player.StoredYields.Faith += Income.Faith;
 }

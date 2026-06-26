@@ -43,7 +43,6 @@ enum class EConquestYieldType : uint8
 	Gold,
 	Science,
 	Culture,
-	Faith,
 	Happiness
 };
 
@@ -68,9 +67,6 @@ struct FConquestYieldSet
 	int32 Culture = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 Faith = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 Happiness = 0;
 
 	void Reset()
@@ -80,7 +76,6 @@ struct FConquestYieldSet
 		Gold = 0;
 		Science = 0;
 		Culture = 0;
-		Faith = 0;
 		Happiness = 0;
 	}
 
@@ -91,7 +86,6 @@ struct FConquestYieldSet
 		Gold += Other.Gold;
 		Science += Other.Science;
 		Culture += Other.Culture;
-		Faith += Other.Faith;
 		Happiness += Other.Happiness;
 		return *this;
 	}

@@ -16,6 +16,9 @@ In `Config/DefaultEngine.ini`:
 ;DefaultPlatformService=Null
 DefaultPlatformService=Steam
 
+[OnlineSubsystemSteam]
+bEnabled=True
+
 [/Script/Engine.Engine]
 !NetDriverDefinitions=ClearArray
 ;+NetDriverDefinitions=(DefName="GameNetDriver",DriverClassName="/Script/OnlineSubsystemUtils.IpNetDriver",DriverClassNameFallback="/Script/OnlineSubsystemUtils.IpNetDriver")
@@ -50,6 +53,10 @@ In `Config/DefaultEngine.ini`:
 [OnlineSubsystem]
 DefaultPlatformService=Null
 ;DefaultPlatformService=Steam
+
+[OnlineSubsystemSteam]
+bEnabled=False
+;bEnabled=True
 
 [/Script/Engine.Engine]
 !NetDriverDefinitions=ClearArray

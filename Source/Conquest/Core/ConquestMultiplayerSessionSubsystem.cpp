@@ -18,6 +18,14 @@ namespace
 		return OnlineSubsystem ? OnlineSubsystem->GetSessionInterface() : nullptr;
 	}
 
+	bool ShouldUseLanSessions(bool bRequestedUseLan)
+	{
+		IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+		return bRequestedUseLan
+			|| !OnlineSubsystem
+			|| OnlineSubsystem->GetSubsystemName() == FName(TEXT("NULL"));
+	}
+
 	TSharedPtr<const FUniqueNetId> GetLocalUserId()
 	{
 		IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
@@ -71,6 +79,7 @@ void UConquestMultiplayerSessionSubsystem::HostSession(int32 PublicConnections, 
 {
 	IOnlineSessionPtr SessionInterface = GetSessionInterface();
 	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+	bUseLan = ShouldUseLanSessions(bUseLan);
 	if (!SessionInterface.IsValid())
 	{
 		OnCreateSessionComplete.Broadcast(false, ConquestSessionName);
@@ -138,7 +147,7 @@ void UConquestMultiplayerSessionSubsystem::HostSession(int32 PublicConnections, 
 void UConquestMultiplayerSessionSubsystem::FindSessions(int32 MaxResults, bool bUseLan)
 {
 	LastRequestedMaxSearchResults = FMath::Max(1, MaxResults);
-	bLastSearchWasLan = bUseLan;
+	bLastSearchWasLan = ShouldUseLanSessions(bUseLan);
 	bRetryingWithoutConquestFilter = false;
 
 	StartFindSessions(LastRequestedMaxSearchResults, bLastSearchWasLan, true);
@@ -152,6 +161,7 @@ void UConquestMultiplayerSessionSubsystem::StartFindSessions(
 {
 	IOnlineSessionPtr SessionInterface = GetSessionInterface();
 	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+	bUseLan = ShouldUseLanSessions(bUseLan);
 	if (!SessionInterface.IsValid())
 	{
 		OnFindSessionsComplete.Broadcast(0);

@@ -205,14 +205,88 @@ void AConquestGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 void AConquestGameState::BroadcastStateChanged()
 {
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::All);
+}
+
+void AConquestGameState::BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags VisualDirtyFlags)
+{
+	MarkVisualsDirty(VisualDirtyFlags);
+
+	if (StateChangeBatchDepth > 0)
+	{
+		bStateChangeBatchPending = true;
+		return;
+	}
+
+	FlushStateChanged(VisualDirtyFlags);
+}
+
+void AConquestGameState::BroadcastStateChangedWithoutReplication()
+{
+	OnConquestStateChanged.Broadcast();
+}
+
+void AConquestGameState::BeginStateChangeBatch()
+{
+	++StateChangeBatchDepth;
+}
+
+void AConquestGameState::EndStateChangeBatch(EConquestStateVisualDirtyFlags FallbackVisualDirtyFlags)
+{
+	if (StateChangeBatchDepth <= 0)
+	{
+		return;
+	}
+
+	--StateChangeBatchDepth;
+	if (StateChangeBatchDepth <= 0 && bStateChangeBatchPending)
+	{
+		FlushStateChanged(FallbackVisualDirtyFlags);
+	}
+}
+
+void AConquestGameState::MarkVisualsDirty(EConquestStateVisualDirtyFlags VisualDirtyFlags)
+{
+	bHasPendingVisualDirtyFlags = true;
+	PendingVisualDirtyFlags |= VisualDirtyFlags;
+}
+
+void AConquestGameState::FlushStateChanged(EConquestStateVisualDirtyFlags FallbackVisualDirtyFlags)
+{
+	const EConquestStateVisualDirtyFlags VisualDirtyFlags = bHasPendingVisualDirtyFlags
+		? PendingVisualDirtyFlags
+		: FallbackVisualDirtyFlags;
+
+	PendingVisualDirtyFlags = EConquestStateVisualDirtyFlags::None;
+	bHasPendingVisualDirtyFlags = false;
+	bStateChangeBatchPending = false;
+
 	if (HasAuthority())
 	{
+		VisualDirtyFlagsForNextPush = VisualDirtyFlags;
 		PushReplicatedState();
-		RebuildCityVisualsFromReplicatedState();
-		RebuildUnitVisualsFromReplicatedState();
+		RebuildDirtyVisuals(VisualDirtyFlags);
 	}
 
 	OnConquestStateChanged.Broadcast();
+}
+
+void AConquestGameState::RebuildDirtyVisuals(EConquestStateVisualDirtyFlags VisualDirtyFlags)
+{
+	if (EnumHasAnyFlags(VisualDirtyFlags, EConquestStateVisualDirtyFlags::TileImprovements))
+	{
+		ApplyReplicatedTileImprovements();
+	}
+
+	if (EnumHasAnyFlags(VisualDirtyFlags, EConquestStateVisualDirtyFlags::Cities))
+	{
+		RebuildCityVisualsFromReplicatedState();
+	}
+
+	if (EnumHasAnyFlags(VisualDirtyFlags, EConquestStateVisualDirtyFlags::Units))
+	{
+		RebuildUnitVisualsFromReplicatedState();
+	}
 }
 
 void AConquestGameState::PushReplicatedState()
@@ -228,6 +302,7 @@ void AConquestGameState::PushReplicatedState()
 	ReplicatedConquestState.PlayerStartRegions = PlayerStartRegions;
 	ReplicatedConquestState.bGameEnded = bGameEnded;
 	ReplicatedConquestState.WinningPlayerId = WinningPlayerId;
+	ReplicatedConquestState.VisualDirtyMask = static_cast<uint8>(VisualDirtyFlagsForNextPush);
 	BuildReplicatedTileImprovements(*this, ReplicatedConquestState.TileImprovements);
 
 	if (TurnManager)
@@ -241,6 +316,7 @@ void AConquestGameState::PushReplicatedState()
 		ReplicatedConquestState.Cities = CityManager->Cities;
 	}
 
+	VisualDirtyFlagsForNextPush = EConquestStateVisualDirtyFlags::All;
 	ForceNetUpdate();
 }
 
@@ -279,9 +355,11 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 		CityManager->Cities = ReplicatedConquestState.Cities;
 	}
 
-	ApplyReplicatedTileImprovements();
-	RebuildCityVisualsFromReplicatedState();
-	RebuildUnitVisualsFromReplicatedState();
+	const EConquestStateVisualDirtyFlags VisualDirtyFlags = bHasAppliedReplicatedConquestState
+		? static_cast<EConquestStateVisualDirtyFlags>(ReplicatedConquestState.VisualDirtyMask)
+		: EConquestStateVisualDirtyFlags::All;
+	bHasAppliedReplicatedConquestState = true;
+	RebuildDirtyVisuals(VisualDirtyFlags);
 
 	OnConquestStateChanged.Broadcast();
 }
@@ -408,7 +486,7 @@ void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings
 		PlayerCivilisations.Add(HumanPlayer.PlayerId, HumanCivilisation);
 	}
 
-	BroadcastStateChanged();
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 void AConquestGameState::SetAvailableCivilisations(const TArray<UConquestCivilisationData*>& InAvailableCivilisations)
@@ -427,7 +505,7 @@ void AConquestGameState::SetAvailableCivilisations(const TArray<UConquestCivilis
 		}
 	}
 
-	BroadcastStateChanged();
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 void AConquestGameState::SetLobbyPlayerSlots(const TArray<FConquestLobbyPlayerSlot>& InLobbyPlayerSlots)
@@ -439,7 +517,7 @@ void AConquestGameState::SetLobbyPlayerSlots(const TArray<FConquestLobbyPlayerSl
 
 	LobbyPlayerSlots = InLobbyPlayerSlots;
 	RebuildPlayerCivilisationsFromLobby(*this);
-	BroadcastStateChanged();
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 bool AConquestGameState::SetLobbySlotCivilisationForPlayer(
@@ -474,7 +552,7 @@ bool AConquestGameState::SetLobbySlotCivilisationForPlayer(
 	Slot.bIsReady = false;
 	ReplicatedConquestState.ReadyPlayerIds.Remove(Slot.PlayerId);
 	RebuildPlayerCivilisationsFromLobby(*this);
-	BroadcastStateChanged();
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	return true;
 }
 
@@ -507,7 +585,7 @@ void AConquestGameState::SetLobbyPlayerReady(int32 PlayerId, bool bReady)
 		ReplicatedConquestState.ReadyPlayerIds.Remove(PlayerId);
 	}
 
-	BroadcastStateChanged();
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 int32 AConquestGameState::GetReadyHumanPlayerCount() const
@@ -984,11 +1062,14 @@ void AConquestGameState::MulticastNotifyUnitMoved_Implementation(
 	int32 UnitInstanceId,
 	int32 PlayerId,
 	FIntPoint FromCoord,
-	FIntPoint ToCoord
+	FIntPoint ToCoord,
+	int32 CurrentMovementPoints
 )
 {
 	if (!HasAuthority())
 	{
+		ApplyReplicatedUnitMoveToLocalState(UnitInstanceId, PlayerId, ToCoord, CurrentMovementPoints);
+
 		if (TObjectPtr<AConquestUnitActor>* UnitActorPtr = UnitActorsByInstanceId.Find(UnitInstanceId))
 		{
 			if (AConquestUnitActor* UnitActor = UnitActorPtr->Get())
@@ -999,6 +1080,37 @@ void AConquestGameState::MulticastNotifyUnitMoved_Implementation(
 	}
 
 	OnConquestUnitMoved.Broadcast(UnitInstanceId, PlayerId, FromCoord, ToCoord);
+	BroadcastStateChangedWithoutReplication();
+}
+
+void AConquestGameState::ApplyReplicatedUnitMoveToLocalState(
+	int32 UnitInstanceId,
+	int32 PlayerId,
+	FIntPoint ToCoord,
+	int32 CurrentMovementPoints
+)
+{
+	for (FConquestPlayerEmpireState& PlayerEmpire : PlayerEmpires)
+	{
+		if (PlayerEmpire.PlayerId != PlayerId)
+		{
+			continue;
+		}
+
+		for (FConquestUnitState& UnitState : PlayerEmpire.Units)
+		{
+			if (UnitState.UnitInstanceId == UnitInstanceId)
+			{
+				UnitState.TileCoord = ToCoord;
+				UnitState.CurrentMovementPoints = CurrentMovementPoints;
+				if (PlayerId == GetLocalPlayerId())
+				{
+					HumanPlayer = PlayerEmpire;
+				}
+				return;
+			}
+		}
+	}
 }
 
 void AConquestGameState::MulticastNotifyUnitAction_Implementation(

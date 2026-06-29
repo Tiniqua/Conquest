@@ -121,6 +121,6 @@ bool UConquestPhilosophyManager::AdoptPhilosophyById(int32 PlayerId, FName Philo
 	}
 
 	OnPhilosophiesChanged.Broadcast();
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	return true;
 }

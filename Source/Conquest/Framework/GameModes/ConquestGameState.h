@@ -26,6 +26,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnConquestStateChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnConquestUnitMoved, int32, UnitInstanceId, int32, PlayerId, FIntPoint, FromCoord, FIntPoint, ToCoord);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnConquestUnitAction, int32, UnitInstanceId, int32, PlayerId, FName, ActionId);
 
+enum class EConquestStateVisualDirtyFlags : uint8
+{
+	None = 0,
+	Cities = 1,
+	Units = 2,
+	TileImprovements = 4,
+	All = 7
+};
+
+ENUM_CLASS_FLAGS(EConquestStateVisualDirtyFlags);
+
 UENUM(BlueprintType)
 enum class EConquestEndTurnBlockType : uint8
 {
@@ -124,6 +135,9 @@ struct FConquestReplicatedGameState
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 WinningPlayerId = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 VisualDirtyMask = 0x07;
 };
 
 UCLASS()
@@ -239,6 +253,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void BroadcastStateChanged();
 
+	void BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags VisualDirtyFlags);
+	void BroadcastStateChangedWithoutReplication();
+	void BeginStateChangeBatch();
+	void EndStateChangeBatch(EConquestStateVisualDirtyFlags FallbackVisualDirtyFlags = EConquestStateVisualDirtyFlags::All);
+	void MarkVisualsDirty(EConquestStateVisualDirtyFlags VisualDirtyFlags);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|Replication")
 	void PushReplicatedState();
 
@@ -302,7 +322,7 @@ public:
 	bool CanPlayerEndTurnFromState(int32 PlayerId, UPARAM(ref) FText& OutBlockReason) const;
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastNotifyUnitMoved(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord);
+	void MulticastNotifyUnitMoved(int32 UnitInstanceId, int32 PlayerId, FIntPoint FromCoord, FIntPoint ToCoord, int32 CurrentMovementPoints);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyUnitAction(int32 UnitInstanceId, int32 PlayerId, FName ActionId);
@@ -322,4 +342,16 @@ public:
 
 	FHexGridModel* GetHexGridModelMutable();
 	const FHexGridModel* GetHexGridModel() const;
+
+private:
+	int32 StateChangeBatchDepth = 0;
+	bool bStateChangeBatchPending = false;
+	bool bHasPendingVisualDirtyFlags = false;
+	bool bHasAppliedReplicatedConquestState = false;
+	EConquestStateVisualDirtyFlags PendingVisualDirtyFlags = EConquestStateVisualDirtyFlags::None;
+	EConquestStateVisualDirtyFlags VisualDirtyFlagsForNextPush = EConquestStateVisualDirtyFlags::All;
+
+	void FlushStateChanged(EConquestStateVisualDirtyFlags FallbackVisualDirtyFlags);
+	void RebuildDirtyVisuals(EConquestStateVisualDirtyFlags VisualDirtyFlags);
+	void ApplyReplicatedUnitMoveToLocalState(int32 UnitInstanceId, int32 PlayerId, FIntPoint ToCoord, int32 CurrentMovementPoints);
 };

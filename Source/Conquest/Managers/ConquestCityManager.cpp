@@ -129,7 +129,7 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	OnCityChanged.Broadcast(NewCity.CityId);
 	RecalculateEmpireYields(PlayerId);
 	UpdateOwnedTileVisuals(PlayerId);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 
 	return true;
 }
@@ -749,7 +749,7 @@ bool UConquestCityManager::DamageCity(int32 CityId, int32 DamageAmount)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	}
 
 	return true;
@@ -787,7 +787,7 @@ bool UConquestCityManager::DamageOwnedTile(const FIntPoint& Coord, int32 DamageA
 	UpdateOwnedTileHealthBar(*OwningCity, TileCombatState);
 	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
 	OnCityChanged.Broadcast(OwningCity->CityId);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	return true;
 }
 
@@ -861,7 +861,7 @@ bool UConquestCityManager::DestroyOwnedTile(const FIntPoint& Coord, int32 Attack
 	UpdateCityWorldLabel(*OwningCity);
 	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
 	OnCityChanged.Broadcast(OwningCity->CityId);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::TileImprovements);
 	return true;
 }
 
@@ -953,7 +953,7 @@ bool UConquestCityManager::CaptureCity(int32 CityId, int32 NewOwnerPlayerId)
 	UpdateOwnedTileVisuals(NewOwnerPlayerId);
 	UpdateCityWorldLabel(*City);
 	OnCityChanged.Broadcast(City->CityId);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	return true;
 }
 
@@ -1429,7 +1429,7 @@ int32 UConquestCityManager::CheatSpawnUnitForPlayerAtTile(int32 PlayerId, FName 
 
 	Player.Units.Add(NewUnit);
 	SpawnUnitActorForState(NewUnit);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 
 	return NewUnit.UnitInstanceId;
 }
@@ -1507,6 +1507,8 @@ void UConquestCityManager::ProcessUnitsAtStartOfTurn(int32 PlayerId)
 			}
 		}
 	}
+
+	GameStateRef->MarkVisualsDirty(EConquestStateVisualDirtyFlags::Units);
 }
 
 void UConquestCityManager::SpawnUnitActorForState(const FConquestUnitState& UnitState)
@@ -1747,7 +1749,7 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 	{
 		RecalculateEmpireYields(PlayerId);
 		AccumulateStrategicResourceIncome(PlayerId);
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	}
 }
 
@@ -1936,7 +1938,7 @@ bool UConquestCityManager::ClaimExpansionTileForCity(int32 CityId, const FIntPoi
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	}
 
 	return true;
@@ -2050,7 +2052,7 @@ bool UConquestCityManager::PurchaseTileImprovementForPlayer(int32 PlayerId, cons
 
 	RecalculateEmpireYields(PlayerId);
 	RecalculateStrategicResourceEconomy(PlayerId);
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::TileImprovements);
 
 	return true;
 }
@@ -2071,7 +2073,7 @@ bool UConquestCityManager::RefreshCityYields(int32 CityId)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
 	}
 
 	return true;
@@ -2184,7 +2186,7 @@ bool UConquestCityManager::SetCityProductionBuildingById(int32 CityId, FName Bui
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;
@@ -2243,7 +2245,7 @@ bool UConquestCityManager::SetCityProductionUnitById(int32 CityId, FName UnitId)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;
@@ -2275,7 +2277,7 @@ bool UConquestCityManager::SetCityProductionProjectById(int32 CityId, FName Proj
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;

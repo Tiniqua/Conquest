@@ -47,12 +47,17 @@ void UConquestTurnManager::SetPhase(EConquestTurnPhase NewPhase)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChanged();
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 }
 
 void UConquestTurnManager::StartTurnProcessing()
 {
+	if (GameStateRef)
+	{
+		GameStateRef->BeginStateChangeBatch();
+	}
+
 	SetPhase(EConquestTurnPhase::StartTurnProcessing);
 
 	if (!GameStateRef)
@@ -86,6 +91,11 @@ void UConquestTurnManager::StartTurnProcessing()
 	}
 
 	EnterPlayerActions();
+
+	if (GameStateRef)
+	{
+		GameStateRef->EndStateChangeBatch(EConquestStateVisualDirtyFlags::All);
+	}
 }
 
 void UConquestTurnManager::EnterPlayerActions()
@@ -95,10 +105,20 @@ void UConquestTurnManager::EnterPlayerActions()
 
 void UConquestTurnManager::EndTurnProcessing()
 {
+	if (GameStateRef)
+	{
+		GameStateRef->BeginStateChangeBatch();
+	}
+
 	SetPhase(EConquestTurnPhase::EndTurnProcessing);
 
 	++CurrentTurn;
 	OnTurnChanged.Broadcast(CurrentTurn);
 
 	StartTurnProcessing();
+
+	if (GameStateRef)
+	{
+		GameStateRef->EndStateChangeBatch(EConquestStateVisualDirtyFlags::All);
+	}
 }

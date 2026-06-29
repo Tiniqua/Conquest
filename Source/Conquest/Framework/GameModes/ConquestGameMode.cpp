@@ -240,7 +240,7 @@ void AConquestGameMode::Logout(AController* Exiting)
 					break;
 				}
 			}
-			ConquestGS->BroadcastStateChanged();
+			ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 		}
 	}
 
@@ -324,7 +324,7 @@ void AConquestGameMode::AssignPlayerToLobbySlot(int32 PlayerId, const FString& P
 		Slot.Civilisation = nullptr;
 	}
 
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 TArray<UConquestCivilisationData*> AConquestGameMode::GetAvailableCivilisations() const
@@ -460,18 +460,16 @@ bool AConquestGameMode::EndTurnForPlayer(int32 PlayerId)
 	}
 
 	ConquestGS->ReplicatedConquestState.ReadyPlayerIds = ReadyPlayerIds;
-	ConquestGS->PushReplicatedState();
 
 	if (!AreAllHumanPlayersReady(*ConquestGS))
 	{
-		ConquestGS->BroadcastStateChanged();
+		ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 		return true;
 	}
 
 	ReadyPlayerIds.Reset();
 	ConquestGS->ReplicatedConquestState.ReadyPlayerIds.Reset();
 	ConquestGS->TurnManager->RequestEndTurn();
-	ConquestGS->PushReplicatedState();
 	return true;
 }
 
@@ -667,8 +665,7 @@ bool AConquestGameMode::MoveUnitForPlayer(int32 PlayerId, int32 UnitInstanceId, 
 		}
 	}
 
-	ConquestGS->MulticastNotifyUnitMoved(Unit->UnitInstanceId, PlayerId, FromCoord, TargetCoord);
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->MulticastNotifyUnitMoved(Unit->UnitInstanceId, PlayerId, FromCoord, TargetCoord, Unit->CurrentMovementPoints);
 	return true;
 }
 
@@ -766,7 +763,7 @@ bool AConquestGameMode::ApplyUnitActionForPlayer(int32 PlayerId, int32 UnitInsta
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(UnitInstanceId, PlayerId, ActionId);
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -838,7 +835,7 @@ bool AConquestGameMode::ApplyUnitAugmentForPlayer(int32 PlayerId, int32 UnitInst
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(UnitInstanceId, PlayerId, FName(TEXT("Augment")));
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -955,12 +952,18 @@ bool AConquestGameMode::AttackUnitForPlayer(
 				}
 			}
 
-			ConquestGS->MulticastNotifyUnitMoved(Attacker->UnitInstanceId, PlayerId, AttackerFromCoord, DefenderCoord);
+			ConquestGS->MulticastNotifyUnitMoved(
+				Attacker->UnitInstanceId,
+				PlayerId,
+				AttackerFromCoord,
+				DefenderCoord,
+				Attacker->CurrentMovementPoints
+			);
 		}
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("Attack")));
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -1064,7 +1067,7 @@ bool AConquestGameMode::AttackCityForPlayer(
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackCity")));
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -1190,12 +1193,18 @@ bool AConquestGameMode::AttackTileForPlayer(
 				}
 			}
 
-			ConquestGS->MulticastNotifyUnitMoved(Attacker->UnitInstanceId, PlayerId, AttackerFromCoord, TargetCoord);
+			ConquestGS->MulticastNotifyUnitMoved(
+				Attacker->UnitInstanceId,
+				PlayerId,
+				AttackerFromCoord,
+				TargetCoord,
+				Attacker->CurrentMovementPoints
+			);
 		}
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackTile")));
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -1818,7 +1827,6 @@ bool AConquestGameMode::CheckCityOwnershipVictory(AConquestGameState& ConquestGS
 
 	ConquestGS.bGameEnded = true;
 	ConquestGS.WinningPlayerId = WinningPlayerId;
-	ConquestGS.PushReplicatedState();
 	ConquestGS.BroadcastStateChanged();
 	return true;
 }
@@ -1861,7 +1869,6 @@ void AConquestGameMode::ResetGameToMainMenu()
 	ConquestGS->bGameEnded = false;
 	ConquestGS->WinningPlayerId = INDEX_NONE;
 	ConquestGS->ReplicatedConquestState = FConquestReplicatedGameState();
-	ConquestGS->PushReplicatedState();
 	ConquestGS->BroadcastStateChanged();
 	ConquestGS->MulticastReturnToMainMenu();
 }

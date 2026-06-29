@@ -20,7 +20,8 @@
 
 AModularHexGridActor::AModularHexGridActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	bReplicates = true;
 	bAlwaysRelevant = true;
 
@@ -149,6 +150,12 @@ AModularHexGridActor::AModularHexGridActor()
 	
 	EnsureDefaultGenerationRules();
 	ConfigureMeshComponents();
+}
+
+void AModularHexGridActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	FlushDirtyVisualChunks(false);
 }
 
 UInstancedStaticMeshComponent* AModularHexGridActor::EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh, UMaterialInterface* OverrideMaterial)
@@ -2977,12 +2984,20 @@ void AModularHexGridActor::RebuildGrid()
 		ResourceMeshComponents
 	);
 
-	ImprovementMeshBuilder.BuildImprovementMeshes(
-		this,
-		SceneRoot,
-		GridModel,
-		ImprovementMeshComponents
-	);
+	if (bUseChunkedImprovementMeshes)
+	{
+		RebuildAllImprovementChunks();
+	}
+	else
+	{
+		ClearChunkedImprovementMeshes();
+		ImprovementMeshBuilder.BuildImprovementMeshes(
+			this,
+			SceneRoot,
+			GridModel,
+			ImprovementMeshComponents
+		);
+	}
 	
 
 	if (bGenerateFogOfWar)
@@ -3306,10 +3321,13 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 	const bool bChanged = GridModel.SetTileImprovement(Q, R, ImprovementId);
 	if (bChanged)
 	{
-		// Terrain shape does not change yet, but this makes material/yield-driven visual changes easy later.
-		MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
-		RebuildPlacedTileVisualMeshes();
-		UpdateTileYieldOverlayForTile(FIntPoint(Q, R));
+		MarkVisualChunkDirtyForTile(
+			FIntPoint(Q, R),
+			static_cast<int32>(EConquestGridVisualChunkLayer::Improvements) |
+				static_cast<int32>(EConquestGridVisualChunkLayer::ProceduralPlaceholders) |
+				static_cast<int32>(EConquestGridVisualChunkLayer::YieldOverlay),
+			false
+		);
 
 		if (const FHexTileData* Tile = GridModel.GetTile(Q, R))
 		{
@@ -3332,9 +3350,14 @@ bool AModularHexGridActor::SetTileImprovement(int32 Q, int32 R, FName Improvemen
 
 void AModularHexGridActor::RefreshPlacedTileVisualMeshes()
 {
-	MeshBuilder.BuildTerrainMesh(GridMesh, GridModel, TileResourceData);
-	RebuildPlacedTileVisualMeshes();
-	RebuildTileYieldOverlay();
+	MarkAllVisualChunksDirty(static_cast<int32>(EConquestGridVisualChunkLayer::Improvements) |
+		static_cast<int32>(EConquestGridVisualChunkLayer::ProceduralPlaceholders) |
+		static_cast<int32>(EConquestGridVisualChunkLayer::YieldOverlay));
+
+	if (bFlushVisualChunksImmediately)
+	{
+		FlushDirtyVisualChunks(true);
+	}
 }
 
 void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
@@ -3348,12 +3371,20 @@ void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
 		FeatureMeshComponents
 	);
 
-	ImprovementMeshBuilder.BuildImprovementMeshes(
-		this,
-		SceneRoot,
-		GridModel,
-		ImprovementMeshComponents
-	);
+	if (bUseChunkedImprovementMeshes)
+	{
+		RebuildAllImprovementChunks();
+	}
+	else
+	{
+		ClearChunkedImprovementMeshes();
+		ImprovementMeshBuilder.BuildImprovementMeshes(
+			this,
+			SceneRoot,
+			GridModel,
+			ImprovementMeshComponents
+		);
+	}
 
 	if (const AConquestGameState* ConquestGameState = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
@@ -3368,6 +3399,399 @@ void AModularHexGridActor::RebuildPlacedTileVisualMeshes()
 	}
 
 	RebuildProceduralPlaceholderVisuals(TArray<FCityState>(), nullptr);
+}
+
+void AModularHexGridActor::MarkVisualChunkDirtyForTile(
+	const FIntPoint& Coord,
+	int32 DirtyLayerMask,
+	bool bIncludeNeighborChunks
+)
+{
+	if (DirtyLayerMask == 0 || !GridModel.IsValidTile(Coord.X, Coord.Y))
+	{
+		return;
+	}
+
+	auto MarkChunk = [this, DirtyLayerMask](const FIntPoint& ChunkCoord)
+	{
+		const int32 ChunkKey = GetVisualChunkKey(ChunkCoord);
+		int32& ExistingMask = DirtyVisualChunkLayerMasks.FindOrAdd(ChunkKey);
+		ExistingMask |= DirtyLayerMask;
+	};
+
+	MarkChunk(GetVisualChunkCoordForTile(Coord));
+
+	if (bIncludeNeighborChunks)
+	{
+		for (int32 Direction = 0; Direction < 6; ++Direction)
+		{
+			int32 NeighborQ = INDEX_NONE;
+			int32 NeighborR = INDEX_NONE;
+			if (GridModel.GetNeighbourCoord(Coord.X, Coord.Y, Direction, NeighborQ, NeighborR))
+			{
+				MarkChunk(GetVisualChunkCoordForTile(FIntPoint(NeighborQ, NeighborR)));
+			}
+		}
+	}
+
+	if (bFlushVisualChunksImmediately)
+	{
+		FlushDirtyVisualChunks(true);
+	}
+	else
+	{
+		SetVisualChunkTickEnabledFromDirtyState();
+	}
+}
+
+void AModularHexGridActor::MarkAllVisualChunksDirty(int32 DirtyLayerMask)
+{
+	if (DirtyLayerMask == 0)
+	{
+		return;
+	}
+
+	const int32 SafeChunkWidth = FMath::Max(1, VisualChunkWidth);
+	const int32 SafeChunkHeight = FMath::Max(1, VisualChunkHeight);
+	const int32 ChunkColumns = FMath::DivideAndRoundUp(GridModel.GetGridWidth(), SafeChunkWidth);
+	const int32 ChunkRows = FMath::DivideAndRoundUp(GridModel.GetGridHeight(), SafeChunkHeight);
+
+	for (int32 ChunkY = 0; ChunkY < ChunkRows; ++ChunkY)
+	{
+		for (int32 ChunkX = 0; ChunkX < ChunkColumns; ++ChunkX)
+		{
+			const int32 ChunkKey = GetVisualChunkKey(FIntPoint(ChunkX, ChunkY));
+			int32& ExistingMask = DirtyVisualChunkLayerMasks.FindOrAdd(ChunkKey);
+			ExistingMask |= DirtyLayerMask;
+		}
+	}
+
+	if (bFlushVisualChunksImmediately)
+	{
+		FlushDirtyVisualChunks(true);
+	}
+	else
+	{
+		SetVisualChunkTickEnabledFromDirtyState();
+	}
+}
+
+void AModularHexGridActor::FlushDirtyVisualChunks(bool bFlushAll)
+{
+	if (DirtyVisualChunkLayerMasks.Num() <= 0)
+	{
+		SetVisualChunkTickEnabledFromDirtyState();
+		return;
+	}
+
+	int32 GlobalLayerMask =
+		static_cast<int32>(EConquestGridVisualChunkLayer::ProceduralPlaceholders) |
+		static_cast<int32>(EConquestGridVisualChunkLayer::Borders) |
+		static_cast<int32>(EConquestGridVisualChunkLayer::YieldOverlay);
+	if (!bUseChunkedImprovementMeshes)
+	{
+		GlobalLayerMask |= static_cast<int32>(EConquestGridVisualChunkLayer::Improvements);
+	}
+
+	int32 CoalescedGlobalLayerMask = 0;
+	for (const TPair<int32, int32>& Pair : DirtyVisualChunkLayerMasks)
+	{
+		CoalescedGlobalLayerMask |= Pair.Value & GlobalLayerMask;
+	}
+
+	if (CoalescedGlobalLayerMask != 0)
+	{
+		RebuildDirtyVisualChunk(
+			INDEX_NONE,
+			static_cast<EConquestGridVisualChunkLayer>(CoalescedGlobalLayerMask)
+		);
+
+		for (TPair<int32, int32>& Pair : DirtyVisualChunkLayerMasks)
+		{
+			Pair.Value &= ~GlobalLayerMask;
+		}
+	}
+
+	for (auto It = DirtyVisualChunkLayerMasks.CreateIterator(); It; ++It)
+	{
+		if (It.Value() == 0)
+		{
+			It.RemoveCurrent();
+		}
+	}
+
+	const int32 MaxChunksToFlush = bFlushAll
+		? DirtyVisualChunkLayerMasks.Num()
+		: FMath::Max(1, MaxVisualChunksRebuiltPerTick);
+
+	TArray<int32> ChunkKeys;
+	DirtyVisualChunkLayerMasks.GetKeys(ChunkKeys);
+	ChunkKeys.Sort();
+
+	int32 RebuiltChunks = 0;
+	for (const int32 ChunkKey : ChunkKeys)
+	{
+		const int32 DirtyLayerMask = DirtyVisualChunkLayerMasks.FindRef(ChunkKey);
+		DirtyVisualChunkLayerMasks.Remove(ChunkKey);
+		if (DirtyLayerMask == 0)
+		{
+			continue;
+		}
+
+		RebuildDirtyVisualChunk(
+			ChunkKey,
+			static_cast<EConquestGridVisualChunkLayer>(DirtyLayerMask)
+		);
+
+		++RebuiltChunks;
+		if (RebuiltChunks >= MaxChunksToFlush)
+		{
+			break;
+		}
+	}
+
+	SetVisualChunkTickEnabledFromDirtyState();
+}
+
+void AModularHexGridActor::RebuildDirtyVisualChunk(int32 ChunkKey, EConquestGridVisualChunkLayer DirtyLayers)
+{
+	if (EnumHasAnyFlags(DirtyLayers, EConquestGridVisualChunkLayer::Improvements))
+	{
+		if (bUseChunkedImprovementMeshes)
+		{
+			RebuildImprovementChunk(ChunkKey);
+		}
+		else
+		{
+			ClearChunkedImprovementMeshes();
+			ImprovementMeshBuilder.BuildImprovementMeshes(
+				this,
+				SceneRoot,
+				GridModel,
+				ImprovementMeshComponents
+			);
+		}
+	}
+
+	const bool bRebuiltCityVisualsForBorders = EnumHasAnyFlags(DirtyLayers, EConquestGridVisualChunkLayer::Borders);
+	if (bRebuiltCityVisualsForBorders)
+	{
+		if (AConquestGameState* ConquestGameState = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+		{
+			ConquestGameState->RebuildCityVisualsFromReplicatedState();
+		}
+	}
+
+	// These layers still use full-map meshes today. They are queued here so callers can
+	// be chunk-aware now, while the expensive legacy rebuild remains isolated.
+	if (
+		!bRebuiltCityVisualsForBorders &&
+		EnumHasAnyFlags(DirtyLayers, EConquestGridVisualChunkLayer::ProceduralPlaceholders)
+	)
+	{
+		if (const AConquestGameState* ConquestGameState = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+		{
+			if (ConquestGameState->CityManager)
+			{
+				RebuildProceduralPlaceholderVisuals(ConquestGameState->CityManager->Cities, ConquestGameState->BuildingTable);
+			}
+		}
+	}
+
+	if (EnumHasAnyFlags(DirtyLayers, EConquestGridVisualChunkLayer::YieldOverlay))
+	{
+		RebuildTileYieldOverlay();
+	}
+}
+
+void AModularHexGridActor::RebuildImprovementChunk(int32 ChunkKey)
+{
+	if (!bUseChunkedImprovementMeshes)
+	{
+		return;
+	}
+
+	ImprovementMeshBuilder.ClearImprovementMeshes(ImprovementMeshComponents);
+
+	if (FConquestChunkedInstancedMeshComponents* ExistingComponents = ChunkedImprovementMeshComponentsByChunk.Find(ChunkKey))
+	{
+		for (TObjectPtr<UInstancedStaticMeshComponent>& MeshComponent : ExistingComponents->Components)
+		{
+			if (MeshComponent)
+			{
+				MeshComponent->ClearInstances();
+				MeshComponent->DestroyComponent();
+			}
+		}
+
+		ExistingComponents->Components.Reset();
+	}
+
+	if (!SceneRoot)
+	{
+		return;
+	}
+
+	TMap<uint32, UInstancedStaticMeshComponent*> MeshComponentsByVisual;
+
+	FConquestChunkedInstancedMeshComponents& ChunkComponents = ChunkedImprovementMeshComponentsByChunk.FindOrAdd(ChunkKey);
+	const FIntPoint ChunkCoord = GetVisualChunkCoordFromKey(ChunkKey);
+	int32 MinQ = 0;
+	int32 MaxQ = INDEX_NONE;
+	int32 MinR = 0;
+	int32 MaxR = INDEX_NONE;
+	GetTileRangeForVisualChunk(ChunkCoord, MinQ, MaxQ, MinR, MaxR);
+
+	for (int32 R = MinR; R <= MaxR; ++R)
+	{
+		for (int32 Q = MinQ; Q <= MaxQ; ++Q)
+		{
+			const FHexTileData* Tile = GridModel.GetTile(Q, R);
+			if (!Tile || Tile->ImprovementId.IsNone())
+			{
+				continue;
+			}
+
+			const FHexImprovementDefinition* ImprovementDefinition = GridModel.FindImprovementDefinition(Tile->ImprovementId);
+			if (!ImprovementDefinition || !ImprovementDefinition->WorldMesh)
+			{
+				continue;
+			}
+
+			UMaterialInterface* EffectiveMaterial = ImprovementDefinition->WorldMeshMaterialOverride
+				? ImprovementDefinition->WorldMeshMaterialOverride.Get()
+				: ImprovementDefinition->IconMaterial.Get();
+
+			const uint32 ComponentKey = HashCombine(
+				PointerHash(ImprovementDefinition->WorldMesh.Get()),
+				PointerHash(EffectiveMaterial)
+			);
+
+			UInstancedStaticMeshComponent* MeshComponent = nullptr;
+			if (UInstancedStaticMeshComponent** ExistingComponent = MeshComponentsByVisual.Find(ComponentKey))
+			{
+				MeshComponent = *ExistingComponent;
+			}
+			else
+			{
+				const FName ComponentName = MakeUniqueObjectName(
+					this,
+					UInstancedStaticMeshComponent::StaticClass(),
+					FName(*FString::Printf(TEXT("ImprovementChunk_%d_%s"), ChunkKey, *ImprovementDefinition->WorldMesh->GetName()))
+				);
+
+				MeshComponent = NewObject<UInstancedStaticMeshComponent>(this, ComponentName);
+				if (!MeshComponent)
+				{
+					continue;
+				}
+
+				MeshComponent->SetStaticMesh(ImprovementDefinition->WorldMesh);
+				if (EffectiveMaterial)
+				{
+					const int32 MaterialSlotCount = FMath::Max(1, ImprovementDefinition->WorldMesh->GetStaticMaterials().Num());
+					for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotCount; ++MaterialIndex)
+					{
+						MeshComponent->SetMaterial(MaterialIndex, EffectiveMaterial);
+					}
+				}
+
+				MeshComponent->SetupAttachment(SceneRoot);
+				MeshComponent->RegisterComponent();
+				MeshComponent->SetMobility(EComponentMobility::Static);
+				MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+				MeshComponent->SetGenerateOverlapEvents(false);
+				MeshComponent->bCastDynamicShadow = true;
+				MeshComponent->bCastStaticShadow = true;
+				MeshComponent->CastShadow = true;
+				AddInstanceComponent(MeshComponent);
+
+				MeshComponentsByVisual.Add(ComponentKey, MeshComponent);
+				ChunkComponents.Components.Add(MeshComponent);
+			}
+
+			const FVector FlatCenter = GridModel.GetHexCenter(Q, R);
+			const FVector SurfaceLocation(FlatCenter.X, FlatCenter.Y, Tile->Height);
+			MeshComponent->AddInstance(FTransform(
+				ImprovementDefinition->MeshRotation,
+				SurfaceLocation + ImprovementDefinition->MeshOffset,
+				ImprovementDefinition->MeshScale
+			));
+		}
+	}
+
+	for (TObjectPtr<UInstancedStaticMeshComponent>& MeshComponent : ChunkComponents.Components)
+	{
+		if (MeshComponent)
+		{
+			MeshComponent->MarkRenderStateDirty();
+		}
+	}
+}
+
+void AModularHexGridActor::RebuildAllImprovementChunks()
+{
+	ClearChunkedImprovementMeshes();
+	MarkAllVisualChunksDirty(static_cast<int32>(EConquestGridVisualChunkLayer::Improvements));
+	FlushDirtyVisualChunks(true);
+}
+
+void AModularHexGridActor::ClearChunkedImprovementMeshes()
+{
+	for (TPair<int32, FConquestChunkedInstancedMeshComponents>& Pair : ChunkedImprovementMeshComponentsByChunk)
+	{
+		for (TObjectPtr<UInstancedStaticMeshComponent>& MeshComponent : Pair.Value.Components)
+		{
+			if (MeshComponent)
+			{
+				MeshComponent->ClearInstances();
+				MeshComponent->DestroyComponent();
+			}
+		}
+	}
+
+	ChunkedImprovementMeshComponentsByChunk.Reset();
+}
+
+FIntPoint AModularHexGridActor::GetVisualChunkCoordForTile(const FIntPoint& Coord) const
+{
+	const int32 SafeChunkWidth = FMath::Max(1, VisualChunkWidth);
+	const int32 SafeChunkHeight = FMath::Max(1, VisualChunkHeight);
+	return FIntPoint(
+		FMath::FloorToInt(static_cast<float>(FMath::Max(0, Coord.X)) / static_cast<float>(SafeChunkWidth)),
+		FMath::FloorToInt(static_cast<float>(FMath::Max(0, Coord.Y)) / static_cast<float>(SafeChunkHeight))
+	);
+}
+
+int32 AModularHexGridActor::GetVisualChunkKey(const FIntPoint& ChunkCoord) const
+{
+	return (FMath::Max(0, ChunkCoord.Y) * 100000) + FMath::Max(0, ChunkCoord.X);
+}
+
+FIntPoint AModularHexGridActor::GetVisualChunkCoordFromKey(int32 ChunkKey) const
+{
+	return FIntPoint(ChunkKey % 100000, ChunkKey / 100000);
+}
+
+void AModularHexGridActor::GetTileRangeForVisualChunk(
+	const FIntPoint& ChunkCoord,
+	int32& OutMinQ,
+	int32& OutMaxQ,
+	int32& OutMinR,
+	int32& OutMaxR
+) const
+{
+	const int32 SafeChunkWidth = FMath::Max(1, VisualChunkWidth);
+	const int32 SafeChunkHeight = FMath::Max(1, VisualChunkHeight);
+	OutMinQ = FMath::Clamp(ChunkCoord.X * SafeChunkWidth, 0, FMath::Max(0, GridModel.GetGridWidth() - 1));
+	OutMinR = FMath::Clamp(ChunkCoord.Y * SafeChunkHeight, 0, FMath::Max(0, GridModel.GetGridHeight() - 1));
+	OutMaxQ = FMath::Clamp(OutMinQ + SafeChunkWidth - 1, 0, FMath::Max(0, GridModel.GetGridWidth() - 1));
+	OutMaxR = FMath::Clamp(OutMinR + SafeChunkHeight - 1, 0, FMath::Max(0, GridModel.GetGridHeight() - 1));
+}
+
+void AModularHexGridActor::SetVisualChunkTickEnabledFromDirtyState()
+{
+	SetActorTickEnabled(DirtyVisualChunkLayerMasks.Num() > 0);
 }
 
 bool AModularHexGridActor::GetTileAtWorldLocation(

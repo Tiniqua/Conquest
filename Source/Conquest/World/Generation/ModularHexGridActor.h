@@ -35,6 +35,28 @@ struct FConquestBuildingRow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTileYieldLensTransitionFinished, EConquestYieldType, YieldType);
 
+UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
+enum class EConquestGridVisualChunkLayer : uint8
+{
+	None = 0 UMETA(Hidden),
+	Improvements = 1,
+	ProceduralPlaceholders = 2,
+	Borders = 4,
+	YieldOverlay = 8,
+	All = 15
+};
+
+ENUM_CLASS_FLAGS(EConquestGridVisualChunkLayer);
+
+USTRUCT()
+struct FConquestChunkedInstancedMeshComponents
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Components;
+};
+
 UCLASS()
 class CONQUEST_API AModularHexGridActor : public AActor
 {
@@ -42,6 +64,7 @@ class CONQUEST_API AModularHexGridActor : public AActor
 
 public:
 	AModularHexGridActor();
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UInstancedStaticMeshComponent* EnsureCityPlaceholderMeshComponent(UStaticMesh* OverrideMesh = nullptr, UMaterialInterface* OverrideMaterial = nullptr);
@@ -197,6 +220,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Yields")
 	void UpdateTileYieldOverlayForTile(const FIntPoint& Coord);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Visual Chunks")
+	void MarkVisualChunkDirtyForTile(
+		const FIntPoint& Coord,
+		UPARAM(meta = (Bitmask, BitmaskEnum = "/Script/Conquest.EConquestGridVisualChunkLayer")) int32 DirtyLayerMask,
+		bool bIncludeNeighborChunks = false
+	);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Visual Chunks")
+	void MarkAllVisualChunksDirty(
+		UPARAM(meta = (Bitmask, BitmaskEnum = "/Script/Conquest.EConquestGridVisualChunkLayer")) int32 DirtyLayerMask
+	);
+
+	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Visual Chunks")
+	void FlushDirtyVisualChunks(bool bFlushAll = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Hex Grid|Water")
 	void SetWaterLayerVisible(bool bVisible);
@@ -427,6 +465,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Procedural Visuals")
 	TObjectPtr<UMaterialInterface> DefaultProceduralPlaceholderMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Visual Chunks", meta = (ClampMin = "1"))
+	int32 VisualChunkWidth = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Visual Chunks", meta = (ClampMin = "1"))
+	int32 VisualChunkHeight = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Visual Chunks", meta = (ClampMin = "1"))
+	int32 MaxVisualChunksRebuiltPerTick = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Visual Chunks")
+	bool bUseChunkedImprovementMeshes = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hex Grid|Visual Chunks")
+	bool bFlushVisualChunksImmediately = false;
 	
 protected:
 	virtual void BeginPlay() override;
@@ -532,6 +585,9 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ImprovementMeshComponents;
 
 	UPROPERTY()
+	TMap<int32, FConquestChunkedInstancedMeshComponents> ChunkedImprovementMeshComponentsByChunk;
+
+	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInterface>> ProceduralPlaceholderSectionMaterials;
 
 	UPROPERTY()
@@ -544,10 +600,20 @@ private:
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> TileYieldTextMaterialInstances;
 
 	TMap<int32, TMap<FIntPoint, int32>> TileYieldSectionIndicesByLayer;
+	TMap<int32, int32> DirtyVisualChunkLayerMasks;
 
 	void EnsureDefaultGenerationRules();
 	void ConfigureMeshComponents();
 	void RebuildPlacedTileVisualMeshes();
+	void RebuildDirtyVisualChunk(int32 ChunkKey, EConquestGridVisualChunkLayer DirtyLayers);
+	void RebuildImprovementChunk(int32 ChunkKey);
+	void RebuildAllImprovementChunks();
+	void ClearChunkedImprovementMeshes();
+	FIntPoint GetVisualChunkCoordForTile(const FIntPoint& Coord) const;
+	int32 GetVisualChunkKey(const FIntPoint& ChunkCoord) const;
+	FIntPoint GetVisualChunkCoordFromKey(int32 ChunkKey) const;
+	void GetTileRangeForVisualChunk(const FIntPoint& ChunkCoord, int32& OutMinQ, int32& OutMaxQ, int32& OutMinR, int32& OutMaxR) const;
+	void SetVisualChunkTickEnabledFromDirtyState();
 	void ClearProceduralPlaceholderVisuals();
 	FConquestProceduralPlaceholderVisual ResolveProceduralPlaceholderPreset(
 		const FConquestProceduralPlaceholderVisual& Visual

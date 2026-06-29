@@ -578,7 +578,7 @@ void AConquestPlayerController::ServerRequestCheatImproveAllResources_Implementa
 	if (ImprovedCount > 0)
 	{
 		ConquestGS->ActiveGridActor->RefreshPlacedTileVisualMeshes();
-		ConquestGS->BroadcastStateChanged();
+		ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::TileImprovements | EConquestStateVisualDirtyFlags::Cities);
 	}
 }
 
@@ -612,7 +612,7 @@ void AConquestPlayerController::ServerRequestCheatGrantTech_Implementation(FName
 		ConquestGS->TechManager->OnResearchChanged.Broadcast();
 	}
 
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 void AConquestPlayerController::ServerRequestCheatGrantPhilosophy_Implementation(FName PhilosophyId)
@@ -637,7 +637,7 @@ void AConquestPlayerController::ServerRequestCheatGrantPhilosophy_Implementation
 		ConquestGS->PhilosophyManager->OnPhilosophiesChanged.Broadcast();
 	}
 
-	ConquestGS->BroadcastStateChanged();
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 void AConquestPlayerController::ServerRequestCheatSpawnUnit_Implementation(FName UnitId, FIntPoint TileCoord)

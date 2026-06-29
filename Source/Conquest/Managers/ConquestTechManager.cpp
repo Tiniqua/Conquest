@@ -31,7 +31,7 @@ bool UConquestTechManager::SetCurrentResearchById(int32 PlayerId, FName TechId)
 	Player.CurrentResearchProgress = GetCachedResearchProgress(Player, TechId);
 
 	OnResearchChanged.Broadcast();
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 
 	return true;
 }
@@ -80,7 +80,7 @@ void UConquestTechManager::ProcessResearchAtStartOfTurn(int32 PlayerId)
 	}
 
 	OnResearchChanged.Broadcast();
-	GameStateRef->BroadcastStateChanged();
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
 TArray<FName> UConquestTechManager::GetAvailableResearchIds(int32 PlayerId) const

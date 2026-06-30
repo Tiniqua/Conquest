@@ -5,8 +5,10 @@
 #include "GameFramework/PlayerController.h"
 #include "ConquestPlayerController.generated.h"
 
+class UAudioComponent;
 class FLifetimeProperty;
 class UConquestCivilisationData;
+class USoundBase;
 
 UCLASS()
 class CONQUEST_API AConquestPlayerController : public APlayerController
@@ -27,6 +29,24 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Game")
 	void RequestReturnToMainMenu();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Settings")
+	void ToggleSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Settings|Audio")
+	void SetMusicEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Settings|Audio")
+	bool IsMusicEnabled() const { return bMusicEnabled; }
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Settings|Audio")
+	void SetMusicVolumeMultiplier(float NewVolumeMultiplier);
+
+	UFUNCTION(BlueprintPure, Category="Conquest|Settings|Audio")
+	float GetMusicVolumeMultiplier() const { return MusicVolumeMultiplier; }
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Audio")
+	void InitializeBackgroundMusic(const TArray<USoundBase*>& InBackgroundMusicTracks);
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Game Setup")
 	void RequestRegenerateFirstTurnMap();
@@ -87,9 +107,25 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="Conquest|Multiplayer")
 	int32 AssignedPlayerId = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Audio")
+	TObjectPtr<UAudioComponent> BackgroundMusicAudioComponent = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USoundBase>> BackgroundMusicTracks;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> CurrentBackgroundMusicTrack = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category="Conquest|Settings|Audio")
+	bool bMusicEnabled = true;
+
+	UPROPERTY(BlueprintReadOnly, Category="Conquest|Settings|Audio")
+	float MusicVolumeMultiplier = 1.0f;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestEndTurn();
@@ -154,5 +190,18 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestCheatSpawnUnit(FName UnitId, FIntPoint TileCoord);
 
+	UFUNCTION(Client, Reliable)
+	void ClientInitializeBackgroundMusic(const TArray<USoundBase*>& InBackgroundMusicTracks);
+
+	UFUNCTION()
+	void HandleBackgroundMusicFinished();
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+private:
+	void LoadUserSettings();
+	void SaveUserSettings() const;
+	void ApplyMusicSettings();
+	void PlayNextBackgroundMusicTrack();
+	USoundBase* ChooseNextBackgroundMusicTrack() const;
 };

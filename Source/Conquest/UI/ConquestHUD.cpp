@@ -8,6 +8,7 @@
 #include "ConquestMainMenuWidget.h"
 #include "ConquestResearchPanelWidget.h"
 #include "ConquestPhilosophyPanelWidget.h"
+#include "ConquestSettingsWidget.h"
 #include "Conquest/UI/ConquestChoiceTypes.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
@@ -272,6 +273,7 @@ AConquestHUD::AConquestHUD()
 	MainMenuWidgetClass = UConquestMainMenuWidget::StaticClass();
 	GameSetupWidgetClass = UConquestGameSetupWidget::StaticClass();
 	GameWidgetClass = UConquestGameWidget::StaticClass();
+	SettingsMenuWidgetClass = UConquestSettingsWidget::StaticClass();
 	HexGridActorClass = AModularHexGridActor::StaticClass();
 }
 
@@ -333,6 +335,16 @@ void AConquestHUD::BeginPlay()
 		}
 	}
 
+	if (SettingsMenuWidgetClass)
+	{
+		SettingsMenuWidget = CreateWidget<UConquestSettingsWidget>(PlayerController, SettingsMenuWidgetClass);
+		if (SettingsMenuWidget)
+		{
+			SettingsMenuWidget->AddToViewport(50);
+			SettingsMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &AConquestHUD::HandleConquestStateChangedForHUD);
@@ -366,6 +378,73 @@ void AConquestHUD::ShowMainMenu()
 	{
 		HUDWidget->ShowMainMenu();
 	}
+}
+
+void AConquestHUD::ShowSettingsMenu()
+{
+	if (!SettingsMenuWidget && SettingsMenuWidgetClass)
+	{
+		if (APlayerController* PlayerController = GetOwningPlayerController())
+		{
+			SettingsMenuWidget = CreateWidget<UConquestSettingsWidget>(PlayerController, SettingsMenuWidgetClass);
+			if (SettingsMenuWidget)
+			{
+				SettingsMenuWidget->AddToViewport(50);
+			}
+		}
+	}
+
+	if (!SettingsMenuWidget)
+	{
+		return;
+	}
+
+	SettingsMenuWidget->RefreshFromSettings();
+	SettingsMenuWidget->SetVisibility(ESlateVisibility::Visible);
+
+	APlayerController* PlayerController = GetOwningPlayerController();
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	PlayerController->bShowMouseCursor = true;
+	PlayerController->bEnableClickEvents = true;
+	PlayerController->bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetWidgetToFocus(SettingsMenuWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	PlayerController->SetInputMode(InputMode);
+}
+
+void AConquestHUD::HideSettingsMenu()
+{
+	if (SettingsMenuWidget)
+	{
+		SettingsMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (HUDWidget && HUDWidget->IsGameWidgetActive())
+	{
+		ConfigureGameInputMode();
+	}
+	else
+	{
+		ConfigureMenuInputMode();
+	}
+}
+
+void AConquestHUD::ToggleSettingsMenu()
+{
+	if (SettingsMenuWidget && SettingsMenuWidget->IsVisible())
+	{
+		HideSettingsMenu();
+		return;
+	}
+
+	ShowSettingsMenu();
 }
 
 void AConquestHUD::ShowCityPanel(int32 CityId)

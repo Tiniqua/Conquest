@@ -1,19 +1,29 @@
 #include "ConquestPlayerController.h"
 
+#include "Components/AudioComponent.h"
 #include "Conquest/Core/ConquestCheats.h"
 #include "Conquest/Core/ConquestContentManager.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
+#include "Conquest/Core/ConquestUserSettingsSaveGame.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
 #include "Conquest/Framework/GameModes/ConquestGameState.h"
 #include "Conquest/Managers/ConquestCityManager.h"
 #include "Conquest/Managers/ConquestPhilosophyManager.h"
 #include "Conquest/Managers/ConquestTechManager.h"
+#include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/World/Generation/HexGridModel.h"
 #include "Conquest/World/Generation/HexImprovementTypes.h"
+#include "Components/InputComponent.h"
+#include "InputCoreTypes.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
+	constexpr const TCHAR* ConquestUserSettingsSaveSlotName = TEXT("ConquestUserSettings");
+	constexpr int32 ConquestUserSettingsSaveUserIndex = 0;
+
 	AConquestGameMode* GetConquestGameMode(const AConquestPlayerController* PlayerController)
 	{
 		return PlayerController && PlayerController->GetWorld()
@@ -24,6 +34,13 @@ namespace
 
 AConquestPlayerController::AConquestPlayerController()
 {
+	BackgroundMusicAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("BackgroundMusicAudioComponent"));
+	if (BackgroundMusicAudioComponent)
+	{
+		BackgroundMusicAudioComponent->bAutoActivate = false;
+		BackgroundMusicAudioComponent->bIsUISound = true;
+	}
+
 	CheatClass = UConquestCheats::StaticClass();
 	bShowMouseCursor = false;
 	bEnableClickEvents = false;
@@ -51,6 +68,39 @@ void AConquestPlayerController::BeginPlay()
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
+
+	if (IsLocalController())
+	{
+		LoadUserSettings();
+		ApplyMusicSettings();
+	}
+
+	if (BackgroundMusicAudioComponent)
+	{
+		BackgroundMusicAudioComponent->OnAudioFinished.RemoveDynamic(this, &AConquestPlayerController::HandleBackgroundMusicFinished);
+		BackgroundMusicAudioComponent->OnAudioFinished.AddDynamic(this, &AConquestPlayerController::HandleBackgroundMusicFinished);
+	}
+
+	if (HasAuthority())
+	{
+		if (const AConquestGameMode* ConquestGM = GetWorld() ? GetWorld()->GetAuthGameMode<AConquestGameMode>() : nullptr)
+		{
+			InitializeBackgroundMusic(ConquestGM->GetBackgroundMusicTracks());
+		}
+	}
+}
+
+void AConquestPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (!InputComponent)
+	{
+		return;
+	}
+
+	InputComponent->BindAction(TEXT("ToggleSettingsMenu"), IE_Pressed, this, &AConquestPlayerController::ToggleSettingsMenu);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AConquestPlayerController::ToggleSettingsMenu);
 }
 
 void AConquestPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -89,6 +139,78 @@ void AConquestPlayerController::RequestReturnToMainMenu()
 	else
 	{
 		ServerRequestReturnToMainMenu();
+	}
+}
+
+void AConquestPlayerController::ToggleSettingsMenu()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(GetHUD()))
+	{
+		ConquestHUD->ToggleSettingsMenu();
+	}
+}
+
+void AConquestPlayerController::SetMusicEnabled(bool bEnabled)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	bMusicEnabled = bEnabled;
+	ApplyMusicSettings();
+	SaveUserSettings();
+}
+
+void AConquestPlayerController::SetMusicVolumeMultiplier(float NewVolumeMultiplier)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	MusicVolumeMultiplier = FMath::Clamp(NewVolumeMultiplier, 0.0f, 2.0f);
+	ApplyMusicSettings();
+	SaveUserSettings();
+}
+
+void AConquestPlayerController::InitializeBackgroundMusic(const TArray<USoundBase*>& InBackgroundMusicTracks)
+{
+	if (!IsLocalController())
+	{
+		ClientInitializeBackgroundMusic(InBackgroundMusicTracks);
+		return;
+	}
+
+	BackgroundMusicTracks.Reset();
+	for (USoundBase* Track : InBackgroundMusicTracks)
+	{
+		if (Track)
+		{
+			BackgroundMusicTracks.Add(Track);
+		}
+	}
+
+	if (
+		!CurrentBackgroundMusicTrack ||
+		!BackgroundMusicTracks.ContainsByPredicate([this](const TObjectPtr<USoundBase>& Track)
+		{
+			return Track.Get() == CurrentBackgroundMusicTrack.Get();
+		})
+	)
+	{
+		CurrentBackgroundMusicTrack = nullptr;
+	}
+
+	ApplyMusicSettings();
+	if (bMusicEnabled && BackgroundMusicTracks.Num() > 0 && BackgroundMusicAudioComponent && !BackgroundMusicAudioComponent->IsPlaying())
+	{
+		PlayNextBackgroundMusicTrack();
 	}
 }
 
@@ -329,6 +451,143 @@ void AConquestPlayerController::ServerRequestEndTurn_Implementation()
 	{
 		ConquestGM->EndTurnForPlayer(AssignedPlayerId);
 	}
+}
+
+void AConquestPlayerController::ClientInitializeBackgroundMusic_Implementation(const TArray<USoundBase*>& InBackgroundMusicTracks)
+{
+	InitializeBackgroundMusic(InBackgroundMusicTracks);
+}
+
+void AConquestPlayerController::HandleBackgroundMusicFinished()
+{
+	if (IsLocalController() && bMusicEnabled)
+	{
+		PlayNextBackgroundMusicTrack();
+	}
+}
+
+void AConquestPlayerController::LoadUserSettings()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UConquestUserSettingsSaveGame* SettingsSave = Cast<UConquestUserSettingsSaveGame>(
+		UGameplayStatics::LoadGameFromSlot(ConquestUserSettingsSaveSlotName, ConquestUserSettingsSaveUserIndex)
+	);
+
+	if (!SettingsSave)
+	{
+		SettingsSave = Cast<UConquestUserSettingsSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(UConquestUserSettingsSaveGame::StaticClass())
+		);
+	}
+
+	if (!SettingsSave)
+	{
+		return;
+	}
+
+	bMusicEnabled = SettingsSave->bMusicEnabled;
+	MusicVolumeMultiplier = FMath::Clamp(SettingsSave->MusicVolumeMultiplier, 0.0f, 2.0f);
+}
+
+void AConquestPlayerController::SaveUserSettings() const
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UConquestUserSettingsSaveGame* SettingsSave = Cast<UConquestUserSettingsSaveGame>(
+		UGameplayStatics::CreateSaveGameObject(UConquestUserSettingsSaveGame::StaticClass())
+	);
+
+	if (!SettingsSave)
+	{
+		return;
+	}
+
+	SettingsSave->bMusicEnabled = bMusicEnabled;
+	SettingsSave->MusicVolumeMultiplier = FMath::Clamp(MusicVolumeMultiplier, 0.0f, 2.0f);
+	UGameplayStatics::SaveGameToSlot(SettingsSave, ConquestUserSettingsSaveSlotName, ConquestUserSettingsSaveUserIndex);
+}
+
+void AConquestPlayerController::ApplyMusicSettings()
+{
+	if (!IsLocalController() || !BackgroundMusicAudioComponent)
+	{
+		return;
+	}
+
+	BackgroundMusicAudioComponent->SetVolumeMultiplier(FMath::Clamp(MusicVolumeMultiplier, 0.0f, 2.0f));
+
+	if (!bMusicEnabled)
+	{
+		BackgroundMusicAudioComponent->Stop();
+		return;
+	}
+
+	if (BackgroundMusicTracks.Num() > 0 && !BackgroundMusicAudioComponent->IsPlaying())
+	{
+		PlayNextBackgroundMusicTrack();
+	}
+}
+
+void AConquestPlayerController::PlayNextBackgroundMusicTrack()
+{
+	if (!IsLocalController() || !BackgroundMusicAudioComponent || !bMusicEnabled || BackgroundMusicTracks.Num() <= 0)
+	{
+		return;
+	}
+
+	USoundBase* NextTrack = ChooseNextBackgroundMusicTrack();
+	if (!NextTrack)
+	{
+		return;
+	}
+
+	CurrentBackgroundMusicTrack = NextTrack;
+	BackgroundMusicAudioComponent->SetSound(NextTrack);
+	BackgroundMusicAudioComponent->SetVolumeMultiplier(FMath::Clamp(MusicVolumeMultiplier, 0.0f, 2.0f));
+	BackgroundMusicAudioComponent->Play(0.0f);
+}
+
+USoundBase* AConquestPlayerController::ChooseNextBackgroundMusicTrack() const
+{
+	TArray<USoundBase*> ValidTracks;
+	for (const TObjectPtr<USoundBase>& Track : BackgroundMusicTracks)
+	{
+		if (Track)
+		{
+			ValidTracks.Add(Track.Get());
+		}
+	}
+
+	if (ValidTracks.Num() <= 0)
+	{
+		return nullptr;
+	}
+
+	if (ValidTracks.Num() == 1)
+	{
+		return ValidTracks[0];
+	}
+
+	USoundBase* SelectedTrack = nullptr;
+	for (int32 Attempt = 0; Attempt < 4 && (!SelectedTrack || SelectedTrack == CurrentBackgroundMusicTrack); ++Attempt)
+	{
+		SelectedTrack = ValidTracks[FMath::RandRange(0, ValidTracks.Num() - 1)];
+	}
+
+	if (!SelectedTrack || SelectedTrack == CurrentBackgroundMusicTrack)
+	{
+		const int32 CurrentIndex = ValidTracks.IndexOfByKey(CurrentBackgroundMusicTrack);
+		return ValidTracks[(CurrentIndex + 1) % ValidTracks.Num()];
+	}
+
+	return SelectedTrack;
 }
 
 void AConquestPlayerController::ServerRequestReturnToMainMenu_Implementation()

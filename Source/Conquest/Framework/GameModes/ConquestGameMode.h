@@ -7,6 +7,7 @@
 #include "ConquestGameMode.generated.h"
 
 class UConquestCivilisationData;
+class USoundBase;
 
 UCLASS()
 class CONQUEST_API AConquestGameMode : public AGameModeBase
@@ -23,6 +24,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Game Setup")
 	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Conquest|Audio")
+	TArray<TObjectPtr<USoundBase>> BackgroundMusicTracks;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Multiplayer")
 	TArray<int32> ReadyPlayerIds;
 
@@ -31,6 +35,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Conquest|Game Setup")
 	TArray<UConquestCivilisationData*> GetAvailableCivilisations() const;
+
+	UFUNCTION(BlueprintPure, Category = "Conquest|Audio")
+	TArray<USoundBase*> GetBackgroundMusicTracks() const;
 
 	UFUNCTION(BlueprintCallable)
 	void StartSinglePlayerGame();

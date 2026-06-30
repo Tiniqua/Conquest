@@ -16,6 +16,7 @@
 #include "Conquest/World/Generation/HexResourceTypes.h"
 #include "Conquest/World/Generation/HexTileTypes.h"
 #include "GameFramework/PlayerState.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -206,6 +207,7 @@ void AConquestGameMode::PostLogin(APlayerController* NewPlayer)
 
 	const int32 PlayerId = NextAssignedPlayerId++;
 	ConquestPC->SetAssignedPlayerId(PlayerId);
+	ConquestPC->InitializeBackgroundMusic(GetBackgroundMusicTracks());
 	ConnectedHumanPlayerIds.AddUnique(PlayerId);
 
 	if (AConquestGameState* ConquestGS = GetGameState<AConquestGameState>())
@@ -337,6 +339,22 @@ TArray<UConquestCivilisationData*> AConquestGameMode::GetAvailableCivilisations(
 		if (Civilisation)
 		{
 			Result.Add(Civilisation);
+		}
+	}
+
+	return Result;
+}
+
+TArray<USoundBase*> AConquestGameMode::GetBackgroundMusicTracks() const
+{
+	TArray<USoundBase*> Result;
+	Result.Reserve(BackgroundMusicTracks.Num());
+
+	for (const TObjectPtr<USoundBase>& Track : BackgroundMusicTracks)
+	{
+		if (Track)
+		{
+			Result.Add(Track.Get());
 		}
 	}
 

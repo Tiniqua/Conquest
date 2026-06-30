@@ -533,6 +533,10 @@ void UConquestMainMenuWidget::ExecuteMainMenuAction(
 		break;
 
 	case EConquestMainMenuButtonAction::Settings:
+		if (ParentHUDWidget)
+		{
+			ParentHUDWidget->ShowSettingsMenu();
+		}
 		OnSettingsRequested(Button);
 		break;
 

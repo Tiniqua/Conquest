@@ -34,6 +34,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|HUD")
 	void ShowGame();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Settings")
+	void ShowSettingsMenu();
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void RequestStartGame(const FConquestGameSetupSettings& SetupSettings);
 

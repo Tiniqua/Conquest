@@ -14,6 +14,7 @@ class UConquestHUDWidget;
 class UConquestMainMenuWidget;
 class UConquestGameSetupWidget;
 class UConquestGameWidget;
+class UConquestSettingsWidget;
 class AModularHexGridActor;
 struct FConquestUnitState;
 
@@ -36,6 +37,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Conquest|HUD")
 	void ShowGame();
 
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Settings")
+	void ShowSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Settings")
+	void HideSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Conquest|Settings")
+	void ToggleSettingsMenu();
+
 	UFUNCTION(BlueprintCallable, Category = "Conquest|Game Setup")
 	void RequestStartGame(const FConquestGameSetupSettings& SetupSettings);
 
@@ -57,6 +67,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
 	TSubclassOf<UConquestPhilosophyPanelWidget> PhilosophyPanelWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category="Conquest|UI")
+	TSubclassOf<UConquestSettingsWidget> SettingsMenuWidgetClass;
+
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UConquestGameWidget> GameWidget;
 
@@ -68,6 +81,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UConquestPhilosophyPanelWidget> PhilosophyPanelWidget;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UConquestSettingsWidget> SettingsMenuWidget;
 
 	UFUNCTION(BlueprintCallable)
 	void ShowCityPanel(int32 CityId);

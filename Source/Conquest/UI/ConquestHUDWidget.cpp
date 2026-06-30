@@ -75,6 +75,14 @@ void UConquestHUDWidget::ShowGame()
 	}
 }
 
+void UConquestHUDWidget::ShowSettingsMenu()
+{
+	if (OwningConquestHUD)
+	{
+		OwningConquestHUD->ShowSettingsMenu();
+	}
+}
+
 void UConquestHUDWidget::RequestStartGame(const FConquestGameSetupSettings& SetupSettings)
 {
 	if (OwningConquestHUD)

@@ -1232,11 +1232,12 @@ void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedIte
 		if (IsLocalPlayerLobbyHost())
 		{
 			bForceRebuildLobbySlots = true;
+			PushGameSetupSettingsToServerIfHost();
 			RefreshLobbySlots();
 		}
 	}
 
-	if (!bApplyingGameSetupSettings)
+	if (!bApplyingGameSetupSettings && !IsLocalPlayerLobbyHost())
 	{
 		PushGameSetupSettingsToServerIfHost();
 	}

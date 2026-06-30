@@ -2,6 +2,8 @@
 
 #include "ConquestHUD.h"
 #include "Components/Button.h"
+#include "Components/ContentWidget.h"
+#include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -78,6 +80,38 @@ void UConquestGameWidget::SetWidgetVisibility(UWidget* Widget, ESlateVisibility 
 	{
 		Widget->SetVisibility(Visibility);
 	}
+}
+
+bool UConquestGameWidget::SetFirstTextBlockText(UWidget* RootWidget, const FText& Text)
+{
+	if (!RootWidget)
+	{
+		return false;
+	}
+
+	if (UTextBlock* TextBlock = Cast<UTextBlock>(RootWidget))
+	{
+		TextBlock->SetText(Text);
+		return true;
+	}
+
+	if (UContentWidget* ContentWidget = Cast<UContentWidget>(RootWidget))
+	{
+		return SetFirstTextBlockText(ContentWidget->GetContent(), Text);
+	}
+
+	if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(RootWidget))
+	{
+		for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+		{
+			if (SetFirstTextBlockText(PanelWidget->GetChildAt(ChildIndex), Text))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 void UConquestGameWidget::SetYieldTexts(const FHexYield& Yield)
@@ -529,6 +563,7 @@ void UConquestGameWidget::RefreshTurnInfo()
 	if (EndTurnButton)
 	{
 		EndTurnButton->SetIsEnabled(!IsWaitingForOtherPlayers());
+		SetFirstTextBlockText(EndTurnButton, GetEndTurnButtonText());
 	}
 }
 

@@ -511,6 +511,7 @@ private:
 	static void SetText(UTextBlock* TextBlock, const FString& Text);
 	static void ClearText(UTextBlock* TextBlock);
 	static void SetWidgetVisibility(UWidget* Widget, ESlateVisibility Visibility);
+	static bool SetFirstTextBlockText(UWidget* RootWidget, const FText& Text);
 
 	void SetYieldTexts(const FHexYield& Yield);
 	void SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData);

@@ -247,6 +247,17 @@ void UConquestMultiplayerSessionSubsystem::JoinSessionByIndex(int32 ResultIndex)
 	}
 }
 
+void UConquestMultiplayerSessionSubsystem::DestroyCurrentSession()
+{
+	if (IOnlineSessionPtr SessionInterface = GetSessionInterface())
+	{
+		if (SessionInterface->GetNamedSession(ConquestSessionName))
+		{
+			SessionInterface->DestroySession(ConquestSessionName);
+		}
+	}
+}
+
 bool UConquestMultiplayerSessionSubsystem::SendSessionInviteToFriend(const FString& FriendUniqueNetId)
 {
 	IOnlineSessionPtr SessionInterface = GetSessionInterface();

@@ -210,6 +210,9 @@ protected:
 	TObjectPtr<UButton> PlayButton = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BackButton = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ReadyButton = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -232,6 +235,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UConquestCivilisationData> PreviewCivilisation = nullptr;
 
 	UPROPERTY(Transient)
 	EHexMapTypePreset SelectedMapPreset = EHexMapTypePreset::Continents;
@@ -285,10 +291,16 @@ protected:
 	void HandlePlayButtonClicked();
 
 	UFUNCTION()
+	void HandleBackButtonClicked();
+
+	UFUNCTION()
 	void HandleReadyButtonClicked();
 
 	UFUNCTION()
 	void HandleConquestStateChanged();
+
+	UFUNCTION()
+	void HandleAssignedPlayerIdChanged(int32 NewPlayerId);
 
 	UFUNCTION()
 	void HandleRandomSeedButtonClicked();
@@ -296,10 +308,20 @@ protected:
 	UFUNCTION()
 	void HandleRandomSeedValueChanged(float NewValue);
 
+	UFUNCTION()
+	void HandleGameSetupFloatValueChanged(float NewValue);
+
+	UFUNCTION()
+	void HandleGameSetupCheckStateChanged(bool bIsChecked);
+
 	int32 GenerateRandomSeed() const;
 
 private:
 	void ApplyDefaultAdvancedValues();
+	void ApplyGameSetupSettingsToControls(const FConquestGameSetupSettings& SetupSettings);
+	void RefreshHostOnlyControlState();
+	void PushGameSetupSettingsToServerIfHost();
+	bool IsLocalPlayerLobbyHost() const;
 	void SetSelectedRandomSeed(int32 NewSeed, bool bUpdateSpinBox);
 	void ConfigureRandomSeedSpinBox();
 	void UpdateMapSizeTooltip();
@@ -322,6 +344,9 @@ private:
 
 	UPROPERTY(Transient)
 	bool bUpdatingRandomSeedSpinBox = false;
+
+	UPROPERTY(Transient)
+	bool bApplyingGameSetupSettings = false;
 
 	UPROPERTY(Transient)
 	bool bUpdatingCivilisationComboBoxes = false;

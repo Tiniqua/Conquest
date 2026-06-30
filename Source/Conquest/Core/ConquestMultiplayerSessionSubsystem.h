@@ -36,6 +36,9 @@ public:
 	void JoinSessionByIndex(int32 ResultIndex);
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Multiplayer")
+	void DestroyCurrentSession();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Multiplayer")
 	bool SendSessionInviteToFriend(const FString& FriendUniqueNetId);
 
 	UFUNCTION(BlueprintPure, Category="Conquest|Multiplayer")

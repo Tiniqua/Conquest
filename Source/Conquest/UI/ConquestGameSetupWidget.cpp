@@ -358,8 +358,13 @@ void UConquestGameSetupWidget::InitializeGameSetupWidget(UConquestHUDWidget* InP
 	RefreshCivilisationOptions();
 	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
+	if (const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		ApplyGameSetupSettingsToControls(ConquestGS->GameSetupSettings);
+	}
 	UpdateMapSizeTooltip();
-	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
+	RefreshHostOnlyControlState();
+	RefreshCivilisationInfo(nullptr);
 }
 
 void UConquestGameSetupWidget::NativeConstruct()
@@ -384,6 +389,12 @@ void UConquestGameSetupWidget::NativeConstruct()
 		PlayButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandlePlayButtonClicked);
 	}
 
+	if (BackButton)
+	{
+		BackButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleBackButtonClicked);
+		BackButton->OnClicked.AddDynamic(this, &UConquestGameSetupWidget::HandleBackButtonClicked);
+	}
+
 	if (ReadyButton)
 	{
 		ReadyButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleReadyButtonClicked);
@@ -399,27 +410,95 @@ void UConquestGameSetupWidget::NativeConstruct()
 	BindCivilisationComboBoxes();
 	ConfigureRandomSeedSpinBox();
 
+	for (USpinBox* SpinBox : {
+		BonusResourceDensitySpinBox.Get(),
+		LuxuryResourceDensitySpinBox.Get(),
+		StrategicResourceDensitySpinBox.Get(),
+		BonusResourceCountSpinBox.Get(),
+		LuxuryResourceCountSpinBox.Get(),
+		StrategicResourceCountSpinBox.Get(),
+		ResourceSpacingSpinBox.Get(),
+		RiverDensitySpinBox.Get(),
+		MaxRiverCountSpinBox.Get(),
+		MinRiverLengthSpinBox.Get(),
+		MaxRiverLengthSpinBox.Get(),
+		RiverSpacingSpinBox.Get(),
+		LakeFrequencySpinBox.Get(),
+		LakeCountSpinBox.Get(),
+		LakeSpacingSpinBox.Get(),
+		LakeMinSizeSpinBox.Get(),
+		LakeMaxSizeSpinBox.Get(),
+		MountainAmountSpinBox.Get(),
+		TemperatureBiasStrengthSpinBox.Get(),
+		PolarFalloffPowerSpinBox.Get(),
+		TemperatureNoiseStrengthSpinBox.Get()
+	})
+	{
+		if (SpinBox)
+		{
+			SpinBox->OnValueChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleGameSetupFloatValueChanged);
+			SpinBox->OnValueChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleGameSetupFloatValueChanged);
+		}
+	}
+
+	for (UCheckBox* CheckBox : {
+		GenerateResourcesCheckBox.Get(),
+		GenerateRiversCheckBox.Get(),
+		UseTemperatureBiasCheckBox.Get()
+	})
+	{
+		if (CheckBox)
+		{
+			CheckBox->OnCheckStateChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleGameSetupCheckStateChanged);
+			CheckBox->OnCheckStateChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleGameSetupCheckStateChanged);
+		}
+	}
+
+	bApplyingGameSetupSettings = true;
 	RefreshMapPresetOptions();
 	RefreshMapSizeOptions();
 	RefreshCivilisationOptions();
 	RefreshLobbySlots();
 	ApplyDefaultAdvancedValues();
+	bApplyingGameSetupSettings = false;
+	if (const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
+	{
+		ApplyGameSetupSettingsToControls(ConquestGS->GameSetupSettings);
+	}
 	UpdateMapSizeTooltip();
+	RefreshHostOnlyControlState();
+	PushGameSetupSettingsToServerIfHost();
 	RefreshReadyStatus();
-	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
+	RefreshCivilisationInfo(nullptr);
 
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
 		ConquestGS->OnConquestStateChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
 	}
+
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->OnAssignedPlayerIdChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleAssignedPlayerIdChanged);
+		ConquestPC->OnAssignedPlayerIdChanged.AddDynamic(this, &UConquestGameSetupWidget::HandleAssignedPlayerIdChanged);
+	}
 }
 
 void UConquestGameSetupWidget::NativeDestruct()
 {
+	if (BackButton)
+	{
+		BackButton->OnClicked.RemoveDynamic(this, &UConquestGameSetupWidget::HandleBackButtonClicked);
+	}
+
 	if (AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr)
 	{
 		ConquestGS->OnConquestStateChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleConquestStateChanged);
+	}
+
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->OnAssignedPlayerIdChanged.RemoveDynamic(this, &UConquestGameSetupWidget::HandleAssignedPlayerIdChanged);
 	}
 
 	Super::NativeDestruct();
@@ -664,6 +743,8 @@ void UConquestGameSetupWidget::ApplyDefaultAdvancedValues()
 
 void UConquestGameSetupWidget::HandleMapPresetSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
+	(void)SelectionType;
+
 	if (const EHexMapTypePreset* FoundPreset = OptionToPreset.Find(SelectedItem))
 	{
 		SelectedMapPreset = *FoundPreset;
@@ -671,6 +752,9 @@ void UConquestGameSetupWidget::HandleMapPresetSelectionChanged(FString SelectedI
 		FHexMapTypePreset Preset;
 		if (FHexMapTypePresets::GetPreset(SelectedMapPreset, Preset))
 		{
+			const bool bWasApplyingGameSetupSettings = bApplyingGameSetupSettings;
+			bApplyingGameSetupSettings = true;
+
 			if (LakeFrequencySpinBox)
 			{
 				LakeFrequencySpinBox->SetValue(Preset.Shape.LakeFrequency);
@@ -691,7 +775,14 @@ void UConquestGameSetupWidget::HandleMapPresetSelectionChanged(FString SelectedI
 			{
 				LakeMaxSizeSpinBox->SetValue(static_cast<float>(Preset.Shape.LakeMaxSize));
 			}
+
+			bApplyingGameSetupSettings = bWasApplyingGameSetupSettings;
 		}
+	}
+
+	if (!bApplyingGameSetupSettings)
+	{
+		PushGameSetupSettingsToServerIfHost();
 	}
 }
 
@@ -855,6 +946,226 @@ FConquestGameSetupSettings UConquestGameSetupWidget::GetSelectedGameSetupSetting
 	return Settings;
 }
 
+void UConquestGameSetupWidget::ApplyGameSetupSettingsToControls(const FConquestGameSetupSettings& SetupSettings)
+{
+	bApplyingGameSetupSettings = true;
+
+	SelectedMapPreset = SetupSettings.MapTypePreset;
+	SelectedMapSizePreset = SetupSettings.MapSizePreset;
+
+	if (MapPresetComboBox)
+	{
+		for (const TPair<FString, EHexMapTypePreset>& Option : OptionToPreset)
+		{
+			if (Option.Value == SelectedMapPreset)
+			{
+				MapPresetComboBox->SetSelectedOption(Option.Key);
+				break;
+			}
+		}
+	}
+
+	if (MapSizeComboBox)
+	{
+		for (const TPair<FString, EConquestMapSizePreset>& Option : OptionToMapSizePreset)
+		{
+			if (Option.Value == SelectedMapSizePreset)
+			{
+				MapSizeComboBox->SetSelectedOption(Option.Key);
+				break;
+			}
+		}
+	}
+
+	SetSelectedRandomSeed(SetupSettings.RandomSeed, true);
+
+	if (GenerateResourcesCheckBox)
+	{
+		GenerateResourcesCheckBox->SetIsChecked(SetupSettings.ResourceGenerationSettings.bGenerateResources);
+	}
+	if (BonusResourceDensitySpinBox)
+	{
+		BonusResourceDensitySpinBox->SetValue(SetupSettings.ResourceGenerationSettings.AutoBonusDensity);
+	}
+	if (LuxuryResourceDensitySpinBox)
+	{
+		LuxuryResourceDensitySpinBox->SetValue(SetupSettings.ResourceGenerationSettings.AutoLuxuryDensity);
+	}
+	if (StrategicResourceDensitySpinBox)
+	{
+		StrategicResourceDensitySpinBox->SetValue(SetupSettings.ResourceGenerationSettings.AutoStrategicDensity);
+	}
+	if (BonusResourceCountSpinBox)
+	{
+		BonusResourceCountSpinBox->SetValue(static_cast<float>(SetupSettings.ResourceGenerationSettings.BonusResourceCount));
+	}
+	if (LuxuryResourceCountSpinBox)
+	{
+		LuxuryResourceCountSpinBox->SetValue(static_cast<float>(SetupSettings.ResourceGenerationSettings.LuxuryResourceCount));
+	}
+	if (StrategicResourceCountSpinBox)
+	{
+		StrategicResourceCountSpinBox->SetValue(static_cast<float>(SetupSettings.ResourceGenerationSettings.StrategicResourceCount));
+	}
+	if (ResourceSpacingSpinBox)
+	{
+		ResourceSpacingSpinBox->SetValue(static_cast<float>(SetupSettings.ResourceGenerationSettings.ResourceMinSpacing));
+	}
+
+	if (GenerateRiversCheckBox)
+	{
+		GenerateRiversCheckBox->SetIsChecked(SetupSettings.RiverSettings.bGenerateRivers);
+	}
+	if (RiverDensitySpinBox)
+	{
+		RiverDensitySpinBox->SetValue(SetupSettings.RiverSettings.RiverDensityPer100Tiles);
+	}
+	if (MaxRiverCountSpinBox)
+	{
+		MaxRiverCountSpinBox->SetValue(static_cast<float>(SetupSettings.RiverSettings.MaxRiverCount));
+	}
+	if (MinRiverLengthSpinBox)
+	{
+		MinRiverLengthSpinBox->SetValue(static_cast<float>(SetupSettings.RiverSettings.MinRiverLength));
+	}
+	if (MaxRiverLengthSpinBox)
+	{
+		MaxRiverLengthSpinBox->SetValue(static_cast<float>(SetupSettings.RiverSettings.MaxRiverLength));
+	}
+	if (RiverSpacingSpinBox)
+	{
+		RiverSpacingSpinBox->SetValue(static_cast<float>(SetupSettings.RiverSettings.RiverAvoidanceRadius));
+	}
+
+	if (LakeFrequencySpinBox)
+	{
+		LakeFrequencySpinBox->SetValue(SetupSettings.MapShapeSettings.LakeFrequency);
+	}
+	if (LakeCountSpinBox)
+	{
+		LakeCountSpinBox->SetValue(static_cast<float>(SetupSettings.MapShapeSettings.LakeCount));
+	}
+	if (LakeSpacingSpinBox)
+	{
+		LakeSpacingSpinBox->SetValue(static_cast<float>(SetupSettings.MapShapeSettings.LakeSpacing));
+	}
+	if (LakeMinSizeSpinBox)
+	{
+		LakeMinSizeSpinBox->SetValue(static_cast<float>(SetupSettings.MapShapeSettings.LakeMinSize));
+	}
+	if (LakeMaxSizeSpinBox)
+	{
+		LakeMaxSizeSpinBox->SetValue(static_cast<float>(SetupSettings.MapShapeSettings.LakeMaxSize));
+	}
+	if (MountainAmountSpinBox)
+	{
+		MountainAmountSpinBox->SetValue(SetupSettings.MountainWeightScale);
+	}
+
+	if (UseTemperatureBiasCheckBox)
+	{
+		UseTemperatureBiasCheckBox->SetIsChecked(SetupSettings.TemperatureSettings.bUseTemperatureBias);
+	}
+	if (TemperatureBiasStrengthSpinBox)
+	{
+		TemperatureBiasStrengthSpinBox->SetValue(SetupSettings.TemperatureSettings.TemperatureBiasStrength);
+	}
+	if (PolarFalloffPowerSpinBox)
+	{
+		PolarFalloffPowerSpinBox->SetValue(SetupSettings.TemperatureSettings.PolarFalloffPower);
+	}
+	if (TemperatureNoiseStrengthSpinBox)
+	{
+		TemperatureNoiseStrengthSpinBox->SetValue(SetupSettings.TemperatureSettings.TemperatureNoiseStrength);
+	}
+
+	UpdateMapSizeTooltip();
+	bApplyingGameSetupSettings = false;
+}
+
+bool UConquestGameSetupWidget::IsLocalPlayerLobbyHost() const
+{
+	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
+	return ConquestPC && ConquestPC->HasAuthority() && ConquestPC->GetAssignedPlayerId() == 0;
+}
+
+void UConquestGameSetupWidget::RefreshHostOnlyControlState()
+{
+	const bool bIsHost = IsLocalPlayerLobbyHost();
+
+	if (MapPresetComboBox)
+	{
+		MapPresetComboBox->SetIsEnabled(bIsHost);
+	}
+	if (MapSizeComboBox)
+	{
+		MapSizeComboBox->SetIsEnabled(bIsHost);
+	}
+	if (RandomSeedSpinBox)
+	{
+		RandomSeedSpinBox->SetIsEnabled(bIsHost);
+	}
+	if (RandomSeedButton)
+	{
+		RandomSeedButton->SetIsEnabled(bIsHost);
+	}
+
+	for (USpinBox* SpinBox : {
+		BonusResourceDensitySpinBox.Get(),
+		LuxuryResourceDensitySpinBox.Get(),
+		StrategicResourceDensitySpinBox.Get(),
+		BonusResourceCountSpinBox.Get(),
+		LuxuryResourceCountSpinBox.Get(),
+		StrategicResourceCountSpinBox.Get(),
+		ResourceSpacingSpinBox.Get(),
+		RiverDensitySpinBox.Get(),
+		MaxRiverCountSpinBox.Get(),
+		MinRiverLengthSpinBox.Get(),
+		MaxRiverLengthSpinBox.Get(),
+		RiverSpacingSpinBox.Get(),
+		LakeFrequencySpinBox.Get(),
+		LakeCountSpinBox.Get(),
+		LakeSpacingSpinBox.Get(),
+		LakeMinSizeSpinBox.Get(),
+		LakeMaxSizeSpinBox.Get(),
+		MountainAmountSpinBox.Get(),
+		TemperatureBiasStrengthSpinBox.Get(),
+		PolarFalloffPowerSpinBox.Get(),
+		TemperatureNoiseStrengthSpinBox.Get()
+	})
+	{
+		if (SpinBox)
+		{
+			SpinBox->SetIsEnabled(bIsHost);
+		}
+	}
+
+	for (UCheckBox* CheckBox : {
+		GenerateResourcesCheckBox.Get(),
+		GenerateRiversCheckBox.Get(),
+		UseTemperatureBiasCheckBox.Get()
+	})
+	{
+		if (CheckBox)
+		{
+			CheckBox->SetIsEnabled(bIsHost);
+		}
+	}
+}
+
+void UConquestGameSetupWidget::PushGameSetupSettingsToServerIfHost()
+{
+	if (!IsLocalPlayerLobbyHost())
+	{
+		return;
+	}
+
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestSetGameSetupSettings(GetSelectedGameSetupSettings());
+	}
+}
+
 int32 UConquestGameSetupWidget::GenerateRandomSeed() const
 {
 	const FGuid Guid = FGuid::NewGuid();
@@ -865,11 +1176,12 @@ int32 UConquestGameSetupWidget::GenerateRandomSeed() const
 void UConquestGameSetupWidget::HandleRandomSeedButtonClicked()
 {
 	SetSelectedRandomSeed(GenerateRandomSeed(), true);
+	PushGameSetupSettingsToServerIfHost();
 }
 
 void UConquestGameSetupWidget::HandleRandomSeedValueChanged(float NewValue)
 {
-	if (bUpdatingRandomSeedSpinBox)
+	if (bUpdatingRandomSeedSpinBox || bApplyingGameSetupSettings)
 	{
 		return;
 	}
@@ -879,15 +1191,14 @@ void UConquestGameSetupWidget::HandleRandomSeedValueChanged(float NewValue)
 		1,
 		2147483646
 	);
+	PushGameSetupSettingsToServerIfHost();
 }
 
 void UConquestGameSetupWidget::HandlePlayButtonClicked()
 {
-	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
 	const AConquestGameState* ConquestGS = GetWorld() ? GetWorld()->GetGameState<AConquestGameState>() : nullptr;
 	if (
-		!ConquestPC ||
-		ConquestPC->GetAssignedPlayerId() != 0 ||
+		!IsLocalPlayerLobbyHost() ||
 		!ConquestGS ||
 		ConquestGS->GetRequiredReadyHumanPlayerCount() <= 0 ||
 		ConquestGS->GetReadyHumanPlayerCount() < ConquestGS->GetRequiredReadyHumanPlayerCount()
@@ -902,14 +1213,52 @@ void UConquestGameSetupWidget::HandlePlayButtonClicked()
 	}
 }
 
+void UConquestGameSetupWidget::HandleBackButtonClicked()
+{
+	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
+	{
+		ConquestPC->RequestLeaveGameSetup();
+	}
+}
+
 void UConquestGameSetupWidget::HandleMapSizeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
+	(void)SelectionType;
+
 	if (const EConquestMapSizePreset* FoundPreset = OptionToMapSizePreset.Find(SelectedItem))
 	{
 		SelectedMapSizePreset = *FoundPreset;
 		UpdateMapSizeTooltip();
-		bForceRebuildLobbySlots = true;
-		RefreshLobbySlots();
+		if (IsLocalPlayerLobbyHost())
+		{
+			bForceRebuildLobbySlots = true;
+			RefreshLobbySlots();
+		}
+	}
+
+	if (!bApplyingGameSetupSettings)
+	{
+		PushGameSetupSettingsToServerIfHost();
+	}
+}
+
+void UConquestGameSetupWidget::HandleGameSetupFloatValueChanged(float NewValue)
+{
+	(void)NewValue;
+
+	if (!bApplyingGameSetupSettings)
+	{
+		PushGameSetupSettingsToServerIfHost();
+	}
+}
+
+void UConquestGameSetupWidget::HandleGameSetupCheckStateChanged(bool bIsChecked)
+{
+	(void)bIsChecked;
+
+	if (!bApplyingGameSetupSettings)
+	{
+		PushGameSetupSettingsToServerIfHost();
 	}
 }
 
@@ -955,7 +1304,7 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 				}
 				OnLobbySlotsChanged(LobbyPlayerSlots);
 				RefreshReadyStatus();
-				RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
+				RefreshCivilisationInfo(PreviewCivilisation);
 				return;
 			}
 		}
@@ -1012,7 +1361,7 @@ void UConquestGameSetupWidget::RefreshLobbySlots()
 	OnLobbySlotsChanged(LobbyPlayerSlots);
 	PushLobbySlotsToServerIfAuthority();
 	RefreshReadyStatus();
-	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
+	RefreshCivilisationInfo(PreviewCivilisation);
 }
 
 void UConquestGameSetupWidget::RefreshCivilisationOptions()
@@ -1061,7 +1410,17 @@ void UConquestGameSetupWidget::RefreshCivilisationOptions()
 	}
 
 	OnCivilisationOptionsChanged();
-	RefreshCivilisationInfo(GetDefaultPreviewCivilisation());
+	if (
+		PreviewCivilisation &&
+		!AvailableCivilisations.ContainsByPredicate([this](const TObjectPtr<UConquestCivilisationData>& Civilisation)
+		{
+			return Civilisation.Get() == PreviewCivilisation.Get();
+		})
+	)
+	{
+		PreviewCivilisation = nullptr;
+	}
+	RefreshCivilisationInfo(PreviewCivilisation);
 }
 
 bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConquestCivilisationData* Civilisation)
@@ -1072,6 +1431,7 @@ bool UConquestGameSetupWidget::SetLobbySlotCivilisation(int32 SlotIndex, UConque
 	}
 
 	LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation;
+	PreviewCivilisation = Civilisation;
 	RefreshCivilisationInfo(Civilisation);
 	const TArray<UComboBoxString*> ComboBoxes = GetCivilisationComboBoxes();
 	RefreshCivilisationComboBox(ComboBoxes.IsValidIndex(SlotIndex) ? ComboBoxes[SlotIndex] : nullptr, SlotIndex);
@@ -1262,6 +1622,7 @@ void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotInde
 	if (TObjectPtr<UConquestCivilisationData>* Civilisation = OptionToCivilisation.Find(SelectedItem))
 	{
 		LobbyPlayerSlots[SlotIndex].Civilisation = Civilisation->Get();
+		PreviewCivilisation = Civilisation->Get();
 		RefreshCivilisationInfo(Civilisation->Get());
 		if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 		{
@@ -1272,28 +1633,40 @@ void UConquestGameSetupWidget::HandleCivilisationSelectionChanged(int32 SlotInde
 
 const UConquestCivilisationData* UConquestGameSetupWidget::GetDefaultPreviewCivilisation() const
 {
-	const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
-	const int32 LocalPlayerId = ConquestPC ? ConquestPC->GetAssignedPlayerId() : 0;
-
-	if (const FConquestLobbyPlayerSlot* LocalSlot = LobbyPlayerSlots.FindByPredicate(
-		[LocalPlayerId](const FConquestLobbyPlayerSlot& CandidateSlot)
-		{
-			return CandidateSlot.PlayerId == LocalPlayerId && CandidateSlot.Civilisation;
-		}))
-	{
-		return LocalSlot->Civilisation;
-	}
-
-	if (LobbyPlayerSlots.Num() > 0 && LobbyPlayerSlots[0].Civilisation)
-	{
-		return LobbyPlayerSlots[0].Civilisation;
-	}
-
-	return AvailableCivilisations.Num() > 0 ? AvailableCivilisations[0].Get() : nullptr;
+	return nullptr;
 }
 
 void UConquestGameSetupWidget::RefreshCivilisationInfo(const UConquestCivilisationData* Civilisation)
 {
+	if (!Civilisation)
+	{
+		if (CivInfoNameText)
+		{
+			CivInfoNameText->SetText(FText::GetEmpty());
+		}
+		if (CivInfoLeaderText)
+		{
+			CivInfoLeaderText->SetText(FText::GetEmpty());
+		}
+		if (CivInfoAbilityText)
+		{
+			CivInfoAbilityText->SetText(FText::GetEmpty());
+		}
+		if (CivInfoUniqueUnitsText)
+		{
+			CivInfoUniqueUnitsText->SetText(FText::GetEmpty());
+		}
+		if (CivInfoUniqueBuildingsText)
+		{
+			CivInfoUniqueBuildingsText->SetText(FText::GetEmpty());
+		}
+		if (CivInfoText)
+		{
+			CivInfoText->SetText(FText::GetEmpty());
+		}
+		return;
+	}
+
 	const FString CivName = Civilisation
 		? (Civilisation->CivilisationName.IsEmpty() ? Civilisation->GetName() : Civilisation->CivilisationName.ToString())
 		: TEXT("No civilisation selected");
@@ -1506,10 +1879,8 @@ void UConquestGameSetupWidget::RefreshReadyStatus()
 
 	if (PlayButton)
 	{
-		const AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer());
 		PlayButton->SetIsEnabled(
-			ConquestPC &&
-			ConquestPC->GetAssignedPlayerId() == 0 &&
+			IsLocalPlayerLobbyHost() &&
 			RequiredCount > 0 &&
 			ReadyCount >= RequiredCount
 		);
@@ -1540,10 +1911,23 @@ void UConquestGameSetupWidget::HandleConquestStateChanged()
 			}
 			return;
 		}
+
+		ApplyGameSetupSettingsToControls(ConquestGS->GameSetupSettings);
 	}
+
+	RefreshHostOnlyControlState();
+	RefreshCivilisationOptions();
+	RefreshLobbySlots();
+	RefreshReadyStatus();
+}
+
+void UConquestGameSetupWidget::HandleAssignedPlayerIdChanged(int32 NewPlayerId)
+{
+	(void)NewPlayerId;
 
 	RefreshCivilisationOptions();
 	RefreshLobbySlots();
+	RefreshHostOnlyControlState();
 	RefreshReadyStatus();
 }
 

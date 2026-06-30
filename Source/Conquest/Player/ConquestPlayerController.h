@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Conquest/Core/ConquestGameplayTypes.h"
+#include "Conquest/World/Generation/ConquestGameSetupTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "ConquestPlayerController.generated.h"
 
@@ -9,6 +10,8 @@ class UAudioComponent;
 class FLifetimeProperty;
 class UConquestCivilisationData;
 class USoundBase;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnConquestAssignedPlayerIdChanged, int32, AssignedPlayerId);
 
 UCLASS()
 class CONQUEST_API AConquestPlayerController : public APlayerController
@@ -24,11 +27,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Multiplayer")
 	void SetAssignedPlayerId(int32 NewPlayerId);
 
+	UPROPERTY(BlueprintAssignable, Category="Conquest|Multiplayer")
+	FOnConquestAssignedPlayerIdChanged OnAssignedPlayerIdChanged;
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|Turn")
 	void RequestEndTurn();
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Game")
 	void RequestReturnToMainMenu();
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Game Setup")
+	void RequestLeaveGameSetup();
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Settings")
 	void ToggleSettingsMenu();
@@ -93,6 +102,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Conquest|Lobby")
 	void RequestSetLobbyReady(bool bReady);
 
+	UFUNCTION(BlueprintCallable, Category="Conquest|Game Setup")
+	void RequestSetGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
+
 	UFUNCTION(BlueprintCallable, Category="Conquest|Cheats")
 	void RequestCheatImproveAllResources();
 
@@ -109,7 +121,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
-	UPROPERTY(Replicated, BlueprintReadOnly, Category="Conquest|Multiplayer")
+	UPROPERTY(ReplicatedUsing=OnRep_AssignedPlayerId, BlueprintReadOnly, Category="Conquest|Multiplayer")
 	int32 AssignedPlayerId = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Audio")
@@ -127,11 +139,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Conquest|Settings|Audio")
 	float MusicVolumeMultiplier = 1.0f;
 
+	UFUNCTION()
+	void OnRep_AssignedPlayerId();
+
 	UFUNCTION(Server, Reliable)
 	void ServerRequestEndTurn();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestReturnToMainMenu();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestLeaveGameSetup();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRegenerateFirstTurnMap();
@@ -177,6 +195,9 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSetLobbyReady(bool bReady);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSetGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestCheatImproveAllResources();

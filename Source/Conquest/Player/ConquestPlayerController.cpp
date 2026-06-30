@@ -3,6 +3,7 @@
 #include "Components/AudioComponent.h"
 #include "Conquest/Core/ConquestCheats.h"
 #include "Conquest/Core/ConquestContentManager.h"
+#include "Conquest/Core/ConquestMultiplayerSessionSubsystem.h"
 #include "Conquest/Core/ConquestPlayerEmpireState.h"
 #include "Conquest/Core/ConquestUserSettingsSaveGame.h"
 #include "Conquest/Framework/GameModes/ConquestGameMode.h"
@@ -114,8 +115,19 @@ void AConquestPlayerController::SetAssignedPlayerId(int32 NewPlayerId)
 {
 	if (HasAuthority())
 	{
+		if (AssignedPlayerId == NewPlayerId)
+		{
+			return;
+		}
+
 		AssignedPlayerId = NewPlayerId;
+		OnAssignedPlayerIdChanged.Broadcast(AssignedPlayerId);
 	}
+}
+
+void AConquestPlayerController::OnRep_AssignedPlayerId()
+{
+	OnAssignedPlayerIdChanged.Broadcast(AssignedPlayerId);
 }
 
 void AConquestPlayerController::RequestEndTurn()
@@ -139,6 +151,33 @@ void AConquestPlayerController::RequestReturnToMainMenu()
 	else
 	{
 		ServerRequestReturnToMainMenu();
+	}
+}
+
+void AConquestPlayerController::RequestLeaveGameSetup()
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UConquestMultiplayerSessionSubsystem* SessionSubsystem =
+			GameInstance->GetSubsystem<UConquestMultiplayerSessionSubsystem>())
+		{
+			SessionSubsystem->DestroyCurrentSession();
+		}
+	}
+
+	if (HasAuthority())
+	{
+		ServerRequestLeaveGameSetup_Implementation();
+		return;
+	}
+
+	if (GetWorld())
+	{
+		const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(this, true);
+		if (!CurrentLevelName.IsEmpty())
+		{
+			UGameplayStatics::OpenLevel(this, FName(*CurrentLevelName), true);
+		}
 	}
 }
 
@@ -397,6 +436,18 @@ void AConquestPlayerController::RequestSetLobbyReady(bool bReady)
 	}
 }
 
+void AConquestPlayerController::RequestSetGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
+{
+	if (HasAuthority())
+	{
+		ServerRequestSetGameSetupSettings_Implementation(SetupSettings);
+	}
+	else
+	{
+		ServerRequestSetGameSetupSettings(SetupSettings);
+	}
+}
+
 void AConquestPlayerController::RequestCheatImproveAllResources()
 {
 	if (HasAuthority())
@@ -598,6 +649,30 @@ void AConquestPlayerController::ServerRequestReturnToMainMenu_Implementation()
 	}
 }
 
+void AConquestPlayerController::ServerRequestLeaveGameSetup_Implementation()
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UConquestMultiplayerSessionSubsystem* SessionSubsystem =
+			GameInstance->GetSubsystem<UConquestMultiplayerSessionSubsystem>())
+		{
+			SessionSubsystem->DestroyCurrentSession();
+		}
+	}
+
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->ResetGameToMainMenu();
+		return;
+	}
+
+	const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(this, true);
+	if (!CurrentLevelName.IsEmpty())
+	{
+		UGameplayStatics::OpenLevel(this, FName(*CurrentLevelName), true);
+	}
+}
+
 void AConquestPlayerController::ServerRequestRegenerateFirstTurnMap_Implementation()
 {
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
@@ -731,6 +806,16 @@ void AConquestPlayerController::ServerRequestSetLobbyReady_Implementation(bool b
 	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
 	{
 		ConquestGM->SetLobbyReadyForPlayer(AssignedPlayerId, bReady);
+	}
+}
+
+void AConquestPlayerController::ServerRequestSetGameSetupSettings_Implementation(
+	const FConquestGameSetupSettings& SetupSettings
+)
+{
+	if (AConquestGameMode* ConquestGM = GetConquestGameMode(this))
+	{
+		ConquestGM->SetGameSetupSettingsForPlayer(AssignedPlayerId, SetupSettings);
 	}
 }
 

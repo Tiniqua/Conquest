@@ -421,7 +421,14 @@ void UConquestGameWidget::HandleEndTurnClicked()
 
 	if (AConquestPlayerController* ConquestPC = Cast<AConquestPlayerController>(GetOwningPlayer()))
 	{
+		const AConquestGameState* ConquestGS = GetWorld()
+			? GetWorld()->GetGameState<AConquestGameState>()
+			: nullptr;
+
 		bLocalEndTurnRequestPending = true;
+		LocalEndTurnRequestTurn = ConquestGS && ConquestGS->TurnManager
+			? ConquestGS->TurnManager->CurrentTurn
+			: INDEX_NONE;
 		ConquestPC->RequestEndTurn();
 	}
 
@@ -460,6 +467,7 @@ void UConquestGameWidget::HandleTurnChanged(int32 NewTurn)
 {
 	(void)NewTurn;
 	bLocalEndTurnRequestPending = false;
+	LocalEndTurnRequestTurn = INDEX_NONE;
 	RefreshTurnInfo();
 	RefreshTopBarYieldInfo();
 	RefreshResearchInfo();
@@ -472,7 +480,22 @@ void UConquestGameWidget::HandleConquestStateChanged()
 		? GetWorld()->GetGameState<AConquestGameState>()
 		: nullptr)
 	{
+		const bool bStillWaitingOnRequestedTurn =
+			bLocalEndTurnRequestPending &&
+			ConquestGS->TurnManager &&
+			ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::PlayerActions &&
+			ConquestGS->TurnManager->CurrentTurn == LocalEndTurnRequestTurn;
+
+		if (!bStillWaitingOnRequestedTurn)
+		{
+			bLocalEndTurnRequestPending = false;
+			LocalEndTurnRequestTurn = INDEX_NONE;
+		}
+	}
+	else
+	{
 		bLocalEndTurnRequestPending = false;
+		LocalEndTurnRequestTurn = INDEX_NONE;
 	}
 
 	RefreshTurnInfo();
@@ -583,6 +606,7 @@ bool UConquestGameWidget::IsWaitingForOtherPlayers() const
 	return
 		ConquestGS->TurnManager->CurrentPhase == EConquestTurnPhase::PlayerActions &&
 		bLocalEndTurnRequestPending &&
+		ConquestGS->TurnManager->CurrentTurn == LocalEndTurnRequestTurn &&
 		HumanPlayerCount > 1;
 }
 

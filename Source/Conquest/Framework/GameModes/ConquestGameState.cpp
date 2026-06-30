@@ -822,120 +822,238 @@ void AConquestGameState::RebuildCityVisualsFromReplicatedState()
 
 	for (const FCityState& City : CityManager->Cities)
 	{
-		if (GridModel)
-		{
-			for (const FIntPoint& Coord : City.OwnedTiles)
-			{
-				if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
-				{
-					Tile->Gameplay.OwnerPlayerId = City.OwnerPlayerId;
-					Tile->Gameplay.OwningCityId = City.CityId;
+		ApplyCityVisualState(City, false, false);
+	}
 
-					const FCityOwnedTileCombatState* TileCombatState =
-						City.OwnedTileCombatStates.FindByPredicate([Coord](const FCityOwnedTileCombatState& Candidate)
-						{
-							return Candidate.Coord == Coord;
-						});
-					if (TileCombatState)
+	RebuildCivilisationBordersFromLocalState();
+
+	ActiveGridActor->RebuildProceduralPlaceholderVisuals(CityManager->Cities, BuildingTable);
+}
+
+void AConquestGameState::ApplyCityVisualState(
+	const FCityState& CityState,
+	bool bRebuildBorders,
+	bool bRebuildProceduralPlaceholders
+)
+{
+	if (!ActiveGridActor)
+	{
+		return;
+	}
+
+	if (CityManager)
+	{
+		if (FCityState* ExistingCity = CityManager->GetCityMutable(CityState.CityId))
+		{
+			*ExistingCity = CityState;
+		}
+		else if (CityState.CityId != INDEX_NONE)
+		{
+			CityManager->Cities.Add(CityState);
+		}
+	}
+
+	FHexGridModel* GridModel = GetHexGridModelMutable();
+	if (GridModel)
+	{
+		TSet<FIntPoint> NewOwnedTiles;
+		for (const FIntPoint& Coord : CityState.OwnedTiles)
+		{
+			NewOwnedTiles.Add(Coord);
+		}
+
+		TArray<FHexTileData>& Tiles = GridModel->GetMutableTiles();
+		for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
+		{
+			FHexTileData& Tile = Tiles[TileIndex];
+			int32 Q = INDEX_NONE;
+			int32 R = INDEX_NONE;
+			const bool bHasCoord = GridModel->GetCoordFromIndex(TileIndex, Q, R);
+			const FIntPoint Coord(Q, R);
+			if (bHasCoord && Tile.Gameplay.OwningCityId == CityState.CityId && !NewOwnedTiles.Contains(Coord))
+			{
+				Tile.Gameplay.OwnerPlayerId = INDEX_NONE;
+				Tile.Gameplay.OwningCityId = INDEX_NONE;
+				Tile.Gameplay.bIsWorked = false;
+				Tile.Gameplay.WorkedByCityId = INDEX_NONE;
+				Tile.Gameplay.CurrentHealth = 100;
+				Tile.Gameplay.MaxHealth = 100;
+				Tile.Gameplay.CombatStrength = 0;
+				Tile.Gameplay.HealRatePerTurn = 5;
+				Tile.Gameplay.DefenderModifier = 1.0f;
+			}
+		}
+
+		for (const FIntPoint& Coord : CityState.OwnedTiles)
+		{
+			if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+			{
+				Tile->Gameplay.OwnerPlayerId = CityState.OwnerPlayerId;
+				Tile->Gameplay.OwningCityId = CityState.CityId;
+				Tile->Gameplay.bIsWorked = false;
+				Tile->Gameplay.WorkedByCityId = INDEX_NONE;
+
+				const FCityOwnedTileCombatState* TileCombatState =
+					CityState.OwnedTileCombatStates.FindByPredicate([Coord](const FCityOwnedTileCombatState& Candidate)
 					{
-						Tile->Gameplay.CurrentHealth = TileCombatState->CurrentHealth;
-						Tile->Gameplay.MaxHealth = TileCombatState->MaxHealth;
-						Tile->Gameplay.CombatStrength = TileCombatState->CombatStrength;
-						Tile->Gameplay.HealRatePerTurn = TileCombatState->HealRatePerTurn;
-						Tile->Gameplay.DefenderModifier = TileCombatState->DefenderModifier;
-					}
-				}
-			}
-
-			for (const FIntPoint& Coord : City.WorkedTiles)
-			{
-				if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
+						return Candidate.Coord == Coord;
+					});
+				if (TileCombatState)
 				{
-					Tile->Gameplay.bIsWorked = true;
-					Tile->Gameplay.WorkedByCityId = City.CityId;
+					Tile->Gameplay.CurrentHealth = TileCombatState->CurrentHealth;
+					Tile->Gameplay.MaxHealth = TileCombatState->MaxHealth;
+					Tile->Gameplay.CombatStrength = TileCombatState->CombatStrength;
+					Tile->Gameplay.HealRatePerTurn = TileCombatState->HealRatePerTurn;
+					Tile->Gameplay.DefenderModifier = TileCombatState->DefenderModifier;
 				}
 			}
 		}
 
-		UStaticMesh* CityMesh = nullptr;
-		UMaterialInterface* CityMaterial = nullptr;
-		UMaterialInterface* CivilisationThemeMaterial = nullptr;
-		FLinearColor CivilisationThemeColor = FLinearColor::White;
-		bool bOverrideCityScale = false;
-		FVector CityScale = FVector::OneVector;
-		if (const UConquestCivilisationData* Civilisation = GetCivilisationForPlayer(City.OwnerPlayerId))
+		for (const FIntPoint& Coord : CityState.WorkedTiles)
 		{
-			CityMesh = Civilisation->CityMesh;
-			CityMaterial = Civilisation->CityMeshMaterialOverride;
-			CivilisationThemeMaterial = Civilisation->CityLabelMaterial
-				? Civilisation->CityLabelMaterial
-				: Civilisation->BorderMaterial;
-			CivilisationThemeColor = Civilisation->ThemeColor;
-			bOverrideCityScale = Civilisation->bOverrideCityMeshScale;
-			CityScale = Civilisation->CityMeshScaleOverride;
-		}
-
-		ActiveGridActor->AddCityPlaceholder(
-			City.CityId,
-			City.CenterTile,
-			CityMesh,
-			CityMaterial,
-			bOverrideCityScale,
-			CityScale
-		);
-		ActiveGridActor->AddOrUpdateCityWorldLabel(
-			City.CityId,
-			City.CenterTile,
-			City.CityName,
-			City.Population,
-			City.CurrentHealth,
-			City.MaxHealth,
-			City.CachedStrength,
-			FMath::Clamp(
-				City.FoodStored / static_cast<float>(FMath::Max(1, City.CachedFoodRequiredForNextPopulation)),
-				0.0f,
-				1.0f
-			),
-			CivilisationThemeMaterial,
-			CivilisationThemeColor
-		);
-
-		for (const FCityOwnedTileCombatState& TileCombatState : City.OwnedTileCombatStates)
-		{
-			if (TileCombatState.Coord != City.CenterTile && City.OwnedTiles.Contains(TileCombatState.Coord))
+			if (FHexTileData* Tile = GridModel->GetTileMutable(Coord))
 			{
-				ActiveGridActor->AddOrUpdateTileHealthBar(
-					TileCombatState.Coord,
-					TileCombatState.CurrentHealth,
-					TileCombatState.MaxHealth,
-					TileCombatState.CombatStrength
-				);
+				Tile->Gameplay.bIsWorked = true;
+				Tile->Gameplay.WorkedByCityId = CityState.CityId;
 			}
 		}
 	}
+
+	UStaticMesh* CityMesh = nullptr;
+	UMaterialInterface* CityMaterial = nullptr;
+	UMaterialInterface* CivilisationThemeMaterial = nullptr;
+	FLinearColor CivilisationThemeColor = FLinearColor::White;
+	bool bOverrideCityScale = false;
+	FVector CityScale = FVector::OneVector;
+	if (const UConquestCivilisationData* Civilisation = GetCivilisationForPlayer(CityState.OwnerPlayerId))
+	{
+		CityMesh = Civilisation->CityMesh;
+		CityMaterial = Civilisation->CityMeshMaterialOverride;
+		CivilisationThemeMaterial = Civilisation->CityLabelMaterial
+			? Civilisation->CityLabelMaterial
+			: Civilisation->BorderMaterial;
+		CivilisationThemeColor = Civilisation->ThemeColor;
+		bOverrideCityScale = Civilisation->bOverrideCityMeshScale;
+		CityScale = Civilisation->CityMeshScaleOverride;
+	}
+
+	ActiveGridActor->AddCityPlaceholder(
+		CityState.CityId,
+		CityState.CenterTile,
+		CityMesh,
+		CityMaterial,
+		bOverrideCityScale,
+		CityScale
+	);
+	ActiveGridActor->AddOrUpdateCityWorldLabel(
+		CityState.CityId,
+		CityState.CenterTile,
+		CityState.CityName,
+		CityState.Population,
+		CityState.CurrentHealth,
+		CityState.MaxHealth,
+		CityState.CachedStrength,
+		FMath::Clamp(
+			CityState.FoodStored / static_cast<float>(FMath::Max(1, CityState.CachedFoodRequiredForNextPopulation)),
+			0.0f,
+			1.0f
+		),
+		CivilisationThemeMaterial,
+		CivilisationThemeColor
+	);
+
+	TSet<FIntPoint> CurrentHealthBarCoords;
+	for (const FCityOwnedTileCombatState& TileCombatState : CityState.OwnedTileCombatStates)
+	{
+		if (TileCombatState.Coord != CityState.CenterTile && CityState.OwnedTiles.Contains(TileCombatState.Coord))
+		{
+			CurrentHealthBarCoords.Add(TileCombatState.Coord);
+			ApplyTileHealthBarVisual(CityState.CityId, TileCombatState);
+		}
+	}
+
+	if (GridModel)
+	{
+		TArray<FIntPoint> HealthBarsToRemove;
+		for (const TPair<FIntPoint, TObjectPtr<UWidgetComponent>>& Pair : ActiveGridActor->TileHealthBarComponents)
+		{
+			const FHexTileData* Tile = GridModel->GetTile(Pair.Key);
+			if (Tile && Tile->Gameplay.OwningCityId == CityState.CityId && !CurrentHealthBarCoords.Contains(Pair.Key))
+			{
+				HealthBarsToRemove.Add(Pair.Key);
+			}
+		}
+
+		for (const FIntPoint& Coord : HealthBarsToRemove)
+		{
+			ActiveGridActor->RemoveTileHealthBar(Coord);
+		}
+	}
+
+	if (bRebuildBorders)
+	{
+		RebuildCivilisationBordersFromLocalState();
+	}
+
+	if (bRebuildProceduralPlaceholders && CityManager)
+	{
+		ActiveGridActor->RebuildProceduralPlaceholderVisuals(CityManager->Cities, BuildingTable);
+	}
+}
+
+void AConquestGameState::RebuildCivilisationBordersFromLocalState()
+{
+	if (!ActiveGridActor || !CityManager)
+	{
+		return;
+	}
+
+	ActiveGridActor->ClearCivilisationBorders();
 
 	for (const TPair<int32, TObjectPtr<UConquestCivilisationData>>& Pair : PlayerCivilisations)
 	{
-		if (Pair.Value)
+		if (!Pair.Value)
 		{
-			TArray<FIntPoint> OwnedTiles;
-			for (const FCityState& City : CityManager->Cities)
-			{
-				if (City.OwnerPlayerId == Pair.Key)
-				{
-					OwnedTiles.Append(City.OwnedTiles);
-				}
-			}
-
-			ActiveGridActor->RebuildCivilisationBordersForTiles(
-				OwnedTiles,
-				Pair.Value->BorderMaterial,
-				Pair.Value->BorderFillMaterial
-			);
+			continue;
 		}
+
+		TArray<FIntPoint> OwnedTiles;
+		for (const FCityState& City : CityManager->Cities)
+		{
+			if (City.OwnerPlayerId == Pair.Key)
+			{
+				OwnedTiles.Append(City.OwnedTiles);
+			}
+		}
+
+		ActiveGridActor->RebuildCivilisationBordersForTiles(
+			OwnedTiles,
+			Pair.Value->BorderMaterial,
+			Pair.Value->BorderFillMaterial
+		);
+	}
+}
+
+void AConquestGameState::ApplyTileHealthBarVisual(int32 CityId, const FCityOwnedTileCombatState& TileCombatState)
+{
+	if (!ActiveGridActor || !CityManager)
+	{
+		return;
 	}
 
-	ActiveGridActor->RebuildProceduralPlaceholderVisuals(CityManager->Cities, BuildingTable);
+	const FCityState* City = CityManager->GetCity(CityId);
+	if (!City || !City->OwnedTiles.Contains(TileCombatState.Coord) || TileCombatState.Coord == City->CenterTile)
+	{
+		ActiveGridActor->RemoveTileHealthBar(TileCombatState.Coord);
+		return;
+	}
+
+	ActiveGridActor->AddOrUpdateTileHealthBar(
+		TileCombatState.Coord,
+		TileCombatState.CurrentHealth,
+		TileCombatState.MaxHealth,
+		TileCombatState.CombatStrength
+	);
 }
 
 void AConquestGameState::RebuildUnitVisualsFromReplicatedState()
@@ -1131,6 +1249,51 @@ void AConquestGameState::MulticastReturnToMainMenu_Implementation()
 		if (AConquestHUD* ConquestHUD = Cast<AConquestHUD>(PlayerController->GetHUD()))
 		{
 			ConquestHUD->ShowMainMenu();
+		}
+	}
+}
+
+void AConquestGameState::MulticastSyncCityVisualState_Implementation(
+	const FCityState& CityState,
+	bool bRebuildBorders,
+	bool bRebuildProceduralPlaceholders
+)
+{
+	ApplyCityVisualState(CityState, bRebuildBorders, bRebuildProceduralPlaceholders);
+}
+
+void AConquestGameState::MulticastSyncTileHealthBar_Implementation(
+	int32 CityId,
+	FCityOwnedTileCombatState TileCombatState
+)
+{
+	ApplyTileHealthBarVisual(CityId, TileCombatState);
+}
+
+void AConquestGameState::MulticastRemoveTileHealthBar_Implementation(FIntPoint Coord)
+{
+	if (ActiveGridActor)
+	{
+		ActiveGridActor->RemoveTileHealthBar(Coord);
+	}
+}
+
+void AConquestGameState::MulticastSyncTileImprovement_Implementation(FIntPoint Coord, FName ImprovementId)
+{
+	if (ActiveGridActor)
+	{
+		if (FHexGridModel* GridModel = GetHexGridModelMutable())
+		{
+			if (GridModel->SetTileImprovementUnchecked(Coord.X, Coord.Y, ImprovementId))
+			{
+				ActiveGridActor->MarkVisualChunkDirtyForTile(
+					Coord,
+					static_cast<int32>(EConquestGridVisualChunkLayer::Improvements) |
+						static_cast<int32>(EConquestGridVisualChunkLayer::ProceduralPlaceholders) |
+						static_cast<int32>(EConquestGridVisualChunkLayer::YieldOverlay),
+					false
+				);
+			}
 		}
 	}
 }

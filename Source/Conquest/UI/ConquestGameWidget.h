@@ -529,6 +529,7 @@ private:
 	FConquestCombatPreviewData CurrentCombatPreviewData;
 	int32 PendingUnitAugmentUnitInstanceId = INDEX_NONE;
 	bool bLocalEndTurnRequestPending = false;
+	int32 LocalEndTurnRequestTurn = INDEX_NONE;
 
 	UFUNCTION()
 	void HandleTileExpansionConfirmClicked();

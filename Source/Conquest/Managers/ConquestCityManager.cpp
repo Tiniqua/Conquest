@@ -129,7 +129,8 @@ bool UConquestCityManager::FoundCity(int32 PlayerId, const FIntPoint& TileCoord,
 	OnCityChanged.Broadcast(NewCity.CityId);
 	RecalculateEmpireYields(PlayerId);
 	UpdateOwnedTileVisuals(PlayerId);
-	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+	GameStateRef->MulticastSyncCityVisualState(NewCity, true, true);
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 
 	return true;
 }
@@ -749,7 +750,7 @@ bool UConquestCityManager::DamageCity(int32 CityId, int32 DamageAmount)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;
@@ -787,7 +788,7 @@ bool UConquestCityManager::DamageOwnedTile(const FIntPoint& Coord, int32 DamageA
 	UpdateOwnedTileHealthBar(*OwningCity, TileCombatState);
 	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
 	OnCityChanged.Broadcast(OwningCity->CityId);
-	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	return true;
 }
 
@@ -861,7 +862,9 @@ bool UConquestCityManager::DestroyOwnedTile(const FIntPoint& Coord, int32 Attack
 	UpdateCityWorldLabel(*OwningCity);
 	OnCityTileChanged.Broadcast(OwningCity->CityId, Coord);
 	OnCityChanged.Broadcast(OwningCity->CityId);
-	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::TileImprovements);
+	GameStateRef->MulticastRemoveTileHealthBar(Coord);
+	GameStateRef->MulticastSyncTileImprovement(Coord, NAME_None);
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	return true;
 }
 
@@ -953,7 +956,7 @@ bool UConquestCityManager::CaptureCity(int32 CityId, int32 NewOwnerPlayerId)
 	UpdateOwnedTileVisuals(NewOwnerPlayerId);
 	UpdateCityWorldLabel(*City);
 	OnCityChanged.Broadcast(City->CityId);
-	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	return true;
 }
 
@@ -1590,7 +1593,26 @@ void UConquestCityManager::UpdateOwnedTileVisuals(int32 PlayerId)
 		return;
 	}
 
-	GameStateRef->RebuildCityVisualsFromReplicatedState();
+	bool bSyncedAnyCity = false;
+	FCityState LastSyncedCity;
+	for (const FCityState& City : Cities)
+	{
+		if (City.OwnerPlayerId == PlayerId)
+		{
+			GameStateRef->MulticastSyncCityVisualState(City, false, false);
+			LastSyncedCity = City;
+			bSyncedAnyCity = true;
+		}
+	}
+
+	if (bSyncedAnyCity)
+	{
+		GameStateRef->MulticastSyncCityVisualState(LastSyncedCity, true, false);
+	}
+	else
+	{
+		GameStateRef->RebuildCivilisationBordersFromLocalState();
+	}
 }
 
 void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
@@ -1626,6 +1648,8 @@ void UConquestCityManager::UpdateCityWorldLabel(const FCityState& City)
 		CivilisationThemeMaterial,
 		CivilisationThemeColor
 	);
+
+	GameStateRef->MulticastSyncCityVisualState(City, false, false);
 }
 
 void UConquestCityManager::UpdateOwnedTileHealthBar(
@@ -1641,6 +1665,7 @@ void UConquestCityManager::UpdateOwnedTileHealthBar(
 	if (!City.OwnedTiles.Contains(TileCombatState.Coord) || TileCombatState.Coord == City.CenterTile)
 	{
 		GameStateRef->ActiveGridActor->RemoveTileHealthBar(TileCombatState.Coord);
+		GameStateRef->MulticastRemoveTileHealthBar(TileCombatState.Coord);
 		return;
 	}
 
@@ -1650,6 +1675,7 @@ void UConquestCityManager::UpdateOwnedTileHealthBar(
 		TileCombatState.MaxHealth,
 		TileCombatState.CombatStrength
 	);
+	GameStateRef->MulticastSyncTileHealthBar(City.CityId, TileCombatState);
 }
 
 FName UConquestCityManager::ResolveCityName(int32 PlayerId, FName RequestedCityName) const
@@ -1749,7 +1775,8 @@ void UConquestCityManager::ProcessCitiesAtStartOfTurn(int32 PlayerId)
 	{
 		RecalculateEmpireYields(PlayerId);
 		AccumulateStrategicResourceIncome(PlayerId);
-		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+		UpdateOwnedTileVisuals(PlayerId);
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 }
 
@@ -1938,7 +1965,8 @@ bool UConquestCityManager::ClaimExpansionTileForCity(int32 CityId, const FIntPoi
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+		GameStateRef->MulticastSyncCityVisualState(*City, !bWasAlreadyOwned, false);
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;
@@ -2052,7 +2080,8 @@ bool UConquestCityManager::PurchaseTileImprovementForPlayer(int32 PlayerId, cons
 
 	RecalculateEmpireYields(PlayerId);
 	RecalculateStrategicResourceEconomy(PlayerId);
-	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::TileImprovements);
+	GameStateRef->MulticastSyncTileImprovement(Coord, ImprovementId);
+	GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 
 	return true;
 }
@@ -2073,7 +2102,8 @@ bool UConquestCityManager::RefreshCityYields(int32 CityId)
 
 	if (GameStateRef)
 	{
-		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities);
+		GameStateRef->MulticastSyncCityVisualState(*City, false, false);
+		GameStateRef->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 	}
 
 	return true;

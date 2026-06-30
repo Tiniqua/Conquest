@@ -329,6 +329,18 @@ public:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastReturnToMainMenu();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastSyncCityVisualState(const FCityState& CityState, bool bRebuildBorders, bool bRebuildProceduralPlaceholders);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastSyncTileHealthBar(int32 CityId, FCityOwnedTileCombatState TileCombatState);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastRemoveTileHealthBar(FIntPoint Coord);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastSyncTileImprovement(FIntPoint Coord, FName ImprovementId);
 	
 	UPROPERTY(ReplicatedUsing=OnRep_ActiveGridActor, BlueprintReadWrite, Category="Conquest|Map")
 	TObjectPtr<AModularHexGridActor> ActiveGridActor;
@@ -339,6 +351,9 @@ public:
 	void RebuildCityVisualsFromReplicatedState();
 	void RebuildUnitVisualsFromReplicatedState();
 	void ClearUnitVisuals();
+	void ApplyCityVisualState(const FCityState& CityState, bool bRebuildBorders, bool bRebuildProceduralPlaceholders);
+	void RebuildCivilisationBordersFromLocalState();
+	void ApplyTileHealthBarVisual(int32 CityId, const FCityOwnedTileCombatState& TileCombatState);
 
 	FHexGridModel* GetHexGridModelMutable();
 	const FHexGridModel* GetHexGridModel() const;

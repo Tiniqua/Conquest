@@ -1067,7 +1067,7 @@ bool AConquestGameMode::AttackCityForPlayer(
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackCity")));
-	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::Units);
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 
@@ -1204,7 +1204,7 @@ bool AConquestGameMode::AttackTileForPlayer(
 	}
 
 	ConquestGS->MulticastNotifyUnitAction(AttackerUnitInstanceId, PlayerId, FName(TEXT("AttackTile")));
-	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Cities | EConquestStateVisualDirtyFlags::Units);
+	ConquestGS->BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::Units);
 	return true;
 }
 

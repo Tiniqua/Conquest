@@ -90,7 +90,6 @@ void UConquestGameWidget::SetYieldTexts(const FHexYield& Yield)
 }
 
 FText UConquestGameWidget::FormatTopBarYieldText(
-	const TCHAR* Label,
 	int32 EmpireYield,
 	int32 SelectedCityYield,
 	bool bShowSelectedCityYield
@@ -99,16 +98,14 @@ FText UConquestGameWidget::FormatTopBarYieldText(
 	if (bShowSelectedCityYield)
 	{
 		return FText::FromString(FString::Printf(
-			TEXT("%s %d(%d)"),
-			Label,
+			TEXT("%d(%d)"),
 			EmpireYield,
 			SelectedCityYield
 		));
 	}
 
 	return FText::FromString(FString::Printf(
-		TEXT("%s %d"),
-		Label,
+		TEXT("%d"),
 		EmpireYield
 	));
 }
@@ -121,7 +118,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(
 		TopBarFoodText,
 		FormatTopBarYieldText(
-			TEXT("F"),
 			YieldData.EmpireYieldPerTurn.Food,
 			YieldData.SelectedCityYieldPerTurn.Food,
 			YieldData.bShowSelectedCityLocalYields
@@ -130,7 +126,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(
 		TopBarProductionText,
 		FormatTopBarYieldText(
-			TEXT("P"),
 			YieldData.EmpireYieldPerTurn.Production,
 			YieldData.SelectedCityYieldPerTurn.Production,
 			YieldData.bShowSelectedCityLocalYields
@@ -139,7 +134,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(
 		TopBarScienceText,
 		FormatTopBarYieldText(
-			TEXT("S"),
 			YieldData.EmpireYieldPerTurn.Science,
 			YieldData.SelectedCityYieldPerTurn.Science,
 			YieldData.bShowSelectedCityLocalYields
@@ -148,7 +142,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(
 		TopBarCultureText,
 		FormatTopBarYieldText(
-			TEXT("C"),
 			YieldData.EmpireYieldPerTurn.Culture,
 			YieldData.SelectedCityYieldPerTurn.Culture,
 			YieldData.bShowSelectedCityLocalYields
@@ -157,7 +150,6 @@ void UConquestGameWidget::SetTopBarYieldTexts(const FConquestTopBarYieldData& Yi
 	SetText(
 		TopBarGoldText,
 		FormatTopBarYieldText(
-			TEXT("G"),
 			YieldData.EmpireYieldPerTurn.Gold,
 			YieldData.SelectedCityYieldPerTurn.Gold,
 			YieldData.bShowSelectedCityLocalYields

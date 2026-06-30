@@ -119,6 +119,9 @@ struct FConquestReplicatedGameState
 	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FConquestGameSetupSettings GameSetupSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<int32> ReadyPlayerIds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -220,6 +223,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
 	TArray<FConquestLobbyPlayerSlot> LobbyPlayerSlots;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Game Setup")
+	FConquestGameSetupSettings GameSetupSettings;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Conquest|Players")
 	TArray<TObjectPtr<UConquestCivilisationData>> AvailableCivilisations;
 
@@ -290,6 +296,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
 	void ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
+
+	UFUNCTION(BlueprintCallable, Category="Conquest|Game Setup")
+	void SetGameSetupSettings(const FConquestGameSetupSettings& SetupSettings);
 
 	UFUNCTION(BlueprintCallable, Category="Conquest|Players")
 	void SetAvailableCivilisations(const TArray<UConquestCivilisationData*>& InAvailableCivilisations);

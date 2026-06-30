@@ -379,6 +379,26 @@ void AConquestGameMode::SetLobbyReadyForPlayer(int32 PlayerId, bool bReady)
 	}
 }
 
+bool AConquestGameMode::SetGameSetupSettingsForPlayer(
+	int32 PlayerId,
+	const FConquestGameSetupSettings& SetupSettings
+)
+{
+	if (PlayerId != 0)
+	{
+		return false;
+	}
+
+	AConquestGameState* ConquestGS = GetGameState<AConquestGameState>();
+	if (!ConquestGS)
+	{
+		return false;
+	}
+
+	ConquestGS->SetGameSetupSettings(SetupSettings);
+	return true;
+}
+
 bool AConquestGameMode::AreAllLobbyHumanPlayersReady() const
 {
 	const AConquestGameState* ConquestGS = GetWorld()

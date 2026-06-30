@@ -514,7 +514,7 @@ private:
 
 	void SetYieldTexts(const FHexYield& Yield);
 	void SetTopBarYieldTexts(const FConquestTopBarYieldData& YieldData);
-	static FText FormatTopBarYieldText(const TCHAR* Label, int32 EmpireYield, int32 SelectedCityYield, bool bShowSelectedCityYield);
+	static FText FormatTopBarYieldText(int32 EmpireYield, int32 SelectedCityYield, bool bShowSelectedCityYield);
 	void ClearTileTexts();
 	void RefreshSelectedUnitInfoFromGameState();
 	bool FocusNextRequiredEndTurnAction();

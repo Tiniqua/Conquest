@@ -98,6 +98,7 @@ public:
 
 	bool SetLobbySlotCivilisationForPlayer(int32 PlayerId, int32 SlotIndex, UConquestCivilisationData* Civilisation);
 	void SetLobbyReadyForPlayer(int32 PlayerId, bool bReady);
+	bool SetGameSetupSettingsForPlayer(int32 PlayerId, const FConquestGameSetupSettings& SetupSettings);
 	bool AreAllLobbyHumanPlayersReady() const;
 
 private:

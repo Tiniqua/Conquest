@@ -10,6 +10,7 @@
 #include "Conquest/UI/ConquestHUD.h"
 #include "Conquest/Player/ConquestPlayerController.h"
 #include "Conquest/Units/ConquestUnitTypes.h"
+#include "Conquest/World/Generation/HexMapTypePresets.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
@@ -123,6 +124,20 @@ AConquestGameState::AConquestGameState()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	UnitActorClass = AConquestUnitActor::StaticClass();
+
+	FHexMapTypePreset DefaultMapPreset;
+	if (FHexMapTypePresets::GetPreset(GameSetupSettings.MapTypePreset, DefaultMapPreset))
+	{
+		GameSetupSettings.MapShapeSettings = DefaultMapPreset.Shape;
+		GameSetupSettings.bUseCustomMapShapeSettings = true;
+	}
+
+	FConquestMapSizePresetDefinition DefaultSizePreset;
+	if (FConquestMapSizePresets::GetPreset(GameSetupSettings.MapSizePreset, DefaultSizePreset))
+	{
+		GameSetupSettings.SizeSettings.GridWidth = DefaultSizePreset.Width;
+		GameSetupSettings.SizeSettings.GridHeight = DefaultSizePreset.Height;
+	}
 }
 
 void AConquestGameState::BeginPlay()
@@ -298,6 +313,8 @@ void AConquestGameState::PushReplicatedState()
 
 	ReplicatedConquestState.PlayerEmpires = PlayerEmpires;
 	ReplicatedConquestState.LobbyPlayerSlots = LobbyPlayerSlots;
+	GameSetupSettings.PlayerSlots = LobbyPlayerSlots;
+	ReplicatedConquestState.GameSetupSettings = GameSetupSettings;
 	ReplicatedConquestState.AvailableCivilisations = AvailableCivilisations;
 	ReplicatedConquestState.PlayerStartRegions = PlayerStartRegions;
 	ReplicatedConquestState.bGameEnded = bGameEnded;
@@ -329,6 +346,7 @@ void AConquestGameState::OnRep_ReplicatedConquestState()
 {
 	PlayerEmpires = ReplicatedConquestState.PlayerEmpires;
 	LobbyPlayerSlots = ReplicatedConquestState.LobbyPlayerSlots;
+	GameSetupSettings = ReplicatedConquestState.GameSetupSettings;
 	AvailableCivilisations = ReplicatedConquestState.AvailableCivilisations;
 	PlayerStartRegions = ReplicatedConquestState.PlayerStartRegions;
 	bGameEnded = ReplicatedConquestState.bGameEnded;
@@ -467,6 +485,7 @@ void AConquestGameState::EnsurePlayerEmpire(int32 PlayerId)
 
 void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
 {
+	GameSetupSettings = SetupSettings;
 	LobbyPlayerSlots = SetupSettings.PlayerSlots;
 	ReplicatedConquestState.TurnMode = SetupSettings.TurnMode;
 	RebuildPlayerCivilisationsFromLobby(*this);
@@ -486,6 +505,19 @@ void AConquestGameState::ApplyGameSetupSettings(const FConquestGameSetupSettings
 		PlayerCivilisations.Add(HumanPlayer.PlayerId, HumanCivilisation);
 	}
 
+	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
+}
+
+void AConquestGameState::SetGameSetupSettings(const FConquestGameSetupSettings& SetupSettings)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GameSetupSettings = SetupSettings;
+	GameSetupSettings.PlayerSlots = LobbyPlayerSlots;
+	ReplicatedConquestState.TurnMode = GameSetupSettings.TurnMode;
 	BroadcastStateChangedWithVisuals(EConquestStateVisualDirtyFlags::None);
 }
 
